@@ -1,0 +1,77 @@
+# =============================================================================
+# repo_set.txt — the 5 unfamiliar repos used for cold-start baselines.
+# Consumed by tools/baseline_cold_start.sh; feeds Validation Gate 1.4.
+#
+# Format
+#   - One absolute path per line.
+#   - Blank lines ignored.
+#   - Lines beginning with `#` are comments (ignored).
+#
+# Selection criteria (mandatory, per build_to_do_checklist.md Phase 1 Step 1.4
+# and docs/_validation_gates.md Gate 1.4):
+#   1. Each repo must live under /Volumes/WS4TB/.
+#   2. Each repo must be marked trust_level = "trusted" in
+#      /Volumes/WS4TB/WS4TBr/CAM_Codx/.codex/config.toml.
+#   3. The 5 repos must span at least 3 different stacks (Python, Next.js /
+#      TypeScript, other — e.g. MCP server, Go, etc.).
+#   4. None may be CAM_Codx itself or its CAM_CAM subrepo.
+#   5. None may have been touched in the current brainstorm session as a
+#      working example (in particular: avoid dram-quest, HBRKR if they
+#      surfaced as discussion examples; the goal is genuinely cold context).
+#   6. Each must already exist on disk; tools/baseline_cold_start.sh
+#      validates -d on every uncommented line and aborts if absent.
+#
+# Falsifier guard for Gate 1.4: each of the 5 chosen repos must produce
+# zero hits when greppe'd from .codex/skills/*/SKILL.md (the repo must be
+# genuinely unfamiliar to Codex via prior skill memory).
+#
+# CANDIDATE POOL (from .codex/config.toml [projects.*] entries with
+# trust_level = "trusted"). Listed here for the human reviewer to pick from;
+# every candidate must be -d verified before being uncommented. Mixed-stack
+# guesses are given as hints, not facts.
+#
+#   /Volumes/WS4TB/Regulus                       # python / RAG backend
+#   /Volumes/WS4TB/claude_abx                    # antibiotic stewardship; mixed
+#   /Volumes/WS4TB/AEGIS                         # mixed; verify stack
+#   /Volumes/WS4TB/MORIAH                        # mixed; verify stack
+#   /Volumes/WS4TB/USSCAPE_AI                    # AI tooling; verify stack
+#   /Volumes/WS4TB/Q_fold                        # verify stack
+#   /Volumes/WS4TB/A2Apidgin                     # python; verify
+#   /Volumes/WS4TB/chemtherm                     # verify stack
+#   /Volumes/WS4TB/swarmy                        # verify stack
+#   /Volumes/WS4TB/CAM-Pulse                     # verify stack
+#   /Volumes/WS4TB/RNACAM                        # bio/ML; verify
+#   /Volumes/WS4TB/UROK                          # verify stack
+#   /Volumes/WS4TB/ace-forecaster                # forecasting; verify
+#   /Volumes/WS4TB/finESS                        # verify stack
+#   /Volumes/WS4TB/ClinAIForensics               # clinical AI; verify
+#   /Volumes/WS4TB/grokflow-cli                  # CLI tool; verify
+#   /Volumes/WS4TB/cbarch                        # verify stack
+#   /Volumes/WS4TB/TQ_gem                        # verify stack
+#   /Volumes/WS4TB/eWhereTF                      # verify stack
+#   /Volumes/WS4TB/aeWTF/eWhereTF                # verify stack
+#   /Volumes/WS4TB/probio/Probiotic_Web_App/probio_swe/nextjs_space   # Next.js
+#   /Volumes/WS4TB/feb26/xplur                   # verify stack
+#   /Volumes/WS4TB/whsgweb                       # web; verify
+#   /Volumes/WS4TB/whsgweb/WhiskeySages          # web; verify
+#   /Volumes/WS4TB/myrepoweb/repo-web            # web; verify
+#   /Volumes/WS4TB/repoWeb/github_portfolio_showcase   # web; verify
+#   /Volumes/WS4TB/CP_FPE/repofractL             # verify stack
+#   /Volumes/WS4TB/repominer/Repository_Metadata_Extraction/repominer  # python
+#
+# REASON FOR LEAVING THE 5 ACTIVE SLOTS UNRESOLVED:
+#   The Coder agent that generated this file could not -d verify candidate
+#   paths in its sandbox. Per the workspace no-fabrication rule and the
+#   explicit instruction in the build prompt ("do NOT invent paths"), the
+#   active slots are left as TODOs for the human running Phase 1 Step 1.4.
+#   Replace each `# TODO` line below with a verified absolute path from the
+#   pool above (or from .codex/config.toml directly), confirming on-disk
+#   existence and the stack-diversity rule first.
+#
+# =============================================================================
+
+# TODO: select repo 1 — verified absolute path; stack: <python | next.js | other>
+# TODO: select repo 2 — verified absolute path; stack: <python | next.js | other>
+# TODO: select repo 3 — verified absolute path; stack: <python | next.js | other>
+# TODO: select repo 4 — verified absolute path; stack: <python | next.js | other>
+# TODO: select repo 5 — verified absolute path; stack: <python | next.js | other>

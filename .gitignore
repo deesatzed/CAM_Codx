@@ -70,7 +70,12 @@ Icon?
 # --- Project-local working artifacts ---
 # Baselines collected during Phase 1 — these contain real session transcripts
 # and per-machine measurements; they are reproduced per environment, not shared.
-baselines/
+# We exclude the *contents* of baselines/ rather than the directory itself,
+# so the schema template + repo selection file can be re-included with negative patterns.
+baselines/*
+# Re-include the committed schema/selection files:
+!baselines/manifest.json.template
+!baselines/repo_set.txt
 
 # Coverage-gap notes and decision log are project-local; commit only when stabilized.
 docs/_coverage_gaps.md

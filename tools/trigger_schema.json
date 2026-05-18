@@ -1,0 +1,140 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://codex-cam-methodology/tools/trigger_schema.json",
+  "title": "Codex-CAM Skill auto_fire trigger schema",
+  "description": "JSON Schema (draft 2020-12) for the `auto_fire` block in a Codex skill's SKILL.md frontmatter. Feeds Gate 4.1 (cam_recall_and_cite frontmatter parses), Gate 5.1 (rescue_ladder trigger parseable), and cross-cutting gate CC.5 (auto-fire trigger schema validity).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["auto_fire"],
+  "properties": {
+    "auto_fire": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["condition"],
+      "properties": {
+        "condition": {
+          "type": "string",
+          "enum": [
+            "verbs_match",
+            "consecutive_failures",
+            "empty_directory",
+            "always",
+            "manual"
+          ],
+          "description": "The trigger condition kind. Each kind constrains which sibling fields are required (see allOf below)."
+        },
+        "verbs": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[A-Za-z][A-Za-z0-9_\\-]*$"
+          },
+          "description": "Trigger verbs evaluated against the active turn's verb classification. Required when condition='verbs_match'."
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Number of consecutive events that must occur before the skill fires. Required when condition='consecutive_failures'."
+        },
+        "failure_kind": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Specific failure category that the `count` consecutive events must share (e.g., 'verification', 'build', 'lint'). Required when condition='consecutive_failures'."
+        },
+        "cooldown_turns": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Number of turns that must pass after a fire before this skill can re-fire. Optional; default is 0 (may re-fire on the very next turn if its condition holds again)."
+        },
+        "disabled_in_repos": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": "Repository path prefixes (matched as string prefixes against the active cwd) where this skill must NOT fire. Use this to opt sensitive repositories (e.g., HIPAA-scoped repos) out of specific skills without removing them from the global skill set."
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "condition": { "const": "verbs_match" } } },
+          "then": {
+            "required": ["verbs"],
+            "not": { "required": ["count"] }
+          }
+        },
+        {
+          "if": { "properties": { "condition": { "const": "consecutive_failures" } } },
+          "then": {
+            "required": ["count", "failure_kind"],
+            "not": { "required": ["verbs"] }
+          }
+        },
+        {
+          "if": { "properties": { "condition": { "const": "empty_directory" } } },
+          "then": {
+            "not": {
+              "anyOf": [
+                { "required": ["verbs"] },
+                { "required": ["count"] },
+                { "required": ["failure_kind"] }
+              ]
+            }
+          }
+        },
+        {
+          "if": { "properties": { "condition": { "const": "always" } } },
+          "then": {
+            "not": {
+              "anyOf": [
+                { "required": ["verbs"] },
+                { "required": ["count"] },
+                { "required": ["failure_kind"] }
+              ]
+            }
+          }
+        },
+        {
+          "if": { "properties": { "condition": { "const": "manual" } } },
+          "then": {
+            "not": {
+              "anyOf": [
+                { "required": ["verbs"] },
+                { "required": ["count"] },
+                { "required": ["failure_kind"] }
+              ]
+            }
+          }
+        }
+      ],
+      "examples": [
+        {
+          "condition": "verbs_match",
+          "verbs": ["add", "scaffold", "fix"],
+          "cooldown_turns": 0
+        },
+        {
+          "condition": "consecutive_failures",
+          "count": 2,
+          "failure_kind": "verification",
+          "cooldown_turns": 1
+        },
+        {
+          "condition": "empty_directory",
+          "cooldown_turns": 0
+        },
+        {
+          "condition": "always",
+          "disabled_in_repos": ["/Volumes/WS4TB/ClinAIForensics"]
+        },
+        {
+          "condition": "manual"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,11 @@
+You are entering this repository cold. You have no prior context about it. Your job in this turn is to produce a faithful first-look orientation against the real working tree only — do not invent files, commands, or behavior. If a piece of information is not present in the repository, say so explicitly rather than guess.
+
+Produce your answer as a numbered checklist with one bullet per item. Keep each bullet short and grounded in a real file path or command you actually inspected.
+
+1. Entry points — name every primary executable, CLI command, server entry, or top-level script the repository exposes, with the file path for each.
+2. Build command — the exact command a contributor would run to build or install the project from a clean checkout. If the project has no build step, say so.
+3. Test command — the exact command that runs the test suite, plus the test framework in use. If no tests exist, say "no test suite present" and cite the absence (e.g., no tests/ directory, no [tool.pytest] block, no jest config).
+4. Primary data model — the central domain object(s), the table(s) or schema file(s) that define them, and the file paths where they live. If the project is not data-modeled (e.g., a pure CLI), say so.
+5. Current known failures — any failing tests, open issues referenced in README/TODOs/FIXME comments, or build errors visible from a top-level inspection. If you find none, say "none observed" rather than asserting the project is healthy.
+
+After the checklist, in one short paragraph, propose the first non-trivial change a new contributor could land — concrete file path, concrete intent, and why it would be valuable. Do not begin implementation; the proposal is a candidate only.

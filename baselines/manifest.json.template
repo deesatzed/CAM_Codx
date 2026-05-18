@@ -1,0 +1,40 @@
+{
+  "_comment_header": [
+    "This file is the TEMPLATE for baselines/manifest.json. Phase 1 Step 1.1",
+    "in build_to_do_checklist.md tells the human running the harness to copy",
+    "this template to baselines/manifest.json and populate every field",
+    "against the REAL machine. Fields populated by the human (not by any",
+    "script). Once written, baselines/manifest.json is the version pin that",
+    "tools/baseline_cold_start.sh and tools/codex_trace_patterns.py both",
+    "read at startup; drift between the manifest and the live environment",
+    "is a hard error in both tools.",
+    "",
+    "NOTE ON COMMIT STATE: the project .gitignore excludes the entire",
+    "baselines/ directory. That keeps per-machine measurements out of git,",
+    "as intended. This template file lives inside baselines/ for proximity",
+    "to its consumers; it is therefore also gitignored. The human running",
+    "Phase 1 may choose to either (a) un-gitignore this single file with a",
+    "negative pattern when stabilising the harness, or (b) keep the",
+    "template uncommitted and rely on this header comment as the schema",
+    "of record. Either choice is acceptable; the source-of-truth schema",
+    "fields are the keys below.",
+    "",
+    "DO NOT edit this template casually. If you add a field, update",
+    "tools/codex_trace_patterns.py (which reads codex_cli_version) and",
+    "tools/baseline_cold_start.sh (which reads codex_cli_version) so the",
+    "consumers stay in sync."
+  ],
+  "captured_at": "<ISO 8601 UTC timestamp; output of `python3 -c 'import datetime; print(datetime.datetime.now(datetime.UTC).isoformat())'`>",
+  "codex_cli_version": "<exact stdout of `codex --version`>",
+  "codex_model_id": "<the `model = \"...\"` line from .codex/config.toml, with the quotes stripped>",
+  "cam_cam_commit_sha": "<output of `git -C /Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM rev-parse HEAD`>",
+  "cam_codex_methodology_commit_sha": "<output of `git -C /Volumes/WS4TB/WS4TBr/CAM_Codx/codex-cam-methodology rev-parse HEAD`>",
+  "hostname": "<output of `hostname`>",
+  "python_version": "<output of `python3 --version`>",
+  "mcp_sdk_version": "<output of `pip show mcp | grep -E '^Version:' | awk '{print $2}'`>",
+  "hardware_fingerprint": {
+    "kernel": "<output of `uname -srm`>",
+    "cpu": "<output of `sysctl -n machdep.cpu.brand_string` on macOS, or `lscpu | head -1` on Linux>",
+    "ram_gb": "<integer; on macOS: `python3 -c 'import subprocess; print(int(subprocess.check_output([\"sysctl\",\"-n\",\"hw.memsize\"]))//(1024**3))'`>"
+  }
+}
