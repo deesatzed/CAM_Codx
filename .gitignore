@@ -1,0 +1,90 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg
+*.egg-info/
+.eggs/
+build/
+dist/
+develop-eggs/
+downloads/
+eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+MANIFEST
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+.env
+.env.local
+.env.*.local
+
+# Testing & coverage
+.coverage
+.coverage.*
+.cache
+.pytest_cache/
+.tox/
+.nox/
+htmlcov/
+coverage.xml
+*.cover
+nosetests.xml
+.hypothesis/
+
+# Type checking
+.mypy_cache/
+.pyright/
+.pytype/
+.ruff_cache/
+
+# --- macOS ---
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+
+# --- IDE ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# --- Project-local working artifacts ---
+# Baselines collected during Phase 1 — these contain real session transcripts
+# and per-machine measurements; they are reproduced per environment, not shared.
+baselines/
+
+# Coverage-gap notes and decision log are project-local; commit only when stabilized.
+docs/_coverage_gaps.md
+docs/_decision_log.md
+docs/_design_approval.md
+
+# Local SQLite databases — never committed.
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+
+# Local logs
+*.log
+logs/
