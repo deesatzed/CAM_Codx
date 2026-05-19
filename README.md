@@ -10,30 +10,32 @@
 
 Two real things already live side-by-side in this workspace, and they do not talk to each other.
 
-On one side, **CAM_CAM** is a substantial Python research engine — a methodology miner, a bandit scorer, a three-layer defense chain, an MCP server with seventeen tools, an export pipeline, and a SQLite corpus indexed with FTS5 and sqlite-vec. It is heavy by design and intended to run out-of-band. Its existing MCP server (`claw.mcp_server`) is wired for Claude Desktop and Cursor users. Codex has never connected to it.
+On one side, **CAM_CAM** is a substantial Python research engine — a methodology miner, a bandit scorer, a three-layer defense chain, an export pipeline, and a SQLite corpus indexed with FTS5 and sqlite-vec. It is heavy by design and intended to run out-of-band. It carries a seventeen-tool MCP server (`claw.mcp_server`) that was never wired to Codex; that server is removed as part of v1 (see `meta/HANDOFF_LATEST.md`).
 
-On the other side, **OpenAI Codex CLI** is installed at `.codex/` with thirty-eight skills, ten agents, and a three-line doctrine in `AGENTS.md` (*"Codex decides. Claude contributes. Tests arbitrate. Markdown remembers."*). Codex is markdown-first, fast, and decisive. It auto-fires skills on declared triggers rather than waiting for the user to ask. The two systems have no working contract today: one Codex skill (`deepscientist-data-research`) references CAM MCP tools (`claw_query_memory`, `claw_store_finding`) that are not wired in `.codex/config.toml`. The skill is therefore a **phantom contract** — it silently no-ops or hallucinates the response shape.
+On the other side, **OpenAI Codex CLI** is installed at `.codex/` with thirty-eight skills, ten agents, and a doctrine in `AGENTS.md`. Codex is markdown-first, fast, and decisive. It auto-fires skills on declared triggers rather than waiting for the user to ask. Today the two systems have no working contract: one Codex skill (`deepscientist-data-research`) references CAM MCP tools (`claw_query_memory`, `claw_store_finding`) that are not wired in `.codex/config.toml`. The skill is therefore a **phantom contract** — it silently no-ops or hallucinates the response shape.
 
 The **Codex-CAM Methodology** is a design for a third, narrow plane that sits between them. It is a new, purpose-built MCP server with a hard four-tool ceiling, enforced by a CI test. Its job is to act as a *librarian* over `claw.db` — recall a relevant pattern, hand back its provenance, search cross-repo decisions, and write outcomes to an append-only fitness ledger. CAM_CAM keeps mining and scoring out-of-band; Codex keeps orchestrating in markdown; the librarian is the only thing that runs inline during a developer's turn. The librarian never triggers mining, never runs the bandit, never owns the defense chain. Those stay where they are.
 
 This README frames scope honestly. The corpus has **107 methodologies** (95 viable, 12 embryonic), not the 889 the CAM_CAM README still claims. The bandit has never received outcome signal (`bandit_outcomes = 0`, `fitness_log = 0`) even though there are 96 `usage_log` entries — the loop is open at the "record outcome" step. The design is therefore framed as **seed corpus plus loop closure**, not "mature library on tap." Closing the loop is the v1 centerpiece; everything else in the design exists to make that loop reliable.
 
 The doctrine adds one line on top of the existing three:
-> *Codex decides. Claude contributes. Tests arbitrate. Markdown remembers. **CAM librarian cites.***
+> *Codex decides. Tests arbitrate. Markdown remembers. **CAM librarian cites.***
 
 ---
 
-## How it relates to existing things
+## What this repo builds
 
-| Component | Role | Status |
+This repository's deliverable is **`cam-codex-mcp`** — a new, thin, four-tool MCP server that connects Codex to the CAM_CAM corpus. It is the core of the methodology. Today the design is locked and the prerequisites are committed; the server code itself lands in `src/claw_codex_mcp/` once Phase 0 gates are green (see `build_to_do_checklist.md`).
+
+| Component | Role | Status in this work |
 |---|---|---|
-| OpenAI Codex CLI | orchestrator | already installed at `.codex/` (38 skills, 10 agents) |
-| CAM_CAM heavy engine | mining + bandit + defense chain | already exists; runs out-of-band; unchanged by this methodology |
-| Existing 17-tool MCP (`claw.mcp_server`) | Claude Desktop / Cursor consumers | unchanged; not used by Codex in this design |
-| New `cam-codex-mcp` (planned) | 4-tool librarian for Codex | DESIGN PHASE, no code |
+| **`cam-codex-mcp`** (this repo's deliverable) | 4-tool librarian connecting Codex to `claw.db` | DESIGN COMPLETE, code pending Phase 0 gates |
+| OpenAI Codex CLI | orchestrator that consumes `cam-codex-mcp` | already installed at `.codex/` (38 skills, 10 agents) |
+| CAM_CAM heavy engine | mining + bandit + corpus producer; runs out-of-band | exists; only the 17-tool legacy MCP is touched (removed) |
+| Legacy 17-tool MCP (`claw.mcp_server`) | the unused, never-wired-to-Codex MCP that this methodology obsoletes | **scheduled for removal** as part of v1 |
 | `claw.db` corpus | methodologies + (future) fitness ledger | 107 methodologies; ledger empty (0 bandit_outcomes); v1 closes the loop |
 
-The seventeen-tool `claw.mcp_server` is **the bloat being escaped**. It is not deprecated and not removed — it continues to serve Claude Desktop and Cursor users without change. Codex simply does not connect to it. The new librarian is a separate process, separate config block, separate auth token, separate four-tool surface.
+The legacy seventeen-tool `claw.mcp_server` was **the bloat being escaped**. It was never wired to Codex (the phantom contract referenced above) and serves no current consumer in this workspace. v1 removes it cleanly and replaces it with `cam-codex-mcp`'s four-tool surface.
 
 ### Tool surface preview
 

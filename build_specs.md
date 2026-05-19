@@ -3,7 +3,7 @@
 > **Status:** specification only. No code has been written. No claim of "production ready" or "complete" applies until every validation gate below is closed.
 > **Source of truth for context:** `/Volumes/WS4TB/WS4TBr/CAM_Codx/HANDOFF_LATEST.md`
 > **Corpus reality (verified 2026-05-17):** 107 methodologies (95 `viable` + 12 `embryonic`), 96 `methodology_usage_log` rows, **0** `methodology_bandit_outcomes`, **0** `methodology_fitness_log`, **1** `failure_knowledge` row. The framing here is *seed corpus*, not mature library.
-> **Hard constraints inherited from the workspace CLAUDE.md:** no mock / no placeholder / no simulation; no timeframes; no cost or revenue estimates; validation gates between every step; ≥90% line coverage with action plan for any gap; never claim "production ready" while remaining work exists.
+> **Hard constraints inherited from the workspace policy file at `/Volumes/WS4TB/CLAUDE.md`:** no mock / no placeholder / no simulation; no timeframes; no cost or revenue estimates; validation gates between every step; ≥90% line coverage with action plan for any gap; never claim "production ready" while remaining work exists.
 
 ---
 
@@ -655,7 +655,7 @@ A recalled methodology must be rejected (with the reason captured in `DECISIONS.
 
 ### Updated Core Rule
 
-Codex decides. Claude contributes. Tests arbitrate. Markdown remembers. CAM librarian cites.
+Codex decides. Tests arbitrate. Markdown remembers. CAM librarian cites.
 ```
 
 ---
@@ -710,7 +710,7 @@ Coverage measured with `coverage.py` running the test suite from §10.
 
 ### 9.1 The existing 17-tool MCP stays
 
-`CAM_CAM/src/claw/mcp_server.py` (1,782 lines, registers 17 tools at lines 1629–1657) is **not modified by this spec**. It continues to serve Claude Desktop, Cursor, and any external consumer that has already integrated against `claw_query_memory`, `claw_store_finding`, and the rest of its surface. Its auth token, transport, and lifecycle are unchanged.
+`CAM_CAM/src/claw/mcp_server.py` (1,782 lines, registered 17 tools at lines 1629–1657) is **removed as part of v1**. The file was never wired to Codex (the phantom-contract origin), and the methodology has no consumer for it. Removal scope: the file itself, the `cam mcp` CLI subcommand in `claw.cli._monolith`, the optional-MCP block in `claw.core.factory`, and surgical removal of MCP-specific tests in 4 test files (pre-deletion baseline captured in `CAM_CAM/PRE_DELETION_BASELINE_2026-05-18.md`).
 
 The two servers are deliberately allowed to coexist:
 - **`claw.mcp_server`** — full-surface, for IDE assistants that expect the whole `claw_*` namespace.

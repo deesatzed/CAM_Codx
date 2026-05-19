@@ -195,7 +195,7 @@ Prerequisites for Phase 4 (must exist first):
 Doctrine, not auto-fix engine. No MCP tool added beyond what already exists.
 
 - [ ] **5.1 — Create `rescue_ladder/SKILL.md`.**
-      Auto-fire trigger: 2nd consecutive verification failure. Rungs per `build_specs.md` §4.3: (1) re-read error, (2) `cam_recall(query=failure_signature, task_kind="error_handling")`, (3) `cam_decisions_search(query=failure_signature, scope="all")`, (4) bounded Claude sub-agent (using existing `.codex/agent_handoff/scripts/ask_claude.sh`), (5) write `BLOCKER.md` and stop.
+      Auto-fire trigger: 2nd consecutive verification failure. Rungs per `build_specs.md` §4.3: (1) re-read error, (2) `cam_recall(query=failure_signature, task_kind="error_handling")`, (3) `cam_decisions_search(query=failure_signature, scope="all")`, (4) escalate to user with a structured summary (no automated delegation to other agents in v1), (5) write `BLOCKER.md` and stop.
       **Validation:** Gate 5.1. CC.4 active.
 
 - [ ] **5.2 — Auto-fire triggers correctly (2nd consecutive failure).**

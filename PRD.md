@@ -39,7 +39,7 @@ The methodology defined in this PRD exists to close those gaps **without** runni
 
 ### 3.1 User
 
-One developer. Solo. Runs OpenAI Codex CLI (`gpt-5.5`, `model_reasoning_effort = "high"`, `personality = "pragmatic"` per `.codex/config.toml`) as the daily driver across roughly 80 trusted projects under `/Volumes/WS4TB/`. Mix of medical apps (HIPAA-relevant), MCP servers, Next.js, Python, and Agno multi-agent systems. Workflow is markdown-first; the doctrine `.codex/AGENTS.md` declares: *"Codex decides. Claude contributes. Tests arbitrate. Markdown remembers."*
+One developer. Solo. Runs OpenAI Codex CLI (`gpt-5.5`, `model_reasoning_effort = "high"`, `personality = "pragmatic"` per `.codex/config.toml`) as the daily driver across roughly 80 trusted projects under `/Volumes/WS4TB/`. Mix of medical apps (HIPAA-relevant), MCP servers, Next.js, Python, and Agno multi-agent systems. Workflow is markdown-first; the doctrine `.codex/AGENTS.md` (as of v1 of this methodology) declares: *"Codex decides. Tests arbitrate. Markdown remembers. CAM librarian cites."*
 
 ### 3.2 Primary Use Cases (Named Scenarios)
 
@@ -67,7 +67,7 @@ Every goal below is falsifiable and free of numeric time targets. Ordering langu
 6. **Codex actually invokes the MCP.** When a skill declares MCP dependency, the corresponding turn produces at least one tool call to the new MCP. Verified by transcript inspection, not self-report.
 7. **Honest framing.** No "889 methodologies" marketing claim anywhere in the new surface, skills, doctrine additions, or PRD prose. The pitch is "seed corpus of 95 viable patterns" or stronger only if the live query proves stronger.
 8. **The phantom contract is closed.** `.codex/skills/deepscientist-data-research/SKILL.md` is rewritten to call only the four new tools (or omits tool calls entirely). No `claw_*` references remain.
-9. **Workspace doctrine carries the new line.** `.codex/AGENTS.md` gains the sentence: *"Codex decides. Claude contributes. Tests arbitrate. Markdown remembers. CAM librarian cites."* — and the four enforcement clauses listed in Requirements §6.1.
+9. **Workspace doctrine carries the new line.** `.codex/AGENTS.md` is updated (already applied 2026-05-18) to the four-clause Core Rule: *"Codex decides. Tests arbitrate. Markdown remembers. CAM librarian cites."* — and the three enforcement bullets listed in Requirements §6.1.
 
 ---
 
@@ -85,7 +85,7 @@ The following are explicitly out of scope for v1. Inclusion here is a contract; 
 - **No mock data, no simulation, no placeholder responses, no cached canned outputs anywhere in the build.** Real corpus, real tool calls, real append-only writes. (Workspace rule, repeated for emphasis.)
 - **No "production ready" or "complete" claims.** Tasks always remain; v1 ships when the validation suite passes and the user accepts.
 - **No modification of `.codex/rules/default.rules` as part of this methodology.** That file contains plaintext secrets (lines 95, 103, 107–117, 124–146) that require separate rotation; this design must not block on or touch that remediation.
-- **No carve-out of the existing 17-tool MCP.** A new thin module is built; `CAM_CAM/src/claw/mcp_server.py` remains untouched for Claude Desktop / Cursor consumers.
+- **No carve-out of the existing 17-tool MCP.** A new thin module is built. The legacy `CAM_CAM/src/claw/mcp_server.py` (never wired to Codex; the phantom contract origin) is **removed** as part of v1 — see the deletion task in `meta/HANDOFF_LATEST.md`.
 
 ---
 
@@ -124,7 +124,7 @@ RFC-2119-style verbs: **MUST**, **SHOULD**, **MAY**. Every MUST is testable.
 | ID | Requirement | Verification |
 |---|---|---|
 | F-DOC-01 | `.codex/AGENTS.md` **MUST** be appended with the four enforcement clauses: (1) CAM_CAM is consulted as a librarian via MCP, never run inline. (2) No mined methodology may be applied without its provenance row written to `IMPLEMENT.md`. (3) On second consecutive verification failure, `rescue_ladder` runs before the user is asked. (4) After any verified step that used a recalled methodology, `outcome_log` must record the result. | Diff review against `.codex/AGENTS.md`. |
-| F-DOC-02 | `.codex/AGENTS.md` **MUST** carry the extended doctrine line: *"Codex decides. Claude contributes. Tests arbitrate. Markdown remembers. CAM librarian cites."* | grep match. |
+| F-DOC-02 | `.codex/AGENTS.md` **MUST** carry the Core Rule: *"Codex decides. Tests arbitrate. Markdown remembers. CAM librarian cites."* | grep match. |
 
 ### 6.4 Functional — UX
 
@@ -239,12 +239,12 @@ Captured explicitly so future revisions know what was held back and why.
 |---|---|
 | `/Volumes/WS4TB/WS4TBr/CAM_Codx/HANDOFF_LATEST.md` | Full session context: verified facts, user-locked decisions, sub-agent findings index, corpus query results. The canonical source this PRD rests on. |
 | `/Volumes/WS4TB/WS4TBr/CAM_Codx/HANDOFF_2026-05-17.md` | Dated copy of the same handoff. |
-| `/Volumes/WS4TB/WS4TBr/CAM_Codx/.codex/AGENTS.md` | Doctrine: *"Codex decides. Claude contributes. Tests arbitrate. Markdown remembers."* — extended in F-DOC-02. |
+| `/Volumes/WS4TB/WS4TBr/CAM_Codx/.codex/AGENTS.md` | Doctrine (current Core Rule): *"Codex decides. Tests arbitrate. Markdown remembers. CAM librarian cites."* — established via F-DOC-02. |
 | `/Volumes/WS4TB/WS4TBr/CAM_Codx/.codex/config.toml` | MCP server registry. Only `context7` is wired today. F-MCP-06 adds `[mcp_servers.cam_cam]`. |
 | `/Volumes/WS4TB/WS4TBr/CAM_Codx/.codex/skills/deepscientist-data-research/SKILL.md` | Phantom-contract skill. Lines 25, 65, 135, 162, 168 reference `claw_query_memory` and `claw_store_finding`. Rewritten under F-SK-05. |
 | `/Volumes/WS4TB/WS4TBr/CAM_Codx/.codex/skills/repo_recon/SKILL.md` | Existing skill modified under F-SK-04 to call `cam_decisions_search`. |
 | `/Volumes/WS4TB/WS4TBr/CAM_Codx/.codex/rules/default.rules` | Contains plaintext API keys at lines 95, 103, 107–117, 124–146. **Out of scope** for this methodology (R-5); must not be modified by it. |
-| `/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM/src/claw/mcp_server.py` | **The cautionary tale.** Existing 17-tool MCP (registration at lines 1689–1779). The bloat being escaped. Stays untouched for Claude Desktop / Cursor consumers. |
+| `/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM/src/claw/mcp_server.py` | **The bloat being escaped.** Legacy 17-tool MCP (was registering at lines 1689–1779). Never wired to Codex. **Removed as part of v1.** |
 | `/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM/data/claw.db` | The corpus. 107 methodologies (95 viable / 12 embryonic), 96 usage-log rows, 0 bandit outcomes, 0 fitness-log rows, 1 failure-knowledge row. Source of truth for every claim in §2. |
 | `/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM/README.md` | Stale: claims 889 methodologies at lines 11, 119, 143, 388, 459. Not modified by this methodology; flagged in R-2 and Open Question 2. |
 | `/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM/docs/MCP_INTEGRATION_GUIDE.md` | Stale: documents 5 tools; implementation has 17. Out of scope for this PRD. |
