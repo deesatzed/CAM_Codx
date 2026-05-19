@@ -1,0 +1,49 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "claw-codex-mcp"
+version = "0.1.0"
+description = "Thin librarian MCP server bridging OpenAI Codex CLI and the CAM_CAM mined-methodology corpus"
+requires-python = ">=3.12"
+license = {text = "MIT"}
+authors = [{name = "Dee Satz", email = "o2satz@gmail.com"}]
+readme = "README.md"
+dependencies = [
+    "mcp>=1.0.0",
+    "pydantic>=2.0.0",
+    "sqlite-vec>=0.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=4.0.0",
+    "pytest-timeout>=2.3.0",
+    "ruff>=0.4.0",
+]
+
+[project.scripts]
+cam-codex-mcp = "claw_codex_mcp.__main__:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/claw_codex_mcp"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+timeout = 60
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.coverage.run]
+source = ["src/claw_codex_mcp"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+fail_under = 90
