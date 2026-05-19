@@ -1,0 +1,15 @@
+{
+  "captured_at": "2026-05-19T13:36:40Z",
+  "codex_cli_version": "codex-cli 0.130.0",
+  "codex_model_id": "gpt-5.5",
+  "cam_cam_commit_sha": "771fc147fc5008451dfb05dc92e867c40161234b",
+  "cam_codex_methodology_commit_sha": "ec014b19c1cddb6872a502ae6bfecc1dede74543",
+  "hostname": "Mac-mini.local",
+  "python_version": "Python 3.13.9",
+  "mcp_sdk_version": "1.27.0",
+  "hardware_fingerprint": {
+    "kernel": "Darwin 25.5.0 arm64",
+    "cpu": "Apple M4 Pro",
+    "ram_gb": 64
+  }
+}
