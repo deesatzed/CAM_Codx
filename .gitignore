@@ -91,6 +91,9 @@ docs/_design_approval.md
 *.sqlite-wal
 *.sqlite-shm
 
+# Test fixtures are real but small — tracked as binary artifacts.
+!tests/fixtures/claw_slice.db
+
 # Local logs
 *.log
 logs/
