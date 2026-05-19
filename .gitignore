@@ -76,6 +76,7 @@ baselines/*
 # Re-include the committed schema/selection files:
 !baselines/manifest.json.template
 !baselines/repo_set.txt
+!baselines/manifest.json
 
 # Coverage-gap notes and decision log are project-local; commit only when stabilized.
 docs/_coverage_gaps.md
