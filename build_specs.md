@@ -29,9 +29,23 @@
 
 **Plane B — Codex-CAM MCP (thin librarian).** A new Python module `claw_codex_mcp` exposing exactly four tools over stdio. Read-mostly facade over `cam.db`. Append-only write for the outcome ledger. The librarian metaphor is load-bearing: it answers questions about the corpus and records outcomes; it does not decide, mine, evolve, or invoke LLMs. Hard 4-tool ceiling enforced by a CI test (see §10.5).
 
-**Plane C — CAM_CAM (heavy engine).** Mining, bandit updates, evolution, federation, dashboards, prism analysis, capability synthesis. All ~40 modules under `CAM_CAM/src/claw/`. Runs **out of band** on its own schedule. Codex never invokes it inline. The MCP layer reads what the heavy engine has already produced; writes from Codex (only `cam_record_outcome`) are append-only into a Codex-tagged table so the heavy engine's bandit writers cannot conflict.
+**Plane C — CAM_CAM (heavy engine, optional).** Mining, bandit updates, evolution, federation, dashboards, prism analysis, capability synthesis. All ~40 modules under `CAM_CAM/src/claw/`. Runs **out of band** on its own schedule when installed. **Plane B does not require Plane C.** When `claw.db` is present, the MCP reads it for recall/provenance and writes outcomes into a Codex-tagged table. When absent, the MCP runs in standalone mode (see §1.3); CAM_CAM is then simply not part of the system.
 
-### 1.2 Boundary rule (single source of every other decision)
+### 1.3 Operating modes
+
+The MCP detects its mode at startup. Three modes are observable:
+
+| Mode | Trigger | `cam_recall` / `cam_provenance` | `cam_decisions_search` | `cam_record_outcome` | Logged at startup |
+|---|---|---|---|---|---|
+| `connected` | `CAM_CODEX_MCP_DB_PATH` set + path resolves + `methodologies` table present | Fully active, ranked results | Fully active | Writes to `claw.db.codex_outcome_log` (default) | `mode=connected corpus=<path> methodologies=<count>` |
+| `standalone` | env var unset OR path missing OR open fails OR table absent | `{results: [], corpus_status: "absent", reason, remediation}` — honest empty, never fabricates | Fully active (this tool has zero CAM_CAM dependency) | Writes to `${CAM_CODEX_MCP_OUTCOME_DB_PATH:-~/.cam_codex_mcp/codex_outcome_log.db}` | `mode=standalone corpus=absent outcome_db=<path>` |
+| `degraded` | claw.db reachable but `methodology_embeddings` (sqlite-vec) fails to load | Active with FTS-only fallback; results carry `corpus_status: "degraded"` | Active | Writes to connected location | `mode=connected corpus=<path> vec=unavailable` |
+
+**Detection rule:** the mode check runs once at process startup. The active mode is immutable for the process lifetime — no per-call re-detection (avoids race conditions and ambiguous failure modes).
+
+**Every tool response includes a `corpus_status` field** with one of: `connected`, `empty`, `absent`, `degraded`. Skills read this field and surface the mode to the user.
+
+### 1.4 Boundary rule (single source of every other decision)
 
 > **Stateful + cross-repo + computational → MCP tool.**
 > **Doctrine + workflow + output schema → Skill (markdown).**
@@ -311,7 +325,7 @@ CREATE TABLE index_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 |---|---|
 | **Purpose** | Record the outcome of applying one or more recalled methodologies to a real task. **The only write path on the MCP surface.** Closes the fitness loop that has been open since corpus inception (`methodology_bandit_outcomes=0`). |
 | **Idempotency / side effects** | Append-only into `codex_outcome_log` (new table, see §5). Idempotent by `run_hash` — a duplicate `run_hash` returns `{recorded: false, reason: "duplicate run_hash"}` and writes nothing. |
-| **Backing store** | `cam.db` table `codex_outcome_log`. **Never** writes to `methodology_bandit_outcomes` or `methodology_fitness_log` — those remain the heavy engine's exclusive write domain. |
+| **Backing store** | Mode-aware (see §1.3). **Connected mode:** `claw.db.codex_outcome_log` (so CAM_CAM's bandit can ingest). **Standalone mode:** `${CAM_CODEX_MCP_OUTCOME_DB_PATH:-~/.cam_codex_mcp/codex_outcome_log.db}`. In both modes: **never** writes to `methodology_bandit_outcomes` or `methodology_fitness_log` — those remain the heavy engine's exclusive write domain. |
 | **Latency target** | p95 ≤300ms (single insert + 1–N foreign-key checks on `methodology_ids`). |
 | **Error modes** | Raises `ToolError("unknown methodology_id: <id>")` if any cited ID is absent from `methodologies`. Raises `ToolError("invalid outcome")` if `outcome` not in the literal set. Returns `{recorded: false, reason: "duplicate run_hash"}` on collision. |
 
@@ -590,7 +604,11 @@ CREATE INDEX IF NOT EXISTS idx_codex_outcome_outcome ON codex_outcome_log(outcom
 
 **Idempotency contract.** The `UNIQUE(run_hash)` constraint plus `INSERT OR IGNORE` makes `cam_record_outcome` safe to re-run with identical input. The bandit cannot be gamed by hitting the tool twice with the same arguments, and Codex skills can safely retry on transient errors without double-counting.
 
-**Migration path.** The new CREATE statements live in **this repo only** at `migrations/001_codex_outcome_log.sql`. They are **not** added to `CAM_CAM/src/claw/db/schema.sql` — CAM_CAM stays untouched. On first run, `claw_codex_mcp.db.ensure_schema()` reads the migration file from this repo and applies `CREATE TABLE IF NOT EXISTS` against the live `cam.db` — non-destructive. The bootstrap is idempotent; subsequent runs are no-ops.
+**Migration path.** The new CREATE statements live in **this repo only** at `migrations/001_codex_outcome_log.sql`. They are **not** added to `CAM_CAM/src/claw/db/schema.sql` — CAM_CAM stays untouched. The mode determines which DB receives the schema:
+- **Connected mode:** `claw_codex_mcp.db.ensure_schema()` reads the migration file and applies `CREATE TABLE IF NOT EXISTS` against the live `claw.db`. Non-destructive; idempotent.
+- **Standalone mode:** `ensure_schema()` creates the file at `${CAM_CODEX_MCP_OUTCOME_DB_PATH:-~/.cam_codex_mcp/codex_outcome_log.db}` if it does not exist, then applies the migration. The directory is created with `mode=0700` (user-only) since it will accumulate outcome data tied to the user's sessions.
+
+A `cam-codex-mcp migrate-outcomes --from <local.db> --to <claw.db>` CLI subcommand is provided (additive, idempotent on `run_hash`) for users who later switch from standalone to connected mode and want to backfill CAM_CAM's bandit with their accumulated local outcomes. The subcommand is **not** an MCP tool — it does not count against the 4-tool ceiling.
 
 ### 5.2 Read paths (no schema change required)
 
@@ -610,6 +628,9 @@ Confirmed against `CAM_CAM/src/claw/db/schema.sql`:
 
 Append exactly this block. The new server is sibling to the existing `[mcp_servers.context7]` (currently at line 276 of `.codex/config.toml`). No other lines change.
 
+All env vars are **optional**. The MCP detects connected vs standalone mode at startup based on whether `CAM_CODEX_MCP_DB_PATH` is set and resolves to a valid `claw.db` (see §1.3).
+
+### Connected-mode example (CAM_CAM installed locally)
 ```toml
 [mcp_servers.cam_cam]
 command = "python"
@@ -617,10 +638,20 @@ args = ["-m", "claw_codex_mcp", "--transport", "stdio"]
 env = { CAM_CODEX_MCP_DB_PATH = "/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM/data/claw.db", CAM_CODEX_MCP_AUTH_TOKEN = "${CAM_CODEX_MCP_AUTH_TOKEN}", CAM_CODEX_MCP_DECISIONS_INDEX = "${HOME}/.cam_codex_mcp/codex_decisions_index.db" }
 ```
 
+### Standalone-mode example (no CAM_CAM)
+```toml
+[mcp_servers.cam_cam]
+command = "python"
+args = ["-m", "claw_codex_mcp", "--transport", "stdio"]
+env = { CAM_CODEX_MCP_AUTH_TOKEN = "${CAM_CODEX_MCP_AUTH_TOKEN}" }
+# CAM_CODEX_MCP_DB_PATH omitted → standalone mode
+# CAM_CODEX_MCP_OUTCOME_DB_PATH and CAM_CODEX_MCP_DECISIONS_INDEX default to ~/.cam_codex_mcp/
+```
+
 Notes:
-- The `python` interpreter must be the one with the `claw` package importable. Either set up a `.venv` and use its absolute path, or rely on `PATH` resolution from the Codex launch environment.
-- `CAM_CODEX_MCP_AUTH_TOKEN` is **separate** from `CLAW_MCP_AUTH_TOKEN` (the existing 17-tool server's token, referenced at `CAM_CAM/src/claw/mcp_server.py:1698`). They must not share a value.
-- This change does **not** modify `.codex/rules/default.rules`, which currently contains plaintext API keys (see `HANDOFF_LATEST.md` "Secret exposure"). That file is out of scope for this methodology and must not be touched until the secrets there are rotated.
+- The `python` interpreter must be the one with `claw_codex_mcp` (this repo's package) installed. Either set up a `.venv` and use its absolute path, or rely on `PATH` resolution. **This repo's package has zero runtime dependency on the `claw` package** — it speaks raw SQL to `claw.db` when present.
+- `CAM_CODEX_MCP_AUTH_TOKEN` is **separate** from any CAM_CAM token. They must not share a value.
+- This change does **not** modify `.codex/rules/default.rules`, which currently contains plaintext API keys (see `meta/HANDOFF_LATEST.md` "Secret exposure"). That file is out of scope for this methodology and must not be touched until the secrets there are rotated.
 
 ---
 
@@ -710,7 +741,7 @@ Coverage measured with `coverage.py` running the test suite from §10.
 
 ### 9.1 The existing 17-tool MCP stays
 
-`CAM_CAM/src/claw/mcp_server.py` (1,782 lines, registered 17 tools at lines 1629–1657) is **removed as part of v1**. The file was never wired to Codex (the phantom-contract origin), and the methodology has no consumer for it. Removal scope: the file itself, the `cam mcp` CLI subcommand in `claw.cli._monolith`, the optional-MCP block in `claw.core.factory`, and surgical removal of MCP-specific tests in 4 test files (pre-deletion baseline captured in `CAM_CAM/PRE_DELETION_BASELINE_2026-05-18.md`).
+`CAM_CAM/src/claw/mcp_server.py` (1,782 lines, registers 17 tools at lines 1689–1779) is **not modified by v1**. With the standalone redesign, this repo is decoupled from CAM_CAM's internal structure — it speaks raw SQL to `claw.db` when present, never imports from the `claw` package. CAM_CAM's legacy MCP server (which was never wired to Codex) is therefore neither used by this design nor affected by it. Whether to clean up that dead code is a CAM_CAM-internal decision, tracked as an out-of-scope cleanup item per `PRD.md` §11.
 
 The two servers are deliberately allowed to coexist:
 - **`claw.mcp_server`** — full-surface, for IDE assistants that expect the whole `claw_*` namespace.
@@ -743,8 +774,10 @@ The following documents have stale claims; they are **out of scope** for this sp
 ### 10.2 Integration tests
 
 - **Real MCP stdio protocol.** Start `python -m claw_codex_mcp --transport stdio` as a subprocess. Send a real `initialize` request, real `tools/list` request (assert exactly 4 tools), real `tools/call` requests for each of the 4 tools, assert the responses validate against the pydantic output models.
-- **Real Codex CLI client.** A second integration harness uses the actual `codex` binary with the `[mcp_servers.cam_cam]` block from §6 wired to the test fixture DB. Exercises tool discovery end-to-end. No mocked client.
-- **Conformance test for the 4-tool ceiling.** Boot the server; call `tools/list`; assert `len(tools) == 4` and the set is exactly `{cam_recall, cam_provenance, cam_decisions_search, cam_record_outcome}`. CI fails on any drift.
+- **Real Codex CLI client (connected mode).** A second integration harness uses the actual `codex` binary with the connected-mode `[mcp_servers.cam_cam]` block from §6 wired to the test fixture DB. Exercises tool discovery end-to-end. No mocked client.
+- **Real Codex CLI client (standalone mode).** A third harness boots the server with `CAM_CODEX_MCP_DB_PATH` unset. Asserts: server starts cleanly, `tools/list` returns exactly 4 tools, `cam_recall` returns `{results: [], corpus_status: "absent"}` (no fabrication, no raise), `cam_decisions_search` and `cam_record_outcome` are fully functional. Startup log contains `mode=standalone`.
+- **Mode transition test.** Boot in standalone, write outcomes, kill server. Re-boot in connected (point at a real `claw.db`), call `cam-codex-mcp migrate-outcomes --from <local.db> --to <claw.db>`, assert rows are migrated idempotently (re-running the command produces zero new rows).
+- **Conformance test for the 4-tool ceiling.** Boot the server; call `tools/list`; assert `len(tools) == 4` and the set is exactly `{cam_recall, cam_provenance, cam_decisions_search, cam_record_outcome}`. CI fails on any drift. Runs in both modes.
 
 ### 10.3 End-to-end test
 

@@ -8,13 +8,14 @@
 
 ## What this is
 
-Two real things already live side-by-side in this workspace, and they do not talk to each other.
+`cam-codex-mcp` is a **standalone MCP server** that gives OpenAI Codex CLI four tools for working with mined software methodologies and cross-repo decision records. It runs in one of two modes auto-detected at startup:
 
-On one side, **CAM_CAM** is a substantial Python research engine — a methodology miner, a bandit scorer, a three-layer defense chain, an export pipeline, and a SQLite corpus indexed with FTS5 and sqlite-vec. It is heavy by design and intended to run out-of-band. It carries a seventeen-tool MCP server (`claw.mcp_server`) that was never wired to Codex; that server is removed as part of v1 (see `meta/HANDOFF_LATEST.md`).
+- **Standalone mode** (default): three of the four tools work fully — cross-repo decision search and the local outcome flywheel — with no external dependencies beyond Codex itself. `cam_recall` returns an honest empty result (no fabrication) with a clear remediation hint.
+- **Connected mode**: when `CAM_CODEX_MCP_DB_PATH` points at a CAM_CAM `claw.db` file, all four tools light up — recall returns ranked methodologies with full provenance, and outcomes are recorded back into `claw.db` so CAM_CAM's bandit can ingest them.
 
-On the other side, **OpenAI Codex CLI** is installed at `.codex/` with thirty-eight skills, ten agents, and a doctrine in `AGENTS.md`. Codex is markdown-first, fast, and decisive. It auto-fires skills on declared triggers rather than waiting for the user to ask. Today the two systems have no working contract: one Codex skill (`deepscientist-data-research`) references CAM MCP tools (`claw_query_memory`, `claw_store_finding`) that are not wired in `.codex/config.toml`. The skill is therefore a **phantom contract** — it silently no-ops or hallucinates the response shape.
+CAM_CAM (the heavy Python research engine that mines methodologies, runs the bandit, and produces `claw.db`) is an **optional** corpus producer. This repo works without it. If you have it installed, point one env var at its data file and the recall layer activates.
 
-The **Codex-CAM Methodology** is a design for a third, narrow plane that sits between them. It is a new, purpose-built MCP server with a hard four-tool ceiling, enforced by a CI test. Its job is to act as a *librarian* over `claw.db` — recall a relevant pattern, hand back its provenance, search cross-repo decisions, and write outcomes to an append-only fitness ledger. CAM_CAM keeps mining and scoring out-of-band; Codex keeps orchestrating in markdown; the librarian is the only thing that runs inline during a developer's turn. The librarian never triggers mining, never runs the bandit, never owns the defense chain. Those stay where they are.
+A Codex skill (`deepscientist-data-research`) in the workspace today carries a **phantom contract** — it references MCP tools (`claw_query_memory`, `claw_store_finding`) that are not wired anywhere. This methodology supersedes that with a clean four-tool surface and rewrites the skill to use it.
 
 This README frames scope honestly. The corpus has **107 methodologies** (95 viable, 12 embryonic), not the 889 the CAM_CAM README still claims. The bandit has never received outcome signal (`bandit_outcomes = 0`, `fitness_log = 0`) even though there are 96 `usage_log` entries — the loop is open at the "record outcome" step. The design is therefore framed as **seed corpus plus loop closure**, not "mature library on tap." Closing the loop is the v1 centerpiece; everything else in the design exists to make that loop reliable.
 
@@ -25,30 +26,57 @@ The doctrine adds one line on top of the existing three:
 
 ## What this repo builds
 
-This repository's deliverable is **`cam-codex-mcp`** — a new, thin, four-tool MCP server that connects Codex to the CAM_CAM corpus. It is the core of the methodology. Today the design is locked and the prerequisites are committed; the server code itself lands in `src/claw_codex_mcp/` once Phase 0 gates are green (see `build_to_do_checklist.md`).
+This repository's deliverable is **`cam-codex-mcp`** — a thin, four-tool, standalone MCP server. It is the core of the methodology. Today the design is locked and the prerequisites are committed; the server code itself lands in `src/claw_codex_mcp/` once Phase 0 gates are green (see `build_to_do_checklist.md`).
 
-| Component | Role | Status in this work |
+| Component | Role | Coupling |
 |---|---|---|
-| **`cam-codex-mcp`** (this repo's deliverable) | 4-tool librarian connecting Codex to `claw.db` | DESIGN COMPLETE, code pending Phase 0 gates |
-| OpenAI Codex CLI | orchestrator that consumes `cam-codex-mcp` | already installed at `.codex/` (38 skills, 10 agents) |
-| CAM_CAM heavy engine | mining + bandit + corpus producer; runs out-of-band | exists; only the 17-tool legacy MCP is touched (removed) |
-| Legacy 17-tool MCP (`claw.mcp_server`) | the unused, never-wired-to-Codex MCP that this methodology obsoletes | **scheduled for removal** as part of v1 |
-| `claw.db` corpus | methodologies + (future) fitness ledger | 107 methodologies; ledger empty (0 bandit_outcomes); v1 closes the loop |
+| **`cam-codex-mcp`** (this repo's deliverable) | 4-tool MCP server consumed by Codex CLI over stdio | none required; works standalone |
+| OpenAI Codex CLI | orchestrator that consumes `cam-codex-mcp` via `.codex/config.toml` | required at runtime |
+| CAM_CAM heavy engine (`claw.db`) | optional corpus producer; mining + bandit run out-of-band | optional; enables `cam_recall` and richer `cam_provenance` |
+| Legacy 17-tool MCP (`claw.mcp_server`) | pre-existing, never wired to Codex; unrelated to this design | not used, not modified |
 
-The legacy seventeen-tool `claw.mcp_server` was **the bloat being escaped**. It was never wired to Codex (the phantom contract referenced above) and serves no current consumer in this workspace. v1 removes it cleanly and replaces it with `cam-codex-mcp`'s four-tool surface.
+This repo speaks raw SQL to `claw.db` when present; it has no Python import dependency on the `claw` package. CAM_CAM's installation, mining cadence, and bandit are entirely its own concern.
 
 ### Tool surface preview
 
-The full schemas live in `build_specs.md`. This is the one-line summary so a reader knows what they are about to read.
+The full schemas live in `build_specs.md`. This is the one-line summary, including how each tool behaves with and without a CAM_CAM corpus connected.
 
-| Tool | Read/Write | One-line purpose |
-|---|---|---|
-| `cam_recall` | read | return top-N viable methodologies for a task description with fitness, tags, and one anti-pattern |
-| `cam_provenance` | read | return the citation block for a given `methodology_id` (source repo, path, commit, mined_at, fitness denominators) |
-| `cam_decisions_search` | read | FTS5 + vector search across cross-repo decision records for similar prior choices |
-| `cam_record_outcome` | append-only write | record a `{methodology_id, outcome, verification_signal, repo, commit}` row to the fitness ledger |
+| Tool | I/O | Connected mode | Standalone mode |
+|---|---|---|---|
+| `cam_recall` | read | top-N viable methodologies with fitness, tags, anti-pattern | `{results: [], corpus_status: "absent", reason: ...}` — honest empty, never fabricates |
+| `cam_provenance` | read | citation block for a `methodology_id` (source repo, path, commit, mined_at, fitness denominators) | `{found: false, corpus_status: "absent"}` |
+| `cam_decisions_search` | read | FTS5 search across cross-repo `DECISIONS.md` records | **identical** — this tool has zero CAM_CAM dependency |
+| `cam_record_outcome` | append-only write | row inserted into `codex_outcome_log` table inside `claw.db` (CAM_CAM's bandit ingests) | row inserted into local SQLite at `~/.cam_codex_mcp/codex_outcome_log.db` |
+
+Every tool response carries a `corpus_status` field with one of: `connected` / `empty` / `absent` / `degraded`. Skills inspect this and surface the mode to the user honestly.
 
 A fifth tool, `cam_match_failure`, was considered and explicitly deferred to v2 — the live `failure_knowledge` table has one row, which is not enough corpus to support the contract.
+
+---
+
+## How it works
+
+`cam-codex-mcp` runs in one of two modes, auto-detected at startup. Configuration is three optional environment variables; all have sensible defaults; mode is logged at startup so you always know what you have.
+
+### Standalone mode (default)
+
+Activates when `CAM_CODEX_MCP_DB_PATH` is unset or points to a missing file. Three of the four tools work fully: cross-repo `DECISIONS.md` search via `cam_decisions_search`, outcome logging to a local SQLite ledger at `~/.cam_codex_mcp/codex_outcome_log.db` via `cam_record_outcome`, and the server reports its state honestly. The fourth tool, `cam_recall`, returns an empty result with `corpus_status: "absent"` and a remediation hint — it never fabricates methodologies. This mode is fully useful: cross-repo decision search and the local outcome flywheel both work, just without the mined-pattern recall layer.
+
+### Connected mode
+
+Activates when you set `CAM_CODEX_MCP_DB_PATH` to a CAM_CAM `claw.db` file. `cam_recall` returns ranked methodologies with full provenance (commit SHA, source repo, fitness score with denominator). Outcomes are recorded into the same `claw.db` so CAM_CAM's bandit can ingest them. All four tools fully active.
+
+### Configuration
+
+Three optional environment variables, all with sensible defaults:
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `CAM_CODEX_MCP_DB_PATH` | corpus location (presence triggers connected mode) | unset → standalone |
+| `CAM_CODEX_MCP_OUTCOME_DB_PATH` | outcome ledger location | mode-dependent default |
+| `CAM_CODEX_MCP_DECISIONS_INDEX` | cross-repo decision FTS index | `~/.cam_codex_mcp/codex_decisions_index.db` |
+
+The 4-tool ceiling is enforced by CI in both modes. **No mode silently synthesizes data.**
 
 ---
 
@@ -170,10 +198,11 @@ Three short scenarios. "Now" is the present state; "proposed" is the design targ
 
 ## What this is NOT
 
-- Not a replacement for CAM_CAM. The heavy engine continues to do mining, bandit updates, evolution, federation, and dashboards — out-of-band, on the user's schedule.
-- Not a real-time runtime for the bandit, miner, or defense chain. The librarian reads. It does not run mining inline.
-- Not "the 889 patterns." The live corpus has 107. The PRD frames this honestly as a seed corpus.
-- Not production ready. Not complete. This is design phase; no code has been written.
+- Not a fork or rewrite of CAM_CAM. CAM_CAM is an *optional* corpus producer in this design; this repo runs without it.
+- Not a real-time runtime for the bandit, miner, or defense chain. The librarian reads; CAM_CAM's heavy engine writes new methodologies on its own schedule.
+- Not "the 889 patterns." When connected, the live corpus is 107 viable methodologies — framed honestly as a seed corpus, not a mature library.
+- Not bundled with a seed/demo corpus. Standalone mode returns an honest empty for `cam_recall`, with a remediation hint pointing at CAM_CAM. **Per workspace policy (no mock / no placeholder / no demo data), a frozen fixture corpus would walk that line.** Install CAM_CAM to get a real corpus.
+- Not production ready. Not complete. This is design phase; the MCP server code has not been written.
 - Not opt-in once installed. The Codex skills auto-fire on declared triggers (the `cam_recall_and_cite` skill on feature requests, `rescue_ladder` on the second failure, `outcome_log` after any verified step that used a recalled pattern). Opt-in would mean the loop never closes.
 - Not a carve-out of the existing seventeen-tool MCP. It is a **new** thin server with a separate module, separate process, separate auth token, separate config block.
 

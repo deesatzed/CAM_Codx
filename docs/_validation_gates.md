@@ -323,13 +323,22 @@
 - Coverage requirement: N/A.
 
 **Gate 9.5 — RESCUE: 2nd-failure trigger produces a different next-step than the 1st-failure attempt**
-- Command: `bash /Volumes/WS4TB/WS4TBr/CAM_Codx/tools/verify_rescue_ladder.sh` — runs a verification that fails twice with the same root cause, captures the 1st-failure response and the post-rescue response, asserts they are not byte-identical AND the post-rescue response references at least one methodology recalled via the rescue ladder.
+- Command: `bash /Volumes/WS4TB/WS4TBr/CAM_Codx/codex-cam-methodology/tools/verify_rescue_ladder.sh` — runs a verification that fails twice with the same root cause, captures the 1st-failure response and the post-rescue response, asserts they are not byte-identical AND the post-rescue response references at least one methodology recalled via the rescue ladder.
 - Pass: responses differ; post-rescue response contains at least one `methodology_id: <id>` citation AND the id is one returned by the rescue's `cam_recall` invocation visible in the same trace.
 - Fail: responses identical, OR no recall citation post-rescue.
 - Falsifier: responses differ only in cosmetic whitespace — diff after normalizing whitespace must still show a real difference (e.g., new methodology reference or new approach verb).
 - Real-data requirement: real verification, real rescue ladder, real recall.
 - Regression scope: rescue ladder claim.
 - Coverage requirement: N/A.
+
+**Gate 9.6 — STANDALONE BOOT (Claim 6): clean install + Codex session against repo with no CAM_CAM present**
+- Command: in an isolated venv, with `CAM_CODEX_MCP_DB_PATH` UNSET: `pip install -e /Volumes/WS4TB/WS4TBr/CAM_Codx/codex-cam-methodology && python -m claw_codex_mcp --transport stdio &` then run a real Codex session against a real workspace repo exercising all 4 tools.
+- Pass: server starts (`mode=standalone` in stderr log); `tools/list` returns exactly 4 tools; `cam_recall` returns `{results: [], corpus_status: "absent", reason, remediation}` (no raise, no fabrication); `cam_provenance` returns `{found: false, corpus_status: "absent"}`; `cam_decisions_search` returns real grep-grounded hits from the user's repos; `cam_record_outcome` writes a row to `${HOME}/.cam_codex_mcp/codex_outcome_log.db` that is queryable with sqlite3 post-session.
+- Fail: any tool raises on the absence condition itself, OR recall returns non-empty results with no real corpus, OR the outcome row never reaches the local SQLite file.
+- Falsifier: recall returns results that look real but trace back to no real `methodologies` row (no row exists when there's no corpus — any non-empty result IS fabrication).
+- Real-data requirement: real Codex CLI session, real workspace repo, real local SQLite for the outcome log. No mocks.
+- Regression scope: Claim 6 (the standalone boot claim that lets this repo be used without CAM_CAM).
+- Coverage requirement: 100% binary — server must function in this mode.
 
 ---
 

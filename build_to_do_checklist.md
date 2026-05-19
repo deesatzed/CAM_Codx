@@ -39,17 +39,19 @@ These confirm the world state we designed against is the world state we will bui
       Run: `pwd` from the project root; expected `/Volumes/WS4TB/WS4TBr/CAM_Codx`.
       Gate: exact match. If the workspace has moved again, **stop and update the HANDOFF before continuing.**
 
-- [ ] **0.2 — Verify corpus state is unchanged.**
+- [ ] **0.2 — Verify corpus state (if connected mode is the build target).**
+      **Skip this step if you intend to build and test in standalone mode only** (CAM_CAM not installed); proceed to 0.3.
       Run: `sqlite3 /Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM/data/claw.db "SELECT lifecycle_state, COUNT(*) FROM methodologies GROUP BY lifecycle_state;"`
-      Gate: `viable|95` and `embryonic|12`. If counts differ, the design framing must be revisited before any code lands.
+      Gate: `viable|95` and `embryonic|12`. If counts differ, the connected-mode design framing must be revisited before any code lands.
 
 - [ ] **0.3 — Confirm phantom-contract surface is a single file.**
       Run: `grep -rln 'claw_query_memory\|claw_store_finding' /Volumes/WS4TB/WS4TBr/CAM_Codx/.codex/`
       Gate: returns exactly one path — `.codex/skills/deepscientist-data-research/SKILL.md`. Any other matches mean the rewrite scope has grown.
 
-- [ ] **0.4 — Confirm the existing 17-tool MCP boots.**
+- [ ] **0.4 — (Connected-mode only) Confirm the existing 17-tool MCP boots for the lightness baseline.**
+      **Skip this step if building in standalone mode only** (no lightness comparison required).
       Run: `cd /Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM && python -c "from claw.mcp_server import server; import asyncio; tools = asyncio.run(server.list_tools()); print(len(tools))"`
-      Gate: prints `17`. This is the lightness baseline anchor; if it cannot run, the lightness claim cannot be measured.
+      Gate: prints `17`. This is the lightness baseline anchor for Claim 5; if it cannot run, the connected-mode lightness claim cannot be measured.
 
 - [ ] **0.5 — User signs off on locked decisions.**
       Re-read the four user-locked decisions in `../HANDOFF_LATEST.md` ("Open Questions / Decisions Needed" section). Gate: explicit user confirmation, recorded in `_decision_log.md`, that all four are still locked.
@@ -59,6 +61,10 @@ These confirm the world state we designed against is the world state we will bui
 
 - [ ] **0.7 — `writing-plans` skill produces an implementation plan.**
       Per the brainstorming-skill terminal transition, after design approval the next skill invoked is `writing-plans`. Gate: an implementation plan file exists under `docs/plans/` and references this checklist as its execution surface.
+
+- [ ] **0.8 — Standalone-mode boot smoke test (after the MCP server exists; revisit during Phase 2).**
+      With `CAM_CODEX_MCP_DB_PATH` unset: `python -m claw_codex_mcp --transport stdio --help` exits 0; a real MCP handshake returns exactly 4 tools; `cam_recall` with any query returns `{results: [], corpus_status: "absent"}`; startup log contains `mode=standalone`.
+      Gate: every assertion passes. Falsifier: any tool raises on the absence condition itself (vs honest empty), or the corpus_status field is missing from the response.
 
 ---
 
@@ -258,8 +264,8 @@ The skills above will not auto-fire reliably until the doctrine declares them lo
 The phantom contract becomes real here. Once this is committed, the new MCP is live for Codex sessions.
 
 - [ ] **8.1 — Append `[mcp_servers.cam_cam]` block to `.codex/config.toml`.**
-      Use the exact TOML from `build_specs.md` §6. Resolve the Python interpreter path to the absolute venv path (per `build_specs.md` §6 risk note) — do not rely on `$PATH`.
-      Gate: `cam-codex-mcp --version` from that block's command resolves and exits 0.
+      Use one of the two TOML variants from `build_specs.md` §6 (connected-mode or standalone-mode). All env vars are optional; choose based on whether CAM_CAM is installed locally. Resolve the Python interpreter path to the absolute venv path (per `build_specs.md` §6 risk note) — do not rely on `$PATH`.
+      Gate: `cam-codex-mcp --version` from that block's command resolves and exits 0. Codex `tools/list` returns exactly 4 tools in either mode.
       **Validation:** Gate 8.1.
 
 - [ ] **8.2 — `context7` block untouched.**
@@ -302,6 +308,11 @@ This phase exercises the full system against real repos. Each gate corresponds t
       Gate: `docs/_validation_gates.md` Gate 9.5 — resolved-without-user rate strictly above the baseline rate AND ≥ 0.60.
       Falsifier: treatment escalates to user on the FIRST tool-call failure across any task — means the auto-fire trigger is broken even if the aggregate rate looks fine.
       **Validation:** Gate 9.5.
+
+- [ ] **9.6 — STANDALONE BOOT (Claim 6).**
+      Clone this repo fresh to a directory with **no CAM_CAM installation present**. Install (`pip install -e .`). Boot the MCP via Codex CLI with NO `CAM_CODEX_MCP_DB_PATH` set. Run a real Codex session against a real workspace repo that exercises every tool: `cam_recall` (expects `corpus_status: "absent"`), `cam_provenance` (expects `found: false`), `cam_decisions_search` (expects real hits across the user's DECISIONS.md files), `cam_record_outcome` (expects a row written to `~/.cam_codex_mcp/codex_outcome_log.db`).
+      Gate: server boots clean; all 4 tools respond; recall and provenance return honest empties; decisions_search and outcome_log fully functional; outcome row is queryable from the local SQLite file post-session.
+      Falsifier: server fails to start without the env var, OR `cam_recall` returns any non-empty `results` (would mean fabrication), OR the outcome write goes nowhere.
 
 ---
 

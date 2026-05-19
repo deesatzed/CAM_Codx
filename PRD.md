@@ -85,7 +85,7 @@ The following are explicitly out of scope for v1. Inclusion here is a contract; 
 - **No mock data, no simulation, no placeholder responses, no cached canned outputs anywhere in the build.** Real corpus, real tool calls, real append-only writes. (Workspace rule, repeated for emphasis.)
 - **No "production ready" or "complete" claims.** Tasks always remain; v1 ships when the validation suite passes and the user accepts.
 - **No modification of `.codex/rules/default.rules` as part of this methodology.** That file contains plaintext secrets (lines 95, 103, 107–117, 124–146) that require separate rotation; this design must not block on or touch that remediation.
-- **No carve-out of the existing 17-tool MCP.** A new thin module is built. The legacy `CAM_CAM/src/claw/mcp_server.py` (never wired to Codex; the phantom contract origin) is **removed** as part of v1 — see the deletion task in `meta/HANDOFF_LATEST.md`.
+- **No carve-out of the existing 17-tool MCP.** A new thin module is built in this repo. The legacy `CAM_CAM/src/claw/mcp_server.py` (never wired to Codex; the phantom contract origin) is **not modified** by v1 — the standalone redesign decouples this repo from CAM_CAM's internal structure entirely.
 
 ---
 
@@ -104,8 +104,12 @@ RFC-2119-style verbs: **MUST**, **SHOULD**, **MAY**. Every MUST is testable.
 | F-MCP-05 | `cam_record_outcome(methodology_id, step_id, result, evidence_ref)` **MUST** append exactly one row to `methodology_bandit_outcomes` and/or `methodology_fitness_log`. Idempotent on `(step_id, methodology_id)`. **MUST NOT** update or delete any prior row. | DB-level test: row count delta == 1 per call; duplicate-key test returns the prior row, not a write. |
 | F-MCP-06 | The MCP **MUST** be wired in `.codex/config.toml` under `[mcp_servers.cam_cam]` with stdio transport. | Config parse test; live launch test. |
 | F-MCP-07 | The MCP **MUST NOT** register any tool whose name starts with `claw_`. | CI naming test. |
-| F-MCP-08 | The MCP **MUST** read from a configurable DB path (default `CAM_CAM/data/claw.db`) and **MUST** use a separate auth token from the existing 17-tool server. | Env-var resolution test. |
-| F-MCP-09 | The MCP **MUST** never invoke CAM_CAM mining, bandit retraining, defense chain, federation, or any other heavy subsystem. Imports from `claw.miner`, `claw.bandit_trainer`, `claw.defense_chain`, `claw.federation` are forbidden. | Import-graph test (`importlib` introspection in CI). |
+| F-MCP-08 | The MCP **MUST** read from a configurable DB path (`CAM_CODEX_MCP_DB_PATH`, optional, no default) and **MUST** use its own auth token. When the env var is unset or the path does not resolve to a valid `claw.db`, the server runs in **standalone mode** (see F-MCP-10). | Env-var resolution test; missing-path test. |
+| F-MCP-09 | The MCP **MUST** never invoke CAM_CAM mining, bandit retraining, defense chain, federation, or any other heavy subsystem. It **MUST NOT** have any Python import dependency on the `claw` package — all interaction with `claw.db` is via raw SQL through `sqlite3`. | Import-graph test (`importlib` introspection in CI); grep for `from claw` / `import claw` in `src/claw_codex_mcp/`. |
+| F-MCP-10 | The MCP **MUST** start successfully in both **connected mode** (corpus reachable) and **standalone mode** (no corpus) and **MUST** log the active mode unambiguously at startup. | Boot test in both modes; assert startup log line contains `mode=connected` or `mode=standalone`. |
+| F-MCP-11 | Every tool response **MUST** include a `corpus_status` field with one of: `connected`, `empty`, `absent`, `degraded`. Skills inspect this field and surface the mode to the user. | Pydantic schema test on every output model; assert `corpus_status` field present and constrained. |
+| F-MCP-12 | In standalone mode, `cam_recall` **MUST** return `{results: [], corpus_status: "absent", reason: "...", remediation: "..."}` — never synthesized rows, never an error. `cam_provenance` **MUST** return `{found: false, corpus_status: "absent"}`. Both **MUST** be non-raising on the corpus-absence condition itself (malformed input still raises). | Standalone integration test against unset env var. |
+| F-MCP-13 | In standalone mode, `cam_decisions_search` and `cam_record_outcome` **MUST** be fully functional. Outcome writes go to `${CAM_CODEX_MCP_OUTCOME_DB_PATH:-~/.cam_codex_mcp/codex_outcome_log.db}`. The `methodology_id` foreign-key check is skipped in standalone mode (the `methodologies` table does not exist). | Standalone integration test: write outcome, query back, assert row present. |
 
 ### 6.2 Functional — Skills
 
@@ -174,6 +178,7 @@ Validation suite. Each claim has a runnable command and a pass condition. From t
 | 3 | **Cross-project learning:** The fitness ledger demonstrably influences round-2 retrieval distribution. | Chi-square test comparing round-2 retrievals against an empty-ledger control fails to reject the null at α=0.05. | Statistical |
 | 4 | **Cold-start:** Orientation rubric score on five curated unfamiliar repos improves over the no-MCP baseline. | Baseline score ≥ proposed score on the same rubric. | Comparative, baseline-anchored |
 | 5 | **Failure rescue:** ≥60% of curated failures are resolved by `rescue_ladder` without a `user_asked_for_help` event. | Resolution rate < 60% on the curated set. | Comparative |
+| 6 | **Standalone boot:** The MCP server starts successfully and serves all 4 tools when `CAM_CODEX_MCP_DB_PATH` is unset, returning `corpus_status: "absent"` on `cam_recall` and `cam_provenance` while `cam_decisions_search` and `cam_record_outcome` function fully. | Server fails to start, any tool raises on the corpus-absence condition itself, or `cam_recall` returns a non-empty `results` array with no real corpus configured (fabrication). | Binary, mode-detection-audited |
 
 **Baseline requirement.** Claims 3, 4, and 5 require baseline measurements captured **before** any methodology code lands. The five-repo orientation set and the curated-failure set must be fixed in writing first.
 
@@ -230,6 +235,8 @@ Captured explicitly so future revisions know what was held back and why.
 | "889 methodologies" claim in any new surface | Stale; not supported by live query. | Live query supports a number ≥ 889. |
 | `awesome-codex-subagents/` integration via `install_codex_subagents.sh` | Referenced sibling directory is missing from the checkout. | Source is restored or the script is removed. |
 | Cleanup of empty `codex-primary-runtime/SKILL.md` | Out of scope; flag for cleanup elsewhere. | Maintenance pass on the skill bundle. |
+| Bundled seed/demo/fixture corpus shipped with this repo | Workspace policy forbids mock / placeholder / demo / cached data. A frozen mined corpus shipped with the repo would walk that line and create a "looks live but is stale" failure mode. Standalone mode returns honest empty with a remediation pointer. | None — locked by no-mock policy. |
+| Deletion of `CAM_CAM/src/claw/mcp_server.py` (the legacy 17-tool MCP) | Was attempted in this session as commit `c127875` and **reverted**: standalone redesign makes CAM_CAM further decoupled, so dead code in CAM_CAM has no impact on this repo. The deletion may still be valid hygiene in CAM_CAM, but it is **not** required by the Codex-CAM Methodology. | A separate CAM_CAM-internal cleanup decision. |
 
 ---
 
@@ -244,7 +251,7 @@ Captured explicitly so future revisions know what was held back and why.
 | `/Volumes/WS4TB/WS4TBr/CAM_Codx/.codex/skills/deepscientist-data-research/SKILL.md` | Phantom-contract skill. Lines 25, 65, 135, 162, 168 reference `claw_query_memory` and `claw_store_finding`. Rewritten under F-SK-05. |
 | `/Volumes/WS4TB/WS4TBr/CAM_Codx/.codex/skills/repo_recon/SKILL.md` | Existing skill modified under F-SK-04 to call `cam_decisions_search`. |
 | `/Volumes/WS4TB/WS4TBr/CAM_Codx/.codex/rules/default.rules` | Contains plaintext API keys at lines 95, 103, 107–117, 124–146. **Out of scope** for this methodology (R-5); must not be modified by it. |
-| `/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM/src/claw/mcp_server.py` | **The bloat being escaped.** Legacy 17-tool MCP (was registering at lines 1689–1779). Never wired to Codex. **Removed as part of v1.** |
+| `/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM/src/claw/mcp_server.py` | Legacy 17-tool MCP (registers tools at lines 1689–1779). Never wired to Codex. **Not modified by v1.** Standalone redesign decouples this repo entirely; CAM_CAM's internal MCP layer is its own concern. |
 | `/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM/data/claw.db` | The corpus. 107 methodologies (95 viable / 12 embryonic), 96 usage-log rows, 0 bandit outcomes, 0 fitness-log rows, 1 failure-knowledge row. Source of truth for every claim in §2. |
 | `/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM/README.md` | Stale: claims 889 methodologies at lines 11, 119, 143, 388, 459. Not modified by this methodology; flagged in R-2 and Open Question 2. |
 | `/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM/docs/MCP_INTEGRATION_GUIDE.md` | Stale: documents 5 tools; implementation has 17. Out of scope for this PRD. |
