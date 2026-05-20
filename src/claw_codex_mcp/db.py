@@ -43,10 +43,15 @@ def _is_valid_corpus(db_path: Path) -> bool:
 
 
 def _check_vec(db_path: Path) -> bool:
-    """True iff sqlite-vec extension loads and methodology_embeddings is queryable."""
+    """True iff sqlite-vec extension loads and methodology_embeddings is queryable.
+
+    Catches the broad sqlite3.Error (parent of OperationalError, DatabaseError,
+    etc.) on the query path — a non-SQLite file raises DatabaseError, a missing
+    table raises OperationalError, and both should mean "no usable corpus".
+    """
     try:
         conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
-    except sqlite3.OperationalError:
+    except sqlite3.Error:
         return False
     try:
         try:
@@ -58,7 +63,7 @@ def _check_vec(db_path: Path) -> bool:
         try:
             conn.execute("SELECT * FROM methodology_embeddings LIMIT 1")
             return True
-        except sqlite3.OperationalError:
+        except sqlite3.Error:
             return False
     finally:
         conn.close()

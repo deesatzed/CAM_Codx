@@ -81,3 +81,35 @@ def test_read_conn_blocks_insert(slice_db_path: Path) -> None:
             conn.execute(
                 "INSERT INTO methodologies (id, problem_description) VALUES ('x', 'y')"
             )
+
+
+# --- Defensive error-path coverage (real conditions, no mocks) ---
+
+def test_open_read_conn_raises_when_db_path_is_none(tmp_path: Path) -> None:
+    """build_specs §1.3: open_read_conn must not be callable in standalone mode."""
+    info = ModeInfo(
+        mode="standalone", corpus_status="absent",
+        db_path=None, outcome_db_path=tmp_path / "out.db", vec_available=False,
+    )
+    with pytest.raises(RuntimeError, match="no corpus DB"):
+        with open_read_conn(info):
+            pass
+
+
+def test_check_vec_returns_false_for_invalid_file(tmp_path: Path) -> None:
+    """A non-SQLite file at the path → _check_vec returns False (not raise)."""
+    from claw_codex_mcp.db import _check_vec
+    bogus = tmp_path / "not_a_db.txt"
+    bogus.write_bytes(b"this is not a sqlite database file")
+    assert _check_vec(bogus) is False
+
+
+def test_check_vec_returns_false_when_embeddings_table_absent(tmp_path: Path) -> None:
+    """A valid SQLite file with no methodology_embeddings table → False."""
+    from claw_codex_mcp.db import _check_vec
+    target = tmp_path / "empty.db"
+    conn = sqlite3.connect(target)
+    conn.execute("CREATE TABLE methodologies (id TEXT PRIMARY KEY)")
+    conn.commit()
+    conn.close()
+    assert _check_vec(target) is False
