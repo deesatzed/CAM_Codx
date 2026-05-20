@@ -47,3 +47,29 @@ async def test_provenance_standalone_returns_not_found(tmp_path: Path) -> None:
     )
     assert out.found is False
     assert out.corpus_status == "absent"
+
+
+async def test_provenance_returns_links_when_available(
+    connected_info: ModeInfo, slice_conn
+) -> None:
+    """For an id that participates in methodology_links, the response includes them."""
+    # Find a real methodology id that has at least one link in the slice.
+    row = slice_conn.execute(
+        "SELECT m.id FROM methodologies m "
+        "WHERE m.id IN (SELECT source_id FROM methodology_links) "
+        "   OR m.id IN (SELECT target_id FROM methodology_links) "
+        "LIMIT 1"
+    ).fetchone()
+    assert row is not None, "slice must contain at least one linked methodology"
+    linked_id = row[0]
+    out = await handle_provenance(
+        CamProvenanceInput(methodology_id=linked_id, include_links=True),
+        connected_info,
+    )
+    assert out.found is True
+    assert len(out.links) >= 1, f"expected >=1 link; got {len(out.links)}"
+    link = out.links[0]
+    assert link.direction in ("parent", "child")
+    assert link.target_id
+    assert link.link_type
+    assert isinstance(link.strength, float)
