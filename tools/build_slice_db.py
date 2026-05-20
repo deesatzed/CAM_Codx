@@ -40,17 +40,34 @@ def build(source: Path, dest: Path, n: int) -> None:
     conn.enable_load_extension(True)
     sqlite_vec.load(conn)
 
-    # Keep only the top-N viable methodologies by retrieval_count.
+    # Keep top viable methodologies AND some embryonic ones.
+    # Reality of the 2026-05-19 corpus (verified live):
+    #   - All viable rows have files_affected = '[]' (provenance fields empty).
+    #   - All embryonic rows have files_affected populated.
+    # We need at least one row with populated files_affected so downstream
+    # fixture tests can assert real provenance is present. We also need
+    # mostly-viable rows to exercise the recall path against the lifecycle
+    # filter (the default include_embryonic=False).
+    # Slice composition: top (n-3) viable by retrieval_count + top 3 embryonic.
+    #
     # NOTE: methodology_fts.methodology_id is a real UNINDEXED FTS5 column
     # (verified 2026-05-19), not content-rowid-linked. Plain DELETE works.
     # vec0 virtual tables (methodology_embeddings) do NOT expose `rowid` to
     # SQL — DELETE must use the primary key column (methodology_id) directly.
+    n_viable = max(1, n - 3)
+    n_embryonic = min(3, n - n_viable)
     conn.executescript(f"""
         CREATE TEMP TABLE keep AS
         SELECT id FROM methodologies
          WHERE lifecycle_state = 'viable'
          ORDER BY retrieval_count DESC, success_count DESC
-         LIMIT {n};
+         LIMIT {n_viable};
+
+        INSERT INTO keep
+        SELECT id FROM methodologies
+         WHERE lifecycle_state = 'embryonic'
+         ORDER BY retrieval_count DESC, success_count DESC, id ASC
+         LIMIT {n_embryonic};
 
         DELETE FROM methodologies WHERE id NOT IN (SELECT id FROM keep);
         DELETE FROM methodology_links WHERE source_id NOT IN (SELECT id FROM keep)
