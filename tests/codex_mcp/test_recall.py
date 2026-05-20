@@ -128,3 +128,43 @@ async def test_recall_domain_filter_narrows_results(
         connected_info,
     )
     assert out.results == []
+
+
+# --- Helper unit tests (defensive parse / timestamp branches) ---
+
+def test_parse_tags_none_returns_empty() -> None:
+    from claw_codex_mcp.tools.recall import _parse_tags
+    assert _parse_tags(None) == []
+
+
+def test_parse_tags_empty_string_returns_empty() -> None:
+    from claw_codex_mcp.tools.recall import _parse_tags
+    assert _parse_tags("") == []
+
+
+def test_parse_tags_malformed_json_returns_empty() -> None:
+    from claw_codex_mcp.tools.recall import _parse_tags
+    assert _parse_tags("{not valid json[") == []
+
+
+def test_parse_tags_non_list_json_returns_empty() -> None:
+    from claw_codex_mcp.tools.recall import _parse_tags
+    assert _parse_tags('"a string not a list"') == []
+    assert _parse_tags('{"a": "dict not a list"}') == []
+
+
+def test_first_tag_prefix_filters_non_strings() -> None:
+    """The defensive isinstance(t, str) guard must hold against mixed-type tags."""
+    from claw_codex_mcp.tools.recall import _first_tag_prefix
+    # A real (well-formed) corpus row's tags column is a JSON array of strings,
+    # but the parser builds list[Any] semantically. The guard must hold.
+    mixed: list = ["other:tag", 42, None, "domain:web", {"k": "v"}]
+    assert _first_tag_prefix(mixed, "domain:") == "web"
+    assert _first_tag_prefix([42, None, {"k": "v"}], "domain:") is None
+
+
+def test_is_stale_malformed_timestamp_is_stale() -> None:
+    """ValueError on fromisoformat means we can't tell freshness; treat as stale."""
+    from claw_codex_mcp.tools.recall import _is_stale
+    assert _is_stale("not a timestamp") is True
+    assert _is_stale("2026-13-99T99:99:99") is True

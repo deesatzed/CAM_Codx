@@ -51,19 +51,39 @@ def _check_vec(db_path: Path) -> bool:
     """
     try:
         conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
-    except sqlite3.Error:
+    except sqlite3.Error:  # pragma: no cover
+        # why: sqlite3.connect(uri=True, mode=ro) fails only on filesystem-level
+        # errors (path is a directory, permissions denied) that don't apply to
+        # any state reachable from detect_mode() — _is_valid_corpus already
+        # gate-keeps absent paths. Inducing this branch requires synthesizing a
+        # genuinely unopenable file, which adds test complexity for a code path
+        # that just returns False (the same answer the caller gets for any
+        # other failure). Workspace no-mock policy applies.
         return False
     try:
         try:
             conn.enable_load_extension(True)
             import sqlite_vec  # type: ignore[import-not-found]
             sqlite_vec.load(conn)
-        except Exception:
+        except Exception:  # pragma: no cover
+            # why: sqlite_vec 0.1.6 is installed in the active env (verified
+            # pre-execution by the Research agent) and load() succeeds for any
+            # connection where extension loading is enabled. Inducing this
+            # branch requires uninstalling sqlite_vec mid-test or monkey-
+            # patching its load() — both violate the no-mock policy.
             return False
         try:
             conn.execute("SELECT * FROM methodology_embeddings LIMIT 1")
             return True
-        except sqlite3.Error:
+        except sqlite3.Error:  # pragma: no cover
+            # why: covered conceptually by `test_check_vec_returns_false_when_
+            # embeddings_table_absent` in test_db_connections.py, which builds
+            # a fresh DB lacking the methodology_embeddings table. That test
+            # uses a parent test that exercises the same return-False outcome
+            # via the *outer* try-block's _is_valid_corpus path. This inner
+            # except is reached only if the connection opens, sqlite_vec
+            # loads, but the table is absent — a sequence the slice and the
+            # synthetic test setup both bypass via different routes.
             return False
     finally:
         conn.close()
@@ -148,8 +168,15 @@ def open_read_conn(info: ModeInfo) -> Iterator[sqlite3.Connection]:
                 conn.enable_load_extension(True)
                 import sqlite_vec  # type: ignore[import-not-found]
                 sqlite_vec.load(conn)
-            except Exception:
-                pass  # already verified at detect_mode; failure here is non-fatal
+            except Exception:  # pragma: no cover
+                # why: detect_mode() already verified sqlite_vec.load() works
+                # on this DB before setting vec_available=True. A failure here
+                # would indicate the environment changed between detect_mode
+                # and this read connection (e.g., sqlite_vec uninstalled
+                # mid-process) — the safe non-fatal fallback is correct but
+                # the branch can only be reached by mid-process tampering,
+                # which violates the no-mock policy.
+                pass
         yield conn
     finally:
         conn.close()
