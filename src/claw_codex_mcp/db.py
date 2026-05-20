@@ -103,3 +103,84 @@ def detect_mode() -> ModeInfo:
         outcome_db_path=Path(outcome_raw) if outcome_raw else db_path,
         vec_available=vec_ok,
     )
+
+
+# --- Connection helpers (Task 3.5) ---
+
+import asyncio
+from contextlib import asynccontextmanager, contextmanager
+from typing import Iterator, AsyncIterator
+
+_WRITE_LOCK: asyncio.Lock | None = None
+
+
+def _get_write_lock() -> asyncio.Lock:
+    global _WRITE_LOCK
+    if _WRITE_LOCK is None:
+        _WRITE_LOCK = asyncio.Lock()
+    return _WRITE_LOCK
+
+
+@asynccontextmanager
+async def write_lock() -> AsyncIterator[None]:
+    """Per-process write lock. build_specs.md §8.3."""
+    lock = _get_write_lock()
+    async with lock:
+        yield
+
+
+@contextmanager
+def open_read_conn(info: ModeInfo) -> Iterator[sqlite3.Connection]:
+    """Open a read-only connection. Raises if mode is standalone (no corpus)."""
+    if info.db_path is None:
+        raise RuntimeError("no corpus DB in standalone mode")
+    conn = sqlite3.connect(f"file:{info.db_path}?mode=ro", uri=True)
+    try:
+        conn.execute("PRAGMA query_only = ON")
+        conn.execute("PRAGMA busy_timeout = 5000")
+        if info.vec_available:
+            try:
+                conn.enable_load_extension(True)
+                import sqlite_vec  # type: ignore[import-not-found]
+                sqlite_vec.load(conn)
+            except Exception:
+                pass  # already verified at detect_mode; failure here is non-fatal
+        yield conn
+    finally:
+        conn.close()
+
+
+OUTCOME_LOG_DDL = """
+CREATE TABLE IF NOT EXISTS codex_outcome_log (
+    id              TEXT PRIMARY KEY,
+    methodology_ids TEXT NOT NULL,
+    task_id         TEXT NOT NULL,
+    repo            TEXT NOT NULL,
+    outcome         TEXT NOT NULL
+        CHECK (outcome IN ('green','red','partial','rejected')),
+    evidence        TEXT NOT NULL DEFAULT '{}',
+    ts              TEXT NOT NULL
+        DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now')),
+    run_hash        TEXT NOT NULL,
+    notes           TEXT,
+    UNIQUE(run_hash)
+);
+CREATE INDEX IF NOT EXISTS idx_codex_outcome_ts ON codex_outcome_log(ts DESC);
+CREATE INDEX IF NOT EXISTS idx_codex_outcome_repo ON codex_outcome_log(repo);
+CREATE INDEX IF NOT EXISTS idx_codex_outcome_outcome ON codex_outcome_log(outcome);
+"""
+
+
+def ensure_outcome_schema(db_path: Path) -> None:
+    """Idempotent schema bootstrap for the outcome log.
+
+    Connected mode → applies to claw.db (additive only). Standalone mode →
+    creates ~/.cam_codex_mcp/codex_outcome_log.db with mode=0700 parent dir.
+    """
+    db_path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    conn = sqlite3.connect(db_path)
+    try:
+        conn.executescript(OUTCOME_LOG_DDL)
+        conn.commit()
+    finally:
+        conn.close()
