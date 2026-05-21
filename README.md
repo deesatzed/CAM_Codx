@@ -2,13 +2,13 @@
 
 *A thin librarian bridge between OpenAI Codex CLI and the CAM_CAM research engine.*
 
-**Status: DESIGN PHASE (v0.1) — no code yet. Tracking documents: PRD.md, build_specs.md, build_to_do_checklist.md.**
+**Status: local MCP implementation is runnable on branch `feature/initial-impl`; final Codex E2E sign-off is blocked by non-interactive MCP approval behavior and unavailable `x-ai/grok-build-0.1` provider support. Tracking documents: PRD.md, build_specs.md, build_to_do_checklist.md, meta/HANDOFF_LATEST.md.**
 
 ---
 
 ## What this is
 
-`cam-codex-mcp` is a **standalone MCP server** that gives OpenAI Codex CLI four tools for working with mined software methodologies and cross-repo decision records. It runs in one of two modes auto-detected at startup:
+`cam-codex-mcp` is a **standalone MCP server** that gives OpenAI Codex CLI four tools for working with mined software methodologies and cross-repo decision records. It runs in one of two modes auto-detected on MCP initialization:
 
 - **Standalone mode** (default): three of the four tools work fully — cross-repo decision search and the local outcome flywheel — with no external dependencies beyond Codex itself. `cam_recall` returns an honest empty result (no fabrication) with a clear remediation hint.
 - **Connected mode**: when `CAM_CODEX_MCP_DB_PATH` points at a CAM_CAM `claw.db` file, all four tools light up — recall returns ranked methodologies with full provenance, and outcomes are recorded back into `claw.db` so CAM_CAM's bandit can ingest them.
@@ -24,9 +24,63 @@ The doctrine adds one line on top of the existing three:
 
 ---
 
+## Run locally
+
+This repo does not start a browser app. The runnable surface is an MCP stdio server consumed by Codex or by an MCP SDK client.
+
+```bash
+cd /Volumes/WS4TB/WS4TBr/CAM_Codx/codex-cam-methodology-impl
+python -m claw_codex_mcp --version
+python -m claw_codex_mcp --transport stdio
+```
+
+The second command waits for newline-delimited JSON-RPC on stdin and exits cleanly on EOF. It is normally launched by Codex through `.codex/config.toml`.
+
+Run the local standalone demo:
+
+```bash
+cd /Volumes/WS4TB/WS4TBr/CAM_Codx/codex-cam-methodology-impl
+python tools/product_smoke.py
+```
+
+That one-command product smoke wraps the version check plus standalone and connected MCP stdio checks. The real-use-case pilot plan is tracked at [`docs/REAL_USE_CASE_TEST_PLAN.md`](docs/REAL_USE_CASE_TEST_PLAN.md).
+
+```bash
+cd /Volumes/WS4TB/WS4TBr/CAM_Codx/codex-cam-methodology-impl
+python tools/demo_stdio.py --mode standalone
+```
+
+Run the connected demo against the real slice fixture:
+
+```bash
+cd /Volumes/WS4TB/WS4TBr/CAM_Codx/codex-cam-methodology-impl
+python tools/demo_stdio.py --mode connected
+```
+
+Both demos launch `python -m claw_codex_mcp --transport stdio` as a subprocess through the official MCP SDK client, list the four tools, call each tool at least once, and print the resulting JSON. Demo SQLite files are written under `/private/tmp/cam_codex_mcp_demo/` by default; pass `--demo-dir <path>` to keep them somewhere else.
+
+Run the validation suite:
+
+```bash
+pytest tests/codex_mcp/ -q
+```
+
+The latest local run in this branch reported `65 passed`.
+
+Run through the workspace Codex MCP configuration:
+
+```bash
+CODEX_HOME=/Volumes/WS4TB/WS4TBr/CAM_Codx/.codex codex mcp list
+CODEX_HOME=/Volumes/WS4TB/WS4TBr/CAM_Codx/.codex codex mcp get cam_cam
+```
+
+Real Codex-agent E2E use is not signed off yet. Current blockers are recorded in `meta/VALIDATION_GAPS_2026-05-20.md`: non-interactive `codex exec` cancels MCP tool calls before returning tool results, and the requested `x-ai/grok-build-0.1` slug is not supported by the current Codex ChatGPT account.
+
+---
+
 ## What this repo builds
 
-This repository's deliverable is **`cam-codex-mcp`** — a thin, four-tool, standalone MCP server. It is the core of the methodology. Today the design is locked and the prerequisites are committed; the server code itself lands in `src/claw_codex_mcp/` once Phase 0 gates are green (see `build_to_do_checklist.md`).
+This repository's deliverable is **`cam-codex-mcp`** — a thin, four-tool, standalone MCP server. It is the core of the methodology. The server code lives in `src/claw_codex_mcp/`; local stdio protocol coverage and standalone/connected fixture behavior are implemented on the current branch.
 
 | Component | Role | Coupling |
 |---|---|---|
@@ -56,7 +110,7 @@ A fifth tool, `cam_match_failure`, was considered and explicitly deferred to v2 
 
 ## How it works
 
-`cam-codex-mcp` runs in one of two modes, auto-detected at startup. Configuration is three optional environment variables; all have sensible defaults; mode is logged at startup so you always know what you have.
+`cam-codex-mcp` runs in one of two modes, auto-detected on MCP initialization and then kept immutable for the process lifetime. Configuration is three optional environment variables; all have sensible defaults; mode is logged on initialization so you always know what you have.
 
 ### Standalone mode (default)
 
@@ -96,16 +150,17 @@ This is its **own git repository** (initialized 2026-05-17, branch `main`), a si
 │   ├── build_to_do_checklist.md         ordered atomic build tasks; every checkbox has a validation gate
 │   ├── docs/
 │   │   └── _validation_gates.md         per-phase and cross-cutting validation gates (referenced by checklist)
-│   ├── migrations/                      (future) DDL for additive tables on `cam.db` — CAM_CAM's schema is not modified
-│   ├── src/claw_codex_mcp/              (future) the thin librarian MCP — separate top-level package
-│   └── tests/                           (future) unit + integration + e2e
+│   ├── migrations/                      DDL for additive outcome ledger tables
+│   ├── src/claw_codex_mcp/              thin librarian MCP package
+│   ├── tests/                           unit and stdio integration tests
+│   └── tools/demo_stdio.py              local runnable demo
 │
 ├── CAM_CAM/                             heavy Python research engine; unchanged by this methodology
 ├── .codex/                              Codex CLI install (38 skills, 10 agents, AGENTS.md doctrine); separate config
 └── HANDOFF_LATEST.md                    session continuity packet (symlink to dated handoff)
 ```
 
-The README, PRD, build_specs, and build_to_do_checklist form a four-document contract. Nothing else in this repo is load-bearing yet.
+The README, PRD, build_specs, build_to_do_checklist, and latest handoff form the current contract. When they disagree, `meta/HANDOFF_LATEST.md` records the latest verified state.
 
 ---
 
@@ -202,7 +257,7 @@ Three short scenarios. "Now" is the present state; "proposed" is the design targ
 - Not a real-time runtime for the bandit, miner, or defense chain. The librarian reads; CAM_CAM's heavy engine writes new methodologies on its own schedule.
 - Not "the 889 patterns." When connected, the live corpus is 107 viable methodologies — framed honestly as a seed corpus, not a mature library.
 - Not bundled with a seed/demo corpus. Standalone mode returns an honest empty for `cam_recall`, with a remediation hint pointing at CAM_CAM. **Per workspace policy (no mock / no placeholder / no demo data), a frozen fixture corpus would walk that line.** Install CAM_CAM to get a real corpus.
-- Not production ready. Not complete. This is design phase; the MCP server code has not been written.
+- Not production ready. Final Codex E2E sign-off is still blocked by MCP approval/model availability, even though the local MCP server and SDK-client demo run.
 - Not opt-in once installed. The Codex skills auto-fire on declared triggers (the `cam_recall_and_cite` skill on feature requests, `rescue_ladder` on the second failure, `outcome_log` after any verified step that used a recalled pattern). Opt-in would mean the loop never closes.
 - Not a carve-out of the existing seventeen-tool MCP. It is a **new** thin server with a separate module, separate process, separate auth token, separate config block.
 

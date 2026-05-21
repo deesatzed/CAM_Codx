@@ -33,15 +33,15 @@
 
 ### 1.3 Operating modes
 
-The MCP detects its mode at startup. Three modes are observable:
+The MCP detects its mode once on first MCP initialization/request and keeps that mode immutable for the process lifetime. Three modes are observable:
 
-| Mode | Trigger | `cam_recall` / `cam_provenance` | `cam_decisions_search` | `cam_record_outcome` | Logged at startup |
+| Mode | Trigger | `cam_recall` / `cam_provenance` | `cam_decisions_search` | `cam_record_outcome` | Logged on initialization |
 |---|---|---|---|---|---|
 | `connected` | `CAM_CODEX_MCP_DB_PATH` set + path resolves + `methodologies` table present | Fully active, ranked results | Fully active | Writes to `claw.db.codex_outcome_log` (default) | `mode=connected corpus=<path> methodologies=<count>` |
 | `standalone` | env var unset OR path missing OR open fails OR table absent | `{results: [], corpus_status: "absent", reason, remediation}` — honest empty, never fabricates | Fully active (this tool has zero CAM_CAM dependency) | Writes to `${CAM_CODEX_MCP_OUTCOME_DB_PATH:-~/.cam_codex_mcp/codex_outcome_log.db}` | `mode=standalone corpus=absent outcome_db=<path>` |
 | `degraded` | claw.db reachable but `methodology_embeddings` (sqlite-vec) fails to load | Active with FTS-only fallback; results carry `corpus_status: "degraded"` | Active | Writes to connected location | `mode=connected corpus=<path> vec=unavailable` |
 
-**Detection rule:** the mode check runs once at process startup. The active mode is immutable for the process lifetime — no per-call re-detection (avoids race conditions and ambiguous failure modes).
+**Detection rule:** the mode check runs once at MCP initialization/request time. The active mode is immutable for the process lifetime — no per-call re-detection (avoids race conditions and ambiguous failure modes). This preserves the original race-avoidance property while allowing EOF startup lightness measurements to avoid paying DB/bootstrap cost before any MCP client exists.
 
 **Every tool response includes a `corpus_status` field** with one of: `connected`, `empty`, `absent`, `degraded`. Skills read this field and surface the mode to the user.
 
@@ -628,7 +628,7 @@ Confirmed against `CAM_CAM/src/claw/db/schema.sql`:
 
 Append exactly this block. The new server is sibling to the existing `[mcp_servers.context7]` (currently at line 276 of `.codex/config.toml`). No other lines change.
 
-All env vars are **optional**. The MCP detects connected vs standalone mode at startup based on whether `CAM_CODEX_MCP_DB_PATH` is set and resolves to a valid `claw.db` (see §1.3).
+All env vars are **optional**. The MCP detects connected vs standalone mode once at MCP initialization/request time based on whether `CAM_CODEX_MCP_DB_PATH` is set and resolves to a valid `claw.db` (see §1.3).
 
 ### Connected-mode example (CAM_CAM installed locally)
 ```toml

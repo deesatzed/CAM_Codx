@@ -175,9 +175,8 @@ def _validate_file(path: Path, validator: Draft202012Validator) -> tuple[bool, s
     # validator. additionalProperties:false at the top level intentionally
     # means we will, in future schema revisions, need to enumerate other
     # frontmatter fields (name, description, tools). For now the schema
-    # accepts only `auto_fire`; this is documented as a known limitation
-    # and is acceptable because the gates that consume this validator are
-    # specifically about the auto_fire block.
+    # accepts standard Codex skill metadata plus `auto_fire`, while keeping
+    # the auto_fire block itself strict.
     errors = sorted(validator.iter_errors(fm), key=lambda e: list(e.absolute_path))
     if errors:
         # Build a compact, actionable error message: first error wins.

@@ -132,16 +132,16 @@ def detect_mode() -> ModeInfo:
 
 # --- Connection helpers (Task 3.5) ---
 
-import asyncio
 from contextlib import asynccontextmanager, contextmanager
 from typing import Iterator, AsyncIterator
 
-_WRITE_LOCK: asyncio.Lock | None = None
+_WRITE_LOCK = None
 
 
-def _get_write_lock() -> asyncio.Lock:
+def _get_write_lock():
     global _WRITE_LOCK
     if _WRITE_LOCK is None:
+        import asyncio
         _WRITE_LOCK = asyncio.Lock()
     return _WRITE_LOCK
 
