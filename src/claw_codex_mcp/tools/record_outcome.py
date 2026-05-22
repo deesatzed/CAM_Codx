@@ -7,12 +7,16 @@ via UNIQUE(run_hash) + INSERT OR IGNORE.
 from __future__ import annotations
 
 import datetime as _dt
+import hashlib
 import json
 import sqlite3
 import uuid
 
 from claw_codex_mcp.db import ModeInfo, write_lock
 from claw_codex_mcp.schemas import CamRecordOutcomeInput, CamRecordOutcomeOutput
+
+INVOCATION_SCHEMA_VERSION = "codex-cam.invocation.v1"
+INVOCATION_EVIDENCE_KEY = "_codex_cam_invocation"
 
 INSERT_SQL = """
 INSERT OR IGNORE INTO codex_outcome_log
@@ -26,12 +30,51 @@ def _now_iso() -> str:
     return _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _canonical_json(value: object) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
+def _invocation_payload(req: CamRecordOutcomeInput) -> dict[str, object]:
+    return {
+        "schema_version": INVOCATION_SCHEMA_VERSION,
+        "tool": "cam_record_outcome",
+        "methodology_ids": sorted(req.methodology_ids),
+        "task_id": req.task_id,
+        "repo": req.repo,
+        "outcome": req.outcome,
+        "evidence": req.evidence,
+        "run_hash": req.run_hash,
+        "notes": req.notes,
+    }
+
+
+def _invocation_digest(req: CamRecordOutcomeInput) -> str:
+    payload = _canonical_json(_invocation_payload(req)).encode("utf-8")
+    return "sha256:" + hashlib.sha256(payload).hexdigest()
+
+
+def _evidence_with_invocation(req: CamRecordOutcomeInput, digest: str) -> dict[str, object]:
+    evidence = dict(req.evidence)
+    evidence[INVOCATION_EVIDENCE_KEY] = {
+        "schema_version": INVOCATION_SCHEMA_VERSION,
+        "tool": "cam_record_outcome",
+        "methodology_ids": sorted(req.methodology_ids),
+        "task_id": req.task_id,
+        "repo": req.repo,
+        "outcome": req.outcome,
+        "run_hash": req.run_hash,
+        "input_digest": digest,
+    }
+    return evidence
+
+
 async def handle_record_outcome(
     req: CamRecordOutcomeInput, info: ModeInfo,
 ) -> CamRecordOutcomeOutput:
     new_id = str(uuid.uuid4())
+    invocation_digest = _invocation_digest(req)
     methodology_ids_json = json.dumps(sorted(req.methodology_ids))
-    evidence_json = json.dumps(req.evidence, sort_keys=True)
+    evidence_json = _canonical_json(_evidence_with_invocation(req, invocation_digest))
     ts = _now_iso()
 
     async with write_lock():

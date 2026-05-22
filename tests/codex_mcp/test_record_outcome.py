@@ -6,6 +6,7 @@ is required on db.py write helpers (build_specs.md §8.4).
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from pathlib import Path
 
@@ -13,7 +14,7 @@ import pytest
 
 from claw_codex_mcp.db import ModeInfo, ensure_outcome_schema
 from claw_codex_mcp.schemas import CamRecordOutcomeInput
-from claw_codex_mcp.tools.record_outcome import handle_record_outcome
+from claw_codex_mcp.tools.record_outcome import _invocation_digest, handle_record_outcome
 
 
 def _standalone_info(tmp_path: Path) -> ModeInfo:
@@ -43,6 +44,78 @@ async def test_record_outcome_writes_row(tmp_path: Path) -> None:
     ).fetchone()
     conn.close()
     assert row == ("green", req.run_hash)
+
+
+async def test_record_outcome_stores_deterministic_invocation_metadata(
+    tmp_path: Path,
+) -> None:
+    info = _standalone_info(tmp_path)
+    req = CamRecordOutcomeInput(
+        methodology_ids=["m2", "m1"],
+        task_id="trace-test",
+        repo="/trace-repo",
+        outcome="green",
+        evidence={"b": 2, "a": 1},
+        run_hash="tracehash123456",
+        notes="trace evidence",
+    )
+
+    out = await handle_record_outcome(req, info)
+
+    assert out.recorded is True
+
+    conn = sqlite3.connect(info.outcome_db_path)
+    stored = conn.execute(
+        "SELECT evidence FROM codex_outcome_log WHERE run_hash=?",
+        (req.run_hash,),
+    ).fetchone()[0]
+    conn.close()
+
+    evidence = json.loads(stored)
+    assert evidence["a"] == 1
+    assert evidence["b"] == 2
+    trace = evidence["_codex_cam_invocation"]
+    expected_digest = _invocation_digest(req)
+    assert expected_digest.startswith("sha256:")
+    assert trace == {
+        "schema_version": "codex-cam.invocation.v1",
+        "tool": "cam_record_outcome",
+        "methodology_ids": ["m1", "m2"],
+        "task_id": "trace-test",
+        "repo": "/trace-repo",
+        "outcome": "green",
+        "run_hash": "tracehash123456",
+        "input_digest": expected_digest,
+    }
+
+
+async def test_record_outcome_invocation_digest_is_canonical(
+    tmp_path: Path,
+) -> None:
+    info = _standalone_info(tmp_path)
+    first = CamRecordOutcomeInput(
+        methodology_ids=["m2", "m1"],
+        task_id="trace-test",
+        repo="/trace-repo",
+        outcome="green",
+        evidence={"b": 2, "a": 1},
+        run_hash="canonical123456",
+    )
+    second = CamRecordOutcomeInput(
+        methodology_ids=["m1", "m2"],
+        task_id="trace-test",
+        repo="/trace-repo",
+        outcome="green",
+        evidence={"a": 1, "b": 2},
+        run_hash="canonical123456",
+    )
+
+    out1 = await handle_record_outcome(first, info)
+    out2 = await handle_record_outcome(second, info)
+
+    assert _invocation_digest(first) == _invocation_digest(second)
+    assert out1.recorded is True
+    assert out2.duplicate is True
 
 
 async def test_record_outcome_idempotent_on_run_hash(tmp_path: Path) -> None:
