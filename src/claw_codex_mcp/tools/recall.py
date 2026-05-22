@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import json
+import re
 from typing import Any
 
 from claw_codex_mcp.db import ModeInfo, open_read_conn
@@ -17,6 +18,12 @@ from claw_codex_mcp.schemas import (
 STALE_DAYS = 30
 NAME_TRUNC = 80
 SNIPPET_TRUNC = 240
+
+
+def _build_safe_fts5_query(query: str) -> str:
+    """Convert natural language into a quoted OR query for SQLite FTS5."""
+    tokens = re.findall(r"[A-Za-z0-9_]+", query.lower())
+    return " OR ".join(f'"{token}"' for token in tokens)
 
 
 def _parse_tags(raw: str | None) -> list[str]:
@@ -118,6 +125,17 @@ async def handle_recall(req: CamRecallInput, info: ModeInfo) -> CamRecallOutput:
             else "lifecycle_state IN ('viable','thriving','embryonic')"
         )
 
+        fts_query = _build_safe_fts5_query(req.query)
+        if not fts_query:
+            return CamRecallOutput(
+                results=[],
+                corpus_status="connected",
+                corpus_size=_corpus_size(conn),
+                degraded=not info.vec_available,
+                reason="query contained no searchable FTS5 tokens",
+                query_echo=req.query,
+            )
+
         # FTS5 first pass — fetch top 50 candidates.
         try:
             cur = conn.execute(
@@ -131,7 +149,7 @@ async def handle_recall(req: CamRecallInput, info: ModeInfo) -> CamRecallOutput:
                       AND {lifecycle_clause}
                     ORDER BY fts_score
                     LIMIT 50""",
-                (req.query,),
+                (fts_query,),
             )
             rows = cur.fetchall()
         except Exception as exc:  # FTS5 syntax error on weird input → treat as empty match

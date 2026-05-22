@@ -64,6 +64,15 @@ async def test_recall_empty_match_returns_empty_results(connected_info: ModeInfo
     assert out.corpus_status == "connected"
 
 
+async def test_recall_sanitizes_fts5_punctuation(connected_info: ModeInfo) -> None:
+    out = await handle_recall(
+        CamRecallInput(query="UROK-self Creation mode: new", include_embryonic=True),
+        connected_info,
+    )
+    assert out.corpus_status == "connected"
+    assert out.reason != "fts5 error: OperationalError"
+
+
 # --- Populated-results path coverage ---
 
 async def test_recall_returns_real_hits_with_provenance(connected_info: ModeInfo) -> None:
