@@ -45,6 +45,20 @@ python tools/product_smoke.py
 
 That one-command product smoke wraps the version check plus standalone and connected MCP stdio checks. The real-use-case pilot plan is tracked at [`docs/REAL_USE_CASE_TEST_PLAN.md`](docs/REAL_USE_CASE_TEST_PLAN.md).
 
+## MCP-Cortex showpiece
+
+Codex-CAM has now been used to mine MCP-Cortex patterns and apply them to a real MCP server without widening the tool surface. The showpiece is tracked in [`docs/showpieces/2026-05-22-mcp-cortex-showpiece.md`](docs/showpieces/2026-05-22-mcp-cortex-showpiece.md).
+
+What is proven:
+
+- Native `cam_cam` MCP recall returned newly mined `mcp-cortex-handoff-self` methodology rows.
+- Native `cam_provenance` cited the applied MCP-Cortex methodology before implementation.
+- Native `cam_record_outcome` recorded the result as outcome `b0dfe005-d8d6-4c05-8248-ff86fd854d93`.
+- The Codex-CAM MCP stayed at the four-tool ceiling.
+- The external `agentmedq` / `sci-stapler` adoption exposed MCP-Cortex-style capability profiles through its existing `list_sources` tool while preserving its five-tool MCP surface.
+
+Why it matters: MCP tells a client which tools exist; MCP-Cortex-style profiles tell a client what those tools are expected to do, which effects they have, what data leaves the process, and whether a call should be treated as local metadata or external network access. The current showpiece is inspectable metadata, not a full enforcement engine. The next layer is a client or server-side policy gate that reads those profiles and decides whether to allow, warn, deny, or require confirmation before tool calls.
+
 ```bash
 cd /Volumes/WS4TB/WS4TBr/CAM_Codx/codex-cam-methodology-impl
 python tools/demo_stdio.py --mode standalone
