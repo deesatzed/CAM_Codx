@@ -56,7 +56,7 @@ These confirm the world state we designed against is the world state we will bui
 - [ ] **0.5 — User signs off on locked decisions.**
       Re-read the four user-locked decisions in `../HANDOFF_LATEST.md` ("Open Questions / Decisions Needed" section). Gate: explicit user confirmation, recorded in `_decision_log.md`, that all four are still locked.
 
-- [ ] **0.6 — User approves Sections 2–6 of the design.**
+- [x] **0.6 — User approves Sections 2–6 of the design.** *(2026-05-26 — see `_design_approval.md`)*
       Section 1 has been approved verbally in the brainstorm. Sections 2 (MCP Surface), 3 (Skills), 4 (Doctrine), 5 (Validation), 6 (Risks) — each must be approved before any implementation begins. Gate: a `_design_approval.md` file lists each section with a `[x]` and a date.
 
 - [ ] **0.7 — `writing-plans` skill produces an implementation plan.**
