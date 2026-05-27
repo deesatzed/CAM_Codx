@@ -77,6 +77,9 @@ baselines/*
 !baselines/manifest.json.template
 !baselines/repo_set.txt
 !baselines/manifest.json
+# Re-include the RSS baseline measurements — authoritative for lightness claim:
+!baselines/legacy_mcp_rss.txt
+!baselines/new_mcp_rss.txt
 
 # Coverage-gap notes and decision log are project-local; commit only when stabilized.
 docs/_coverage_gaps.md

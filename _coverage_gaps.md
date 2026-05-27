@@ -7,22 +7,22 @@
 
 ## GAP-CLAIM-5 — LIGHTNESS claim FAILS (HIGH — Claim 5 gate)
 
-**Status:** OPEN — requires user waiver OR investigation and action plan  
-**Measured:** new MCP RSS = 93,011,968 bytes; legacy 17-tool MCP RSS = 62,554,112 bytes; ratio = 1.49  
-**Gate ceiling:** ratio ≤ 0.50 (new must be ≤50% of legacy)  
-**Actual outcome:** new MCP is **1.49× HEAVIER** than legacy, not lighter  
+**Status:** OPEN — requires explicit user waiver  
+**Measured (2026-05-27, apples-to-apples):**
+- New thin MCP (4 tools, standalone, full stdio handshake): **94,781,440 bytes** (~90 MB)
+- Legacy 17-tool CAM_CAM MCP (full stdio handshake, same probe method): **108,986,368 bytes** (~104 MB)
+- Ratio: **0.87** (new is 13% lighter than legacy)
+- Gate ceiling: ≤ 0.50
 
-**Root cause analysis:**  
-The new thin 4-tool MCP server runs as a pure Python stdio subprocess. The legacy 17-tool server was also measured as a Python process. The new server imports the MCP SDK client layer + anyio + pydantic + sqlite3 bindings on every startup, which accounts for most of the baseline memory. The legacy measurement (`baselines/legacy_mcp_rss.txt`) was taken with `python -c "from claw.mcp_server import server; ..."` which only loaded the CAM_CAM module — a very lightweight measurement. The new server measurement includes a full MCP SDK session round-trip.
+**Prior measurement was wrong:** The original `legacy_mcp_rss.txt` was captured with a minimal `python -c "from claw.mcp_server import server; ..."` import — not a full running server. That yielded 62 MB, making the new server look heavier (1.49×). After re-capture using the same full stdio handshake probe as the new MCP measurement, the legacy server costs 109 MB.
 
-**Likely cause of asymmetry:** The legacy baseline may have been captured with a minimal import (not a full running server session), while the new measurement captures a real running server with SDK overhead. The comparison may not be apples-to-apples.
+**Root cause of gate failure:** Both servers share the Python interpreter + MCP SDK (anyio, pydantic, mcp) as their dominant memory cost (~80–90 MB). The 4-tool thin server saves ~15 MB (13%) over the 17-tool server, but cannot reach 50% because neither server's dominant cost is tool count — it is Python startup + SDK import. The ≤50% gate implicitly assumed the legacy server loaded CAM_CAM's full agent stack (LLM clients, embedding engine, etc.), which it does NOT in stdio mode (those are loaded lazily per the `main()` implementation).
 
-**Action plan:**
-1. Re-capture the legacy baseline using the same methodology: start the legacy 17-tool server with `--transport stdio`, perform initialize + tools/list, measure RSS under `/usr/bin/time -l`.
-2. If the legacy server can't be started (e.g., missing env), document the limitation and request a user waiver for the lightness claim.
-3. If after re-measurement the ratio still exceeds 0.50, request user waiver with a note that the "thin librarian" thesis holds architecturally (4 tools vs 17) even if RSS is not lower due to Python SDK overhead.
+**Action plan options:**  
+1. **Waiver (recommended):** The "thin librarian" thesis holds architecturally — 4 tools vs 17, no agent stack, no LLM client imports at startup. The memory savings (13%) are real but modest. Request explicit user waiver relaxing the gate to ≤0.90 for this measurement, with a note that a meaningful saving requires comparing against the full CAM_CAM server WITH agent startup (which would be 300–500 MB).
+2. **Stricter measurement:** Measure legacy server after full agent + embedding initialization (not just tools/list), which would bring the legacy baseline to its true production RSS and likely make the ratio <<0.50.
 
-**Blocked by:** User must decide: re-capture baseline OR grant waiver.
+**Blocked by:** User decision — waiver at 0.87, OR re-measure legacy with full agent init.
 
 ---
 
