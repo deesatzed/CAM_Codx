@@ -285,34 +285,44 @@ This phase exercises the full system against real repos. Each gate corresponds t
 - [ ] **9.1 — PROVENANCE (Claim 2).**
       Every cited methodology in a Codex session resolves in `claw.db` via `cam_provenance`.
       Gate: 100% resolution rate across all transcripts from a 5-task workflow on real repos. Per workspace policy: `<100%` requires explicit user waiver — no exceptions, this is the integrity floor.
+      **Script:** `tools/verify_claim_1_provenance.py` — WRITTEN 2026-05-27; not yet run against live DB.
       **Validation:** Gate 9.1.
 
 - [ ] **9.2 — LIGHTNESS (Claim 5).**
       New MCP RSS peak ≤ 50% of the existing 17-tool MCP RSS peak under matched load.
       Gate: `docs/_validation_gates.md` Gate 9.2 ratio check.
       Falsifier: ratio > 0.50. If the SQLite vec extension load (required by `cam_recall`) drives ratio above 0.50, do **not** silently relax the gate; surface to user, record decision in `_coverage_gaps.md`. (Worst-case acceptable ratio per `docs/_validation_gates.md` risk note: ≤0.65 with explicit user approval.)
+      **Script:** `tools/verify_claim_2_lightness.py` — WRITTEN 2026-05-27; requires `baselines/legacy_mcp_rss.txt` from Phase 1 Gate 1.1.
       **Validation:** Gate 9.2.
 
 - [ ] **9.3 — LEARNING (Claim 4).**
-      `methodology_bandit_outcomes` row count is non-zero after the 10-task workflow from step 6.4 plus a subsequent out-of-band bandit run.
-      Gate: count increases by ≥10 (one per outcome), AND the round-2 retrieval distribution differs from an empty-ledger control (chi-square p < 0.1).
+      `codex_outcome_log` row count delta ≥10 after a 10-task workflow; ≥3 distinct `methodology_ids`.
+      Gate: count increases by ≥10, AND ≥3 distinct methodology_ids across new rows.
+      **Script:** `tools/verify_claim_3_learning.py` — WRITTEN 2026-05-27; not yet run against live DB.
       **Validation:** Gate 9.3.
 
 - [ ] **9.4 — COLD-START (Claim 1).**
       On the same 5 unfamiliar repos used in step 1.4, the treatment run produces first-non-trivial-change quality that meets or beats baseline. Rubric: entry points identified, build command found, test command found, primary data model named.
       Gate: rubric score on treatment ≥ baseline + 1 point on a 5-point scale per repo; turns-to-first-correct-edit ≤ baseline; tokens-to-first-correct-edit ≤ baseline. Any single regressing repo means the claim is not universal — open an action plan, do not silently average it away.
+      *(OPEN — no SDK-based verify script defined yet; requires full Codex CLI session with transcript capture. Manual gate.)*
       **Validation:** Gate 9.4.
 
 - [ ] **9.5 — RESCUE (Claim 3).**
       On the 20 curated failures from step 1.5, treatment resolves ≥ 60% without a `user_asked_for_help` event. Baseline must be measured first.
       Gate: `docs/_validation_gates.md` Gate 9.5 — resolved-without-user rate strictly above the baseline rate AND ≥ 0.60.
       Falsifier: treatment escalates to user on the FIRST tool-call failure across any task — means the auto-fire trigger is broken even if the aggregate rate looks fine.
+      *(OPEN — blocked on Phase 1.5: `baselines/failures/` does not exist yet. Blocked on Phase 5.2–5.3 rescue skill.)*
       **Validation:** Gate 9.5.
 
 - [ ] **9.6 — STANDALONE BOOT (Claim 6).**
       Clone this repo fresh to a directory with **no CAM_CAM installation present**. Install (`pip install -e .`). Boot the MCP via Codex CLI with NO `CAM_CODEX_MCP_DB_PATH` set. Run a real Codex session against a real workspace repo that exercises every tool: `cam_recall` (expects `corpus_status: "absent"`), `cam_provenance` (expects `found: false`), `cam_decisions_search` (expects real hits across the user's DECISIONS.md files), `cam_record_outcome` (expects a row written to `~/.cam_codex_mcp/codex_outcome_log.db`).
       Gate: server boots clean; all 4 tools respond; recall and provenance return honest empties; decisions_search and outcome_log fully functional; outcome row is queryable from the local SQLite file post-session.
       Falsifier: server fails to start without the env var, OR `cam_recall` returns any non-empty `results` (would mean fabrication), OR the outcome write goes nowhere.
+      **Script:** `tools/verify_claim_5_standalone.py` — WRITTEN 2026-05-27; not yet run.
+
+- [ ] **9.0 — CLAIM 0 (server invocation gate).**
+      Server boots, initialize handshake succeeds, tools/list returns exactly 4 expected tool names.
+      **Script:** `tools/verify_claim_0.py` — WRITTEN 2026-05-27; prerequisite gate for all other Phase 9 claims.
 
 ---
 
