@@ -41,3 +41,46 @@ def test_rebuild_is_idempotent(tmp_path: Path) -> None:
         "SELECT COUNT(*) FROM decisions_docs"
     ).fetchone()[0]
     assert n1 == n2, "rebuild must be idempotent"
+
+
+def test_build_index_empty_body_block(tmp_path: Path) -> None:
+    """GAP-COV-2 line 103: indexed_body = anchor (the `else anchor` branch).
+
+    A block with a heading but no body text exercises the `if body else anchor`
+    path — the FTS body becomes just the anchor heading with no trailing content.
+    """
+    repo = tmp_path / "empty_body_repo"
+    repo.mkdir()
+    decisions_file = repo / "DECISIONS.md"
+    # Block with a heading but an immediately-following heading (empty body).
+    decisions_file.write_text(
+        "## Headless Decision\n## 2026-01-01 Real Decision\n\nSome body text.\n",
+        encoding="utf-8",
+    )
+    index_db = tmp_path / "idx.db"
+    n_blocks, n_files = build_index(index_db, [repo])
+    assert n_files == 1
+    assert n_blocks == 2
+    # The empty-body block should be stored as just the anchor heading.
+    conn = sqlite3.connect(index_db)
+    rows = conn.execute(
+        "SELECT block_anchor, body FROM decisions_docs ORDER BY block_anchor"
+    ).fetchall()
+    conn.close()
+    anchors = {r[0]: r[1] for r in rows}
+    assert "Headless Decision" in anchors
+    # Body stored as just the anchor text (no trailing newline/content).
+    assert anchors["Headless Decision"] == "Headless Decision"
+
+
+def test_search_with_repo_filter(tmp_path: Path) -> None:
+    """GAP-COV-2 lines 116-117: repo_filter SQL branch in search_index."""
+    index_db = tmp_path / "idx.db"
+    build_index(index_db, [FIXTURE_ROOT / "repo_a", FIXTURE_ROOT / "repo_b"])
+    # repo_b contains "mock data" — filter to repo_b should still find it.
+    hits_filtered = search_index(index_db, "mock data", k=5, repo_filter=str(FIXTURE_ROOT / "repo_b"))
+    assert len(hits_filtered) == 1
+    assert "mock" in hits_filtered[0]["body"].lower()
+    # Filter to repo_a should NOT find the mock-data hit (it's in repo_b).
+    hits_a = search_index(index_db, "mock data", k=5, repo_filter=str(FIXTURE_ROOT / "repo_a"))
+    assert len(hits_a) == 0
