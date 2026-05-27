@@ -5,6 +5,27 @@
 
 ---
 
+## GAP-CLAIM-5 — LIGHTNESS claim FAILS (HIGH — Claim 5 gate)
+
+**Status:** OPEN — requires user waiver OR investigation and action plan  
+**Measured:** new MCP RSS = 93,011,968 bytes; legacy 17-tool MCP RSS = 62,554,112 bytes; ratio = 1.49  
+**Gate ceiling:** ratio ≤ 0.50 (new must be ≤50% of legacy)  
+**Actual outcome:** new MCP is **1.49× HEAVIER** than legacy, not lighter  
+
+**Root cause analysis:**  
+The new thin 4-tool MCP server runs as a pure Python stdio subprocess. The legacy 17-tool server was also measured as a Python process. The new server imports the MCP SDK client layer + anyio + pydantic + sqlite3 bindings on every startup, which accounts for most of the baseline memory. The legacy measurement (`baselines/legacy_mcp_rss.txt`) was taken with `python -c "from claw.mcp_server import server; ..."` which only loaded the CAM_CAM module — a very lightweight measurement. The new server measurement includes a full MCP SDK session round-trip.
+
+**Likely cause of asymmetry:** The legacy baseline may have been captured with a minimal import (not a full running server session), while the new measurement captures a real running server with SDK overhead. The comparison may not be apples-to-apples.
+
+**Action plan:**
+1. Re-capture the legacy baseline using the same methodology: start the legacy 17-tool server with `--transport stdio`, perform initialize + tools/list, measure RSS under `/usr/bin/time -l`.
+2. If the legacy server can't be started (e.g., missing env), document the limitation and request a user waiver for the lightness claim.
+3. If after re-measurement the ratio still exceeds 0.50, request user waiver with a note that the "thin librarian" thesis holds architecturally (4 tools vs 17) even if RSS is not lower due to Python SDK overhead.
+
+**Blocked by:** User must decide: re-capture baseline OR grant waiver.
+
+---
+
 ## GAP-COV-1 — `__main__.py` at 14% (HIGH — blocks CC.6 gate)
 
 **Status:** OPEN — action plan written, not yet executed  

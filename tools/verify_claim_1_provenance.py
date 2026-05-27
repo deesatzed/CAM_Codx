@@ -36,9 +36,14 @@ QUERIES = [
 ]
 
 
-def _fail(reason: str, exit_code: int = 1) -> None:
-    print(f"FAIL  {CLAIM}\n      {reason}", file=sys.stderr)
-    sys.exit(exit_code)
+class _VerifyFail(Exception):
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+def _fail(reason: str) -> None:
+    raise _VerifyFail(reason)
 
 
 def _pass(detail: str = "") -> None:
@@ -56,14 +61,14 @@ def _independent_lookup(db_path: str, methodology_id: str) -> dict | None:
     conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
     try:
         row = conn.execute(
-            "SELECT id, notes, tags FROM methodologies WHERE id = ?",
+            "SELECT id, methodology_notes, tags FROM methodologies WHERE id = ?",
             (methodology_id,),
         ).fetchone()
     finally:
         conn.close()
     if row is None:
         return None
-    return {"id": row[0], "notes": row[1], "tags": row[2]}
+    return {"id": row[0], "methodology_notes": row[1], "tags": row[2]}
 
 
 async def _verify() -> None:
@@ -82,8 +87,9 @@ async def _verify() -> None:
         cwd=ROOT,
     )
 
+    # IDs that passed MCP-layer checks; sqlite cross-check runs after session closes.
+    ids_to_crosscheck: list[str] = []
     total_rows = 0
-    passed_rows = 0
     failures: list[str] = []
 
     with open(os.devnull, "w", encoding="utf-8") as errlog:
@@ -94,15 +100,16 @@ async def _verify() -> None:
 
                 for query in QUERIES:
                     recall_result = _payload(
-                        await session.call_tool("cam_recall", {"query": query, "limit": 5})
+                        await session.call_tool("cam_recall", {"query": query, "k": 5})
                     )
 
                     corpus_status = recall_result.get("corpus_status", "unknown")
                     if corpus_status not in ("connected", "degraded"):
-                        _fail(
+                        failures.append(
                             f"corpus_status={corpus_status!r} for query {query!r}; "
                             "expected connected or degraded — is CAM_CODEX_MCP_DB_PATH set correctly?"
                         )
+                        break
 
                     results = recall_result.get("results", [])
                     if not results:
@@ -120,10 +127,10 @@ async def _verify() -> None:
                             continue
                         seen_ids.add(mid)
 
-                        # Check required provenance fields
+                        # Check required provenance fields (schema uses 'name', not 'title')
                         missing = [
                             f
-                            for f in ("methodology_id", "title", "fitness_n")
+                            for f in ("methodology_id", "name", "fitness_n")
                             if not row.get(f)
                         ]
                         if missing:
@@ -132,7 +139,7 @@ async def _verify() -> None:
                             )
                             continue
 
-                        # cam_provenance must resolve to same row (independent connection)
+                        # cam_provenance must resolve to same row
                         prov_result = _payload(
                             await session.call_tool(
                                 "cam_provenance", {"methodology_id": mid}
@@ -144,15 +151,19 @@ async def _verify() -> None:
                             )
                             continue
 
-                        # Independent sqlite cross-check
-                        db_row = _independent_lookup(db_path, mid)
-                        if db_row is None:
-                            failures.append(
-                                f"id={mid!r} not found in claw.db via independent connection"
-                            )
-                            continue
+                        # Queue for independent sqlite cross-check (outside session)
+                        ids_to_crosscheck.append(mid)
 
-                        passed_rows += 1
+    # Independent sqlite cross-check — runs after MCP session is fully closed.
+    passed_rows = 0
+    for mid in ids_to_crosscheck:
+        db_row = _independent_lookup(db_path, mid)
+        if db_row is None:
+            failures.append(
+                f"id={mid!r} not found in claw.db via independent connection"
+            )
+        else:
+            passed_rows += 1
 
     if total_rows == 0:
         _fail(
@@ -180,7 +191,11 @@ async def _verify() -> None:
 
 
 def main() -> int:
-    asyncio.run(_verify())
+    try:
+        asyncio.run(_verify())
+    except _VerifyFail as exc:
+        print(f"FAIL  {CLAIM}\n      {exc.reason}", file=sys.stderr)
+        return 1
     return 0
 
 

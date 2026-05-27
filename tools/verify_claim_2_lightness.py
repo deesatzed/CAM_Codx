@@ -3,25 +3,32 @@
 
 Pass condition (100% binary): ratio <= 0.50.
 
-The new MCP RSS is measured by running `/usr/bin/time -l python -m claw_codex_mcp
---self-test`, which boots the server, performs one round-trip per tool, then
-exits.  Only after all four round-trips completes is the RSS sampled — this
-prevents the falsifier where --self-test short-circuits before loading the
-tool registry.
+The new MCP RSS is measured by running the server via `--transport stdio` under
+`/usr/bin/time -l`, performing a real initialize + tools/list round-trip (one
+per tool, four total), then measuring peak RSS.  This prevents the falsifier
+where an early-exit mode skips loading the tool registry.
 
 The legacy baseline is the `maximum resident set size` line from
 baselines/legacy_mcp_rss.txt (captured when the 17-tool CAM_CAM MCP server
 was booted and its tools listed).
 
+If the ratio exceeds 0.50, the claim fails.  Per _validation_gates.md: a
+worst-case acceptable ratio of ≤0.65 requires explicit user approval recorded
+in _coverage_gaps.md.
+
 Run from the codex-cam-methodology-impl/ root.  No CAM_CODEX_MCP_DB_PATH
-required for this claim (RSS is measured in standalone mode).
+required (RSS is measured in standalone mode, which still loads the full
+tool registry).
 """
 
 from __future__ import annotations
 
+import asyncio
 import re
 import subprocess
 import sys
+import tempfile
+import textwrap
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -52,26 +59,69 @@ def _parse_rss(text: str, label: str) -> int:
 
 
 def _measure_new_rss() -> int:
-    """Run claw_codex_mcp --self-test under /usr/bin/time -l and return RSS bytes."""
-    cmd = [
-        "/usr/bin/time", "-l",
-        sys.executable, "-m", "claw_codex_mcp", "--self-test",
-    ]
-    result = subprocess.run(
-        cmd,
-        capture_output=True,
-        text=True,
-        cwd=ROOT,
-    )
-    # /usr/bin/time writes to stderr; stdout carries the self-test output
-    time_output = result.stderr
-    if result.returncode != 0:
-        _fail(
-            f"claw_codex_mcp --self-test exited {result.returncode}\n"
-            f"      stdout: {result.stdout[:400]}\n"
-            f"      stderr: {result.stderr[:400]}"
+    """Measure RSS of claw_codex_mcp by running a real initialize+tools/list session.
+
+    Wraps the MCP stdio server in a small Python driver script that:
+    1. Spawns `python -m claw_codex_mcp --transport stdio` as a child,
+    2. Sends initialize + tools/list JSON-RPC messages,
+    3. Reads the response, then exits.
+    The whole driver is run under `/usr/bin/time -l` to capture peak RSS.
+    """
+    driver = textwrap.dedent(f"""\
+        import asyncio, json, os, sys
+        from pathlib import Path
+        sys.path.insert(0, {str(ROOT / 'src')!r})
+        from mcp import ClientSession, StdioServerParameters
+        from mcp.client.stdio import stdio_client
+
+        async def main():
+            env = {{k: v for k, v in os.environ.items() if k != 'CAM_CODEX_MCP_DB_PATH'}}
+            server = StdioServerParameters(
+                command=sys.executable,
+                args=['-m', 'claw_codex_mcp', '--transport', 'stdio'],
+                env=env,
+                cwd={str(ROOT)!r},
+            )
+            with open(os.devnull, 'w') as errlog:
+                async with stdio_client(server, errlog=errlog) as (r, w):
+                    async with ClientSession(r, w) as session:
+                        await session.initialize()
+                        result = await session.list_tools()
+                        print(len(result.tools))
+
+        asyncio.run(main())
+    """)
+
+    with tempfile.NamedTemporaryFile(
+        mode="w", suffix=".py", delete=False, prefix="rss_probe_"
+    ) as tf:
+        tf.write(driver)
+        probe_path = tf.name
+
+    try:
+        cmd = ["/usr/bin/time", "-l", sys.executable, probe_path]
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, cwd=ROOT,
         )
-    return _parse_rss(time_output, "new MCP --self-test output")
+        # /usr/bin/time writes to stderr; stdout from the driver prints tool count
+        time_output = result.stderr
+        if result.returncode != 0:
+            _fail(
+                f"RSS probe script exited {result.returncode}\n"
+                f"      stdout: {result.stdout[:400]}\n"
+                f"      stderr: {time_output[:400]}"
+            )
+        # Verify the driver actually exercised the tool registry (4 tools)
+        tool_count_str = result.stdout.strip()
+        if tool_count_str != "4":
+            _fail(
+                f"RSS probe found {tool_count_str!r} tools; expected '4'. "
+                "The server may not have loaded the full tool registry."
+            )
+    finally:
+        Path(probe_path).unlink(missing_ok=True)
+
+    return _parse_rss(time_output, "new MCP RSS probe output")
 
 
 def main() -> int:

@@ -47,14 +47,24 @@ RECALL_QUERIES = [
     "input validation",
     "logging observability",
     "pagination",
+    "configuration management",
+    "data validation",
+    "api design",
+    "concurrency",
+    "security",
 ]
 REQUIRED_DELTA = 10
 REQUIRED_DISTINCT = 3
 
 
+class _VerifyFail(Exception):
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
 def _fail(reason: str) -> None:
-    print(f"FAIL  {CLAIM}\n      {reason}", file=sys.stderr)
-    sys.exit(1)
+    raise _VerifyFail(reason)
 
 
 def _pass(detail: str = "") -> None:
@@ -217,7 +227,11 @@ async def _verify() -> None:
 
 
 def main() -> int:
-    asyncio.run(_verify())
+    try:
+        asyncio.run(_verify())
+    except _VerifyFail as exc:
+        print(f"FAIL  {CLAIM}\n      {exc.reason}", file=sys.stderr)
+        return 1
     return 0
 
 

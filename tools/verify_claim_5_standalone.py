@@ -46,9 +46,14 @@ EXPECTED_TOOLS = {
 STANDALONE_OUTCOME_DB = Path.home() / ".cam_codex_mcp" / "codex_outcome_log.db"
 
 
+class _VerifyFail(Exception):
+    def __init__(self, reason: str) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
 def _fail(reason: str) -> None:
-    print(f"FAIL  {CLAIM}\n      {reason}", file=sys.stderr)
-    sys.exit(1)
+    raise _VerifyFail(reason)
 
 
 def _pass(detail: str = "") -> None:
@@ -203,7 +208,11 @@ def main() -> int:
             "intended to run the standalone claim with a corpus-aware caller env.",
             file=sys.stderr,
         )
-    asyncio.run(_verify())
+    try:
+        asyncio.run(_verify())
+    except _VerifyFail as exc:
+        print(f"FAIL  {CLAIM}\n      {exc.reason}", file=sys.stderr)
+        return 1
     return 0
 
 
