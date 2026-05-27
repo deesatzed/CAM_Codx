@@ -200,6 +200,16 @@ CREATE TABLE IF NOT EXISTS codex_outcome_log (
 CREATE INDEX IF NOT EXISTS idx_codex_outcome_ts ON codex_outcome_log(ts DESC);
 CREATE INDEX IF NOT EXISTS idx_codex_outcome_repo ON codex_outcome_log(repo);
 CREATE INDEX IF NOT EXISTS idx_codex_outcome_outcome ON codex_outcome_log(outcome);
+CREATE TRIGGER IF NOT EXISTS codex_outcome_log_no_update
+    BEFORE UPDATE ON codex_outcome_log
+BEGIN
+    SELECT RAISE(ABORT, 'codex_outcome_log is append-only: UPDATE is forbidden');
+END;
+CREATE TRIGGER IF NOT EXISTS codex_outcome_log_no_delete
+    BEFORE DELETE ON codex_outcome_log
+BEGIN
+    SELECT RAISE(ABORT, 'codex_outcome_log is append-only: DELETE is forbidden');
+END;
 """
 
 

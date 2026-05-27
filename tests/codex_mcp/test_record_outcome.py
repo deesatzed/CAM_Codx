@@ -218,3 +218,75 @@ async def test_record_outcome_connected_rejects_unknown_methodology_id(
     ).fetchone()[0]
     conn.close()
     assert n == 0
+
+
+# ── Gate 6.5 / CC.2: append-only enforcement (triggers) ──────────────────────
+
+
+def test_outcome_log_schema_has_no_update_trigger(tmp_path: Path) -> None:
+    """Gate 6.5: ensure_outcome_schema must install the no-update trigger."""
+    out_db = tmp_path / "outcome.db"
+    ensure_outcome_schema(out_db)
+    conn = sqlite3.connect(out_db)
+    names = [r[0] for r in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='trigger'"
+    ).fetchall()]
+    conn.close()
+    assert "codex_outcome_log_no_update" in names, "missing append-only UPDATE trigger"
+    assert "codex_outcome_log_no_delete" in names, "missing append-only DELETE trigger"
+
+
+def test_outcome_log_update_is_rejected(tmp_path: Path) -> None:
+    """Gate 6.5 / CC.2: UPDATE on codex_outcome_log must raise."""
+    out_db = tmp_path / "outcome.db"
+    ensure_outcome_schema(out_db)
+    conn = sqlite3.connect(out_db)
+    conn.execute(
+        "INSERT INTO codex_outcome_log "
+        "(methodology_ids, task_id, repo, outcome, evidence, run_hash) "
+        "VALUES ('[]', 'tid', '/repo', 'green', '{}', 'testhash-upd')"
+    )
+    conn.commit()
+    with pytest.raises((sqlite3.OperationalError, sqlite3.IntegrityError), match="append-only"):
+        conn.execute(
+            "UPDATE codex_outcome_log SET outcome='red' WHERE run_hash='testhash-upd'"
+        )
+        conn.commit()
+    conn.close()
+
+
+def test_outcome_log_delete_is_rejected(tmp_path: Path) -> None:
+    """Gate 6.5 / CC.2: DELETE on codex_outcome_log must raise."""
+    out_db = tmp_path / "outcome.db"
+    ensure_outcome_schema(out_db)
+    conn = sqlite3.connect(out_db)
+    conn.execute(
+        "INSERT INTO codex_outcome_log "
+        "(methodology_ids, task_id, repo, outcome, evidence, run_hash) "
+        "VALUES ('[]', 'tid', '/repo', 'green', '{}', 'testhash-del')"
+    )
+    conn.commit()
+    with pytest.raises((sqlite3.OperationalError, sqlite3.IntegrityError), match="append-only"):
+        conn.execute(
+            "DELETE FROM codex_outcome_log WHERE run_hash='testhash-del'"
+        )
+        conn.commit()
+    conn.close()
+
+
+def test_outcome_log_insert_still_works_after_trigger_install(tmp_path: Path) -> None:
+    """Sanity: triggers must not block legitimate INSERTs."""
+    out_db = tmp_path / "outcome.db"
+    ensure_outcome_schema(out_db)
+    conn = sqlite3.connect(out_db)
+    conn.execute(
+        "INSERT INTO codex_outcome_log "
+        "(methodology_ids, task_id, repo, outcome, evidence, run_hash) "
+        "VALUES ('[]', 'tid', '/repo', 'green', '{}', 'testhash-ins')"
+    )
+    conn.commit()
+    n = conn.execute(
+        "SELECT COUNT(*) FROM codex_outcome_log WHERE run_hash='testhash-ins'"
+    ).fetchone()[0]
+    conn.close()
+    assert n == 1
