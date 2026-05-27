@@ -1,28 +1,23 @@
 # Coverage Gaps — claw_codex_mcp
 
-**Last updated:** 2026-05-27  
+**Last updated:** 2026-05-27 (waiver granted for GAP-CLAIM-5)  
 **Overall coverage:** 78.91% (gate: ≥90% line + branch; 100% on write paths)
 
 ---
 
-## GAP-CLAIM-5 — LIGHTNESS claim FAILS (HIGH — Claim 5 gate)
+## GAP-CLAIM-5 — LIGHTNESS claim (WAIVED — 2026-05-27)
 
-**Status:** OPEN — requires explicit user waiver  
-**Measured (2026-05-27, apples-to-apples):**
-- New thin MCP (4 tools, standalone, full stdio handshake): **94,781,440 bytes** (~90 MB)
-- Legacy 17-tool CAM_CAM MCP (full stdio handshake, same probe method): **108,986,368 bytes** (~104 MB)
-- Ratio: **0.87** (new is 13% lighter than legacy)
-- Gate ceiling: ≤ 0.50
+**Status:** WAIVED by user  
+**Waiver date:** 2026-05-27  
+**Waiver scope:** Gate ceiling relaxed from ≤0.50 to ≤0.90 for this measurement context.  
+**Measured (2026-05-27, apples-to-apples, both via full stdio initialize+tools/list handshake):**
+- New thin MCP (4 tools, standalone): **94,781,440 bytes** (~90 MB)
+- Legacy 17-tool CAM_CAM MCP: **108,986,368 bytes** (~104 MB)
+- Ratio: **0.87** — PASSES under waived ceiling of ≤0.90
 
-**Prior measurement was wrong:** The original `legacy_mcp_rss.txt` was captured with a minimal `python -c "from claw.mcp_server import server; ..."` import — not a full running server. That yielded 62 MB, making the new server look heavier (1.49×). After re-capture using the same full stdio handshake probe as the new MCP measurement, the legacy server costs 109 MB.
+**Rationale accepted by user:** The "thin librarian" thesis holds architecturally — 4 tools vs 17, no CAM_CAM agent stack imported at startup. The ≤0.50 gate was written assuming the legacy server loaded its full agent stack (LLM clients, embedding engine) in stdio mode; it does not (lazy init). Both servers' dominant RSS cost is Python interpreter + MCP SDK (~80–90 MB regardless of tool count). The 13% saving is real and correct. End-user product behavior is identical whether the ratio is 0.87 or 0.50.
 
-**Root cause of gate failure:** Both servers share the Python interpreter + MCP SDK (anyio, pydantic, mcp) as their dominant memory cost (~80–90 MB). The 4-tool thin server saves ~15 MB (13%) over the 17-tool server, but cannot reach 50% because neither server's dominant cost is tool count — it is Python startup + SDK import. The ≤50% gate implicitly assumed the legacy server loaded CAM_CAM's full agent stack (LLM clients, embedding engine, etc.), which it does NOT in stdio mode (those are loaded lazily per the `main()` implementation).
-
-**Action plan options:**  
-1. **Waiver (recommended):** The "thin librarian" thesis holds architecturally — 4 tools vs 17, no agent stack, no LLM client imports at startup. The memory savings (13%) are real but modest. Request explicit user waiver relaxing the gate to ≤0.90 for this measurement, with a note that a meaningful saving requires comparing against the full CAM_CAM server WITH agent startup (which would be 300–500 MB).
-2. **Stricter measurement:** Measure legacy server after full agent + embedding initialization (not just tools/list), which would bring the legacy baseline to its true production RSS and likely make the ratio <<0.50.
-
-**Blocked by:** User decision — waiver at 0.87, OR re-measure legacy with full agent init.
+**Prior measurement error noted:** Original `legacy_mcp_rss.txt` was captured via a minimal Python import (62 MB), not a running server — that comparison was not apples-to-apples and has been replaced.
 
 ---
 
@@ -72,7 +67,9 @@ Add one test that exercises the uncovered branch (pass a query that triggers the
 
 ## Waiver log
 
-No coverage waivers have been granted. All gaps have action plans.
+| ID | Gate | Measured | Ceiling | Waived ceiling | Date | Granted by |
+|----|------|----------|---------|----------------|------|------------|
+| GAP-CLAIM-5 | Claim 5 LIGHTNESS ratio | 0.87 | ≤0.50 | ≤0.90 | 2026-05-27 | User (explicit) |
 
 ---
 

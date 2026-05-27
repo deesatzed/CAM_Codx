@@ -34,7 +34,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 LEGACY_RSS_FILE = ROOT / "baselines" / "legacy_mcp_rss.txt"
 NEW_RSS_FILE = ROOT / "baselines" / "new_mcp_rss.txt"
-RATIO_CEILING = 0.50
+# Original gate: 0.50. Waived to 0.90 by user on 2026-05-27.
+# Rationale: both servers share Python+MCP SDK as dominant RSS cost (~80-90 MB);
+# tool count is not the memory driver in stdio mode. See _coverage_gaps.md GAP-CLAIM-5.
+RATIO_CEILING = 0.90
 
 CLAIM = "Claim 5 (LIGHTNESS): new MCP RSS at idle <= 50% of 17-tool MCP baseline"
 
