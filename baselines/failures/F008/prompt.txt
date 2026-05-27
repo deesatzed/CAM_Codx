@@ -1,0 +1,3 @@
+FAILURE SCENARIO F008
+
+cam mine-self --quick raises TypeError: cannot unpack non-iterable NoneType object; mine-self returns None instead of (findings, repo_name) tuple when --quick flag used

@@ -1,0 +1,3 @@
+FAILURE SCENARIO F014
+
+failure feedback prompt lacks causal context: only final error message passed to enrichment; no stack trace, no preceding commands, no failure chain

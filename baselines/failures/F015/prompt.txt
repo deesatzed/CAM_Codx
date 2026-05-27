@@ -1,0 +1,3 @@
+FAILURE SCENARIO F015
+
+cam_recall returns zero results for queries containing special FTS5 characters (parentheses, quotes, asterisks); FTS5 MATCH raises OperationalError: fts5: syntax error

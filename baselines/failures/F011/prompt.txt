@@ -1,0 +1,3 @@
+FAILURE SCENARIO F011
+
+miner silently skips recovery strategies 2 and 3 after model escalation: conditional guard checks wrong flag; only strategy 1 (primary model) ever executes

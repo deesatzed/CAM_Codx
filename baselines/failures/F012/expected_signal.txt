@@ -1,0 +1,1 @@
+pass parent of base_dir to _discover_repos in federation.py; add assertion that discovery finds at least one repo

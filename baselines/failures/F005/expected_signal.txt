@@ -1,0 +1,1 @@
+update ganglion_pool.record_outcome signature; pass OutcomeRecord dataclass not raw string

@@ -1,0 +1,1 @@
+tests must use tmp_path fixtures for path isolation; subprocess calls need explicit timeout parameter

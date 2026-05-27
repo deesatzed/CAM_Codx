@@ -1,0 +1,3 @@
+FAILURE SCENARIO F012
+
+federation cross-query returns empty results: wrong base directory passed to _discover_repos; method detects project root instead of repos parent dir

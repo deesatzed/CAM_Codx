@@ -1,0 +1,3 @@
+FAILURE SCENARIO F013
+
+_discover_repos includes the base directory itself as a repo candidate causing source_tree false-positive match; miner processes its own codebase as a repo to mine

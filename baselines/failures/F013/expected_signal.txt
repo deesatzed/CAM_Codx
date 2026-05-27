@@ -1,0 +1,1 @@
+skip base_dir in the discovery loop: add `if d == base_dir: continue` guard

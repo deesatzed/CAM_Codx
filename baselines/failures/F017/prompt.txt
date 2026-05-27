@@ -1,0 +1,3 @@
+FAILURE SCENARIO F017
+
+_check_vec raises unhandled sqlite3.DatabaseError when db_path points to a non-SQLite file (e.g., a text file); only OperationalError was caught

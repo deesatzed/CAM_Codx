@@ -1,0 +1,3 @@
+FAILURE SCENARIO F018
+
+test_recall.py fails with KeyError: 'files_affected' when slice DB only contains viable methodologies with no embryonic rows; the test fixture assumes mixed lifecycle

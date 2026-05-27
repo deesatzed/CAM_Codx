@@ -1,0 +1,3 @@
+repo: /Volumes/WS4TB/WS4TBr/CAM_Codx/codex-cam-methodology-impl
+fix_commit: 3ab853e
+broken_at: 339560e9ebeb0737e158033932d6a1424abf22bf

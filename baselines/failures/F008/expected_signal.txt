@@ -1,0 +1,1 @@
+add explicit return (findings, repo_name) in the --quick early-exit branch of mine-self

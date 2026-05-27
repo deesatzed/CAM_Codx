@@ -1,0 +1,1 @@
+broaden except clause to catch sqlite3.Error (parent of both DatabaseError and OperationalError)

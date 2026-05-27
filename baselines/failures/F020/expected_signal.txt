@@ -1,0 +1,1 @@
+add confidence and evidence_fragments to INSERT statement in persist_failure_knowledge; update schema to include both columns

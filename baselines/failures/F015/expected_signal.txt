@@ -1,0 +1,1 @@
+sanitize query before passing to FTS5 MATCH: strip/escape parentheses, quotes, and asterisks; fall back to LIKE scan if FTS5 raises

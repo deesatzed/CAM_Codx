@@ -1,0 +1,3 @@
+FAILURE SCENARIO F019
+
+failure knowledge UI groups all signals under a single generic bucket; causal groups not distinguished in review view; reviewer cannot differentiate error types

@@ -1,0 +1,3 @@
+FAILURE SCENARIO F010
+
+routing returns 500 on second request: db.repository INSERT not idempotent on run_hash; logs endpoint returns 422 missing field error; agent interface duplicate-registration error on reload

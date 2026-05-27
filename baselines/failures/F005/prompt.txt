@@ -1,0 +1,3 @@
+FAILURE SCENARIO F005
+
+federation outcome callback silently drops write-back to ganglion pool; cycle.py calls ganglion_pool.record_outcome but passes wrong argument type (str instead of OutcomeRecord)

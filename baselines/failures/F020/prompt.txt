@@ -1,0 +1,3 @@
+FAILURE SCENARIO F020
+
+failure detail signals not persisted: persist_failure_knowledge() skips signal detail fields (confidence, evidence_fragments); only top-level summary saved

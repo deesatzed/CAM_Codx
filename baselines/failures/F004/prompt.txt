@@ -1,0 +1,3 @@
+FAILURE SCENARIO F004
+
+knowledge pipeline loses ~96% of mined findings: operational_cards table INSERT missing from batch write path; triage queue not draining; budget cap blocks enrichment after first methodology

@@ -1,0 +1,3 @@
+FAILURE SCENARIO F006
+
+tests import claw.community.kit_exporter but module file is missing from repository; fresh clone fails immediately on test collection

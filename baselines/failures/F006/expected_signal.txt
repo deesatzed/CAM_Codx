@@ -1,0 +1,1 @@
+add src/claw/community/kit_exporter.py to repository; module was written but never committed

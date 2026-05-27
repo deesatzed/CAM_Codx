@@ -1,0 +1,1 @@
+move fastapi from [mcp] optional to base [dependencies] in pyproject.toml

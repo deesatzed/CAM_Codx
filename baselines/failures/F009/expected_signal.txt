@@ -1,0 +1,1 @@
+pass --no-auto-seed flag to subprocess invocation in test; add PYTIMEOUT=30 to subprocess call

@@ -80,6 +80,9 @@ baselines/*
 # Re-include the RSS baseline measurements — authoritative for lightness claim:
 !baselines/legacy_mcp_rss.txt
 !baselines/new_mcp_rss.txt
+# Re-include failure corpus — 20 real failures from git history, required for Phase 1.5 / 9.5:
+!baselines/failures/
+!baselines/failures/**
 
 # Coverage-gap notes and decision log are project-local; commit only when stabilized.
 docs/_coverage_gaps.md

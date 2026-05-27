@@ -1,0 +1,1 @@
+extract and include stack_trace, preceding_commands, and failure_chain from run context in prompt enrichment

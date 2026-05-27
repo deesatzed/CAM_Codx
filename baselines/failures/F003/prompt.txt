@@ -1,0 +1,3 @@
+FAILURE SCENARIO F003
+
+CI lint gate fails: ruff reports unused import in fitness.py; assimilator.py has undefined name in except clause

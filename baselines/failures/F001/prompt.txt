@@ -1,0 +1,3 @@
+FAILURE SCENARIO F001
+
+cam recall returns zero results despite viable methodologies in corpus; fallback model slug 'claude-3-opus' rejected by OpenRouter (unsupported model ID)

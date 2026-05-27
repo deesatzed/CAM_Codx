@@ -1,0 +1,1 @@
+rebuild claw_slice.db to include both embryonic and viable rows; update build_slice_db.py to insert at least one of each lifecycle state

@@ -1,0 +1,3 @@
+FAILURE SCENARIO F007
+
+fresh clone fails: pip install -e . raises ModuleNotFoundError for fastapi; fastapi listed in optional deps only, not base dependencies

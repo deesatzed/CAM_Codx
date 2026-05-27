@@ -1,0 +1,1 @@
+add INSERT to operational_cards; fix triage drain loop; raise per-task budget cap from $0.50 to $5.00

@@ -1,0 +1,1 @@
+model slug must use OpenRouter format (provider/model); correct slug: anthropic/claude-3-opus-20240229

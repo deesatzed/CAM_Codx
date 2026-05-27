@@ -1,0 +1,1 @@
+add group_by=causal_category to failure knowledge query; update review UI to render separate sections per causal group

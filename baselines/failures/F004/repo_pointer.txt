@@ -1,0 +1,3 @@
+repo: /Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM
+fix_commit: 2a614fb
+broken_at: 9a0c3bc2b084330c81eff50a74b5628c26598037

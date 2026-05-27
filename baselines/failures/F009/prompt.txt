@@ -1,0 +1,3 @@
+FAILURE SCENARIO F009
+
+validation gate CLI smoke test hangs indefinitely: subprocess spawns auto-seed which blocks waiting for user input; no timeout set

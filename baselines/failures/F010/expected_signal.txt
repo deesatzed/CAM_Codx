@@ -1,0 +1,1 @@
+add INSERT OR IGNORE to repository; fix logs schema; deregister agent before re-registration in interface.py

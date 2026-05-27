@@ -1,0 +1,1 @@
+add test for standalone ensure_outcome_schema with explicit db_path; add test triggering FTS fallback via corrupted query

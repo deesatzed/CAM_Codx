@@ -1,0 +1,3 @@
+FAILURE SCENARIO F016
+
+db.py write path coverage below 100%: ensure_outcome_schema branches for standalone vs connected mode not exercised; recall.py FTS fallback branch uncovered

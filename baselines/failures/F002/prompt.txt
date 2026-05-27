@@ -1,0 +1,3 @@
+FAILURE SCENARIO F002
+
+CI tests fail on clean checkout: test_assimilator_freshness uses hardcoded absolute paths; test_validation_gate hangs waiting for subprocess with no timeout
