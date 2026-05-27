@@ -13,7 +13,8 @@ from pathlib import Path
 import pytest
 
 from claw_codex_mcp.db import (
-    ModeInfo, open_read_conn, write_lock, ensure_outcome_schema,
+    ModeInfo, open_read_conn, write_lock, ensure_outcome_schema, health_check,
+    get_outcome_summary, count_green_outcomes,
 )
 
 
@@ -56,6 +57,103 @@ async def test_write_lock_serializes() -> None:
         ["A:start", "A:end", "B:start", "B:end"],
         ["B:start", "B:end", "A:start", "A:end"],
     ), f"writes interleaved: {order}"
+
+
+async def test_health_check_returns_outcome_row_count(tmp_path: Path) -> None:
+    out_db = tmp_path / "outcome.db"
+    ensure_outcome_schema(out_db)
+    conn = sqlite3.connect(out_db)
+    try:
+        conn.execute(
+            "INSERT INTO codex_outcome_log "
+            "(id, methodology_ids, task_id, repo, outcome, evidence, run_hash) "
+            "VALUES ('h1', '[]', 'tid-1', '/repo', 'green', '{}', 'hash-health-1')"
+        )
+        conn.execute(
+            "INSERT INTO codex_outcome_log "
+            "(id, methodology_ids, task_id, repo, outcome, evidence, run_hash) "
+            "VALUES ('h2', '[]', 'tid-2', '/repo', 'partial', '{}', 'hash-health-2')"
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    info = ModeInfo(
+        mode="standalone",
+        corpus_status="absent",
+        db_path=None,
+        outcome_db_path=out_db,
+        vec_available=False,
+    )
+
+    assert await health_check(info) == 2
+
+
+def test_get_outcome_summary_returns_counts_grouped_by_outcome(
+    tmp_path: Path,
+) -> None:
+    out_db = tmp_path / "outcome.db"
+    ensure_outcome_schema(out_db)
+    conn = sqlite3.connect(out_db)
+    try:
+        rows = [
+            ("s1", "green", "hash-summary-1"),
+            ("s2", "green", "hash-summary-2"),
+            ("s3", "partial", "hash-summary-3"),
+            ("s4", "rejected", "hash-summary-4"),
+        ]
+        conn.executemany(
+            "INSERT INTO codex_outcome_log "
+            "(id, methodology_ids, task_id, repo, outcome, evidence, run_hash) "
+            "VALUES (?, '[]', 'tid', '/repo', ?, '{}', ?)",
+            rows,
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    info = ModeInfo(
+        mode="standalone",
+        corpus_status="absent",
+        db_path=None,
+        outcome_db_path=out_db,
+        vec_available=False,
+    )
+
+    assert get_outcome_summary(info) == {
+        "green": 2,
+        "partial": 1,
+        "rejected": 1,
+    }
+
+
+def test_count_green_outcomes_returns_green_row_count(tmp_path: Path) -> None:
+    out_db = tmp_path / "outcome.db"
+    ensure_outcome_schema(out_db)
+    conn = sqlite3.connect(out_db)
+    try:
+        rows = [
+            ("g1", "green", "hash-green-count-1"),
+            ("g2", "green", "hash-green-count-2"),
+            ("r1", "red", "hash-green-count-3"),
+            ("p1", "partial", "hash-green-count-4"),
+        ]
+        conn.executemany(
+            "INSERT INTO codex_outcome_log "
+            "(id, methodology_ids, task_id, repo, outcome, evidence, run_hash) "
+            "VALUES (?, '[]', 'tid', '/repo', ?, '{}', ?)",
+            rows,
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    info = ModeInfo(
+        mode="standalone",
+        corpus_status="absent",
+        db_path=None,
+        outcome_db_path=out_db,
+        vec_available=False,
+    )
+
+    assert count_green_outcomes(info) == 2
 
 
 def test_ensure_outcome_schema_idempotent(tmp_path: Path) -> None:

@@ -154,6 +154,48 @@ async def write_lock() -> AsyncIterator[None]:
         yield
 
 
+async def health_check(info: ModeInfo) -> int:
+    """Return the row count in codex_outcome_log for the active outcome DB."""
+    conn = sqlite3.connect(f"file:{info.outcome_db_path}?mode=ro", uri=True)
+    try:
+        conn.execute("PRAGMA query_only = ON")
+        conn.execute("PRAGMA busy_timeout = 5000")
+        cur = conn.execute("SELECT COUNT(*) FROM codex_outcome_log")
+        row = cur.fetchone()
+        return int(row[0])
+    finally:
+        conn.close()
+
+
+def get_outcome_summary(info: ModeInfo) -> dict[str, int]:
+    """Return outcome counts grouped by codex_outcome_log.outcome."""
+    conn = sqlite3.connect(f"file:{info.outcome_db_path}?mode=ro", uri=True)
+    try:
+        conn.execute("PRAGMA query_only = ON")
+        conn.execute("PRAGMA busy_timeout = 5000")
+        rows = conn.execute(
+            "SELECT outcome, COUNT(*) FROM codex_outcome_log GROUP BY outcome "
+            "ORDER BY outcome"
+        ).fetchall()
+        return {str(outcome): int(count) for outcome, count in rows}
+    finally:
+        conn.close()
+
+
+def count_green_outcomes(info: ModeInfo) -> int:
+    """Return the count of green rows in codex_outcome_log."""
+    conn = sqlite3.connect(f"file:{info.outcome_db_path}?mode=ro", uri=True)
+    try:
+        conn.execute("PRAGMA query_only = ON")
+        conn.execute("PRAGMA busy_timeout = 5000")
+        row = conn.execute(
+            "SELECT COUNT(*) FROM codex_outcome_log WHERE outcome = 'green'"
+        ).fetchone()
+        return int(row[0])
+    finally:
+        conn.close()
+
+
 @contextmanager
 def open_read_conn(info: ModeInfo) -> Iterator[sqlite3.Connection]:
     """Open a read-only connection. Raises if mode is standalone (no corpus)."""
