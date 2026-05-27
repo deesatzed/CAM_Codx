@@ -182,12 +182,12 @@ Prerequisites for Phase 4 (must exist first):
       Gate: zero hits for `claw_query_memory` or `claw_store_finding` across the entire `.codex/skills/` tree. CC.3 active.
       **Validation:** Gate 4.2 (zero phantom refs) and Gate 4.4 (rewrite removed all 5 references at lines 25 / 65 / 135 / 162 / 168).
 
-- [ ] **4.4 — Behavioural: Codex CLI actually invokes `cam_recall`.** *(OPEN — manual gate M1; non-interactive Codex MCP approval is intentionally user-gated by OpenAI; reframed to SDK-based verify_claim_0 script per GAP-C2 Option B)*
+- [x] **4.4 — Behavioural: Codex CLI actually invokes `cam_recall`.** *(2026-05-27 — PASSES. Live Codex session: `$cam_recall_and_cite` skill invoked via user-level symlink. `cam_recall` called 4 times with real queries against corpus_size=866, corpus_status=connected. `cam_provenance` called 3 times for returned methodology IDs. `cam_record_outcome` called and confirmed recorded=true, outcome_id=0aaa13b7-6816-48d6-a435-4ac8f1876c36. Full MCP tool chain proven end-to-end. Note: auto_fire frontmatter (`verbs_match`) does NOT trigger automatically in Codex 0.134.0 — skill must be invoked explicitly via `$skill_name`. CAM skills symlinked from workspace `.codex/skills/` into `~/.codex/skills/` to make them visible to Codex.)*
       Run a real pattern-shaped task on an unfamiliar workspace repo. Inspect the transcript with the trace-pattern regex registry from prerequisites.
       Gate: at least one `tool_call: cam_recall` event in the transcript on a task where the skill is in the active skill list.
       **Validation:** Gate 4.5. **This is Claim 0** — if it fails, all later behavioural claims are vacuous; do not proceed.
 
-- [ ] **4.5 — Skill output contract integrity.** *(OPEN — depends on 4.4 live Codex session)*
+- [x] **4.5 — Skill output contract integrity.** *(2026-05-27 — PASSES. `IMPLEMENT.md` in showpiece-clones/UROK updated with `## Retrieved Methodologies (step: TQ-023)` block containing pattern_id, name, fitness, source, status columns and one-line provenance citations per spec. Codex correctly handled zero-results from strict recall (no fabrication) and fell back to embryonic/stale patterns with honest status labeling.)*
       For each invocation in step 4.4, the resulting `IMPLEMENT.md` contains the required `## Retrieved Methodologies` block with the one-line provenance per pattern (`pattern_id - name - fitness X.XX (N green / M red) - source: <path> [STALE if last_verified > 30d]`).
       Gate: block format parses against the template; every fitness number is accompanied by its denominator (`N green / M red`).
 
