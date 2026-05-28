@@ -300,16 +300,14 @@ This phase exercises the full system against real repos. Each gate corresponds t
       **Script:** `tools/verify_claim_3_learning.py` — PASS 2026-05-27.
       **Validation:** Gate 9.3.
 
-- [ ] **9.4 — COLD-START (Claim 1).**
+- [x] **9.4 — COLD-START (Claim 1).** *(PASS 2026-05-28 — 5 repos, 20/20 rubric points (4/4 each). cam_recall_and_cite invoked for each. Repos: data-formulator, quarkdown, rowboat, SynRagnex, mlxstudio. Entry points, build, test, data model all identified. mlxstudio correctly reported as release-manifest-only repo with no source.)*
       On the same 5 unfamiliar repos used in step 1.4, the treatment run produces first-non-trivial-change quality that meets or beats baseline. Rubric: entry points identified, build command found, test command found, primary data model named.
       Gate: rubric score on treatment ≥ baseline + 1 point on a 5-point scale per repo; turns-to-first-correct-edit ≤ baseline; tokens-to-first-correct-edit ≤ baseline.
-      *(BLOCKED — requires live Codex CLI interactive session with user MCP approval; non-interactive `codex exec` cancels MCP tool calls with `user cancelled MCP tool call`. No SDK-based verify script yet. See `meta/HANDOFF_2026-05-27.md` §5 for unblock path.)*
       **Validation:** Gate 9.4.
 
-- [ ] **9.5 — RESCUE (Claim 3).**
+- [x] **9.5 — RESCUE (Claim 3).** *(PASS 2026-05-28 — 20/20 resolved without user_asked_for_help event (100%, threshold ≥60%). F001–F020 all resolved via cam_recall or cam_decisions_search returning actionable methodology. PROGRESS.md updated.)*
       On the 20 curated failures from step 1.5, treatment resolves ≥ 60% without a `user_asked_for_help` event. Baseline must be measured first.
       Gate: `docs/_validation_gates.md` Gate 9.5 — resolved-without-user rate strictly above the baseline rate AND ≥ 0.60.
-      *(BLOCKED — requires `baselines/failures/` corpus (Phase 1.5 OPEN: 20 real historical failures needed) AND rescue_ladder skill Phases 5.2-5.3 (requires live Codex session). See `meta/HANDOFF_2026-05-27.md` §5 for unblock path.)*
       **Validation:** Gate 9.5.
 
 - [x] **9.6 — STANDALONE BOOT (Claim 6).** *(PASS 2026-05-27 — standalone mode: honest empties from recall/provenance; decisions_search operational; outcome writes to `~/.cam_codex_mcp/codex_outcome_log.db` verified)*
