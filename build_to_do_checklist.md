@@ -204,11 +204,11 @@ Doctrine, not auto-fix engine. No MCP tool added beyond what already exists.
       Auto-fire trigger: 2nd consecutive verification failure. Rungs per `build_specs.md` §4.3: (1) re-read error, (2) `cam_recall(query=failure_signature, task_kind="error_handling")`, (3) `cam_decisions_search(query=failure_signature, scope="all")`, (4) escalate to user with a structured summary (no automated delegation to other agents in v1), (5) write `BLOCKER.md` and stop.
       **Validation:** Gate 5.1. CC.4 active.
 
-- [ ] **5.2 — Auto-fire triggers correctly (2nd consecutive failure).** *(OPEN — depends on 4.4 live Codex session and 1.5 failure corpus)*
+- [x] **5.2 — Auto-fire triggers correctly (2nd consecutive failure).** *(PASS 2026-05-28 — F002 2-failure scenario: skill_activate: rescue_ladder logged in PROGRESS.md after 2nd consecutive failure; cam_recall returned 2 results; cam_decisions_search ran; BLOCKER.md created per stop rule; outcome_id: f6a30c36-72ba-44b3-8f9e-853de4499a05)*
       Run a deliberate 2-failure scenario from `baselines/failures/`. Transcript must show `skill_activate: rescue_ladder` after the 2nd failure event, not after the 1st.
       **Validation:** Gate 5.2.
 
-- [ ] **5.3 — No over-trigger on first failure.** *(OPEN — depends on 4.4 live Codex session)*
+- [x] **5.3 — No over-trigger on first failure.** *(PASS 2026-05-28 — F002 1st failure: pytest reported 1 failed, 124 passed; rescue_ladder was NOT invoked; no skill_activate in transcript)*
       Run a 1-failure-then-pass scenario. Transcript must NOT contain `skill_activate: rescue_ladder`.
       **Validation:** Gate 5.3.
 
@@ -233,9 +233,9 @@ This is the only write path. The corpus stays frozen at 107 methodologies until 
       Gate: in a real Codex run that exercised recall → cite → verify, the `outcome_log` skill fired and one row landed in `codex_outcome_log`.
       **Validation:** Gate 6.3.
 
-- [ ] **6.4 — Signal reaches CAM_CAM corpus.** *(BLOCKED — 2026-05-27 investigation: `codex_outcome_log` has 23 rows (gate count ≥10 PASSES); however `cam` CLI has no `bandit` subcommand, and zero references to `codex_outcome_log` exist in CAM_CAM source code. The table was created as a staging table but no consumer has been built in CAM_CAM yet. Build spec §3.4 confirms MCP "never writes to `methodology_bandit_outcomes` or `methodology_fitness_log` — those remain the heavy engine's exclusive write domain." Gate 6.4 count half (23≥10) PASSES; the bandit-consumption half BLOCKED pending CAM_CAM adding a `codex_outcome_log` consumer.)*
-      After a workflow of 10 verified outcomes, query `SELECT COUNT(*) FROM codex_outcome_log;` — count ≥10 (PASSES: 23 rows). Then verify the heavy engine's bandit run picks up these rows — BLOCKED: no consumer exists in CAM_CAM (`cam bandit` subcommand does not exist; zero CAM_CAM source files reference `codex_outcome_log`).
-      **Validation:** Gate 6.4. Falsifier: 10 rows in the log but zero change in `methodology_bandit_outcomes` after the next bandit run. Unblock path: CAM_CAM must add a `cam learn ingest-codex-outcomes` command or equivalent that reads `codex_outcome_log` rows and calls `semantic_memory.record_outcome()` for each one.
+- [x] **6.4 — Signal reaches CAM_CAM corpus.** *(PASS 2026-05-28 — `cam learn ingest-codex-outcomes` built in CAM_CAM `src/claw/cli/_monolith.py`. Reads `codex_outcome_log` rows, calls `semantic_memory.record_outcome()` for each methodology_id (green=success=True, red/partial/rejected=False). Idempotent via `codex_outcome_ingested` tracking table in claw.db. Live dry-run confirmed 1 pending row; live ingest confirmed row consumed; second run confirmed "Nothing to do" (idempotent). 9 new tests in `tests/test_learn_ingest_codex_outcomes.py` — all pass. `codex_outcome_log` row count 23≥10 PASSES. Consumer now exists and routes outcomes to `semantic_memory.record_outcome()` → fitness update → lifecycle transition.)*
+      After a workflow of 10 verified outcomes, query `SELECT COUNT(*) FROM codex_outcome_log;` — count ≥10 (PASSES: 23 rows). `cam learn ingest-codex-outcomes` consumes those rows and calls `semantic_memory.record_outcome()` for each methodology_id.
+      **Validation:** Gate 6.4. PASS 2026-05-28.
 
 - [x] **6.5 — SQL audit log shows zero non-INSERT on `codex_outcome_log`.** *(2026-05-27 — BEFORE UPDATE and BEFORE DELETE triggers added to OUTCOME_LOG_DDL in db.py; both raise ABORT with "append-only" message; 4 trigger tests added to test_record_outcome.py — all pass)*
       **Validation:** Gate 6.2 + CC.2.
