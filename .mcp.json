@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "cam_cam": {
+      "command": "python",
+      "args": ["-m", "claw_codex_mcp", "--transport", "stdio"],
+      "env": {
+        "PYTHONPATH": "/Volumes/WS4TB/CAM_grok_build/CAM_Codx/codex-cam-methodology-impl/src",
+        "CAM_CODEX_MCP_DB_PATH": "/Volumes/WS4TB/CAM_grok_build/CAM_Codx/CAM_CAM/instances/typescript/claw.db",
+        "CAM_CODEX_MCP_DECISIONS_INDEX": "/Users/o2satz/.cam_codex_mcp/codex_decisions_index.db"
+      }
+    }
+  }
+}

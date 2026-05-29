@@ -76,6 +76,13 @@ def _write_message(message: dict[str, Any]) -> None:
     sys.stdout.flush()
 
 
+def _write_framed_message(message: dict[str, Any]) -> None:
+    payload = json.dumps(message, separators=(",", ":")).encode("utf-8")
+    header = f"Content-Length: {len(payload)}\r\n\r\n".encode("ascii")
+    sys.stdout.buffer.write(header + payload)
+    sys.stdout.buffer.flush()
+
+
 def _tool_definitions() -> list[dict[str, Any]]:
     return [
         {"name": name, "description": description, "inputSchema": {"type": "object"}}
@@ -162,16 +169,41 @@ def _handle_request(
     return _jsonrpc_error(message_id, -32601, f"Method not found: {method}")
 
 
+def _parse_content_length(header_line: str) -> int | None:
+    name, _, value = header_line.partition(":")
+    if name.lower() != "content-length":
+        return None
+    try:
+        return int(value.strip())
+    except ValueError:
+        return None
+
+
 def _serve_stdio() -> int:
     for line in sys.stdin:
+        if line.lower().startswith("content-length:"):
+            content_length = _parse_content_length(line)
+            while True:
+                header = sys.stdin.readline()
+                if header in {"", "\n", "\r\n"}:
+                    break
+                if header.lower().startswith("content-length:"):
+                    content_length = _parse_content_length(header)
+            if content_length is None:
+                _write_framed_message(_jsonrpc_error(None, -32700, "Parse error"))
+                continue
+            line = sys.stdin.read(content_length)
+            write_response = _write_framed_message
+        else:
+            write_response = _write_message
         try:
             request = json.loads(line)
         except json.JSONDecodeError:
-            _write_message(_jsonrpc_error(None, -32700, "Parse error"))
+            write_response(_jsonrpc_error(None, -32700, "Parse error"))
             continue
         response = _handle_request(request)
         if response is not None:
-            _write_message(response)
+            write_response(response)
     return 0
 
 

@@ -1,5 +1,43 @@
 # PROGRESS.md
 
+## Grok Controller Migration - 2026-05-29
+
+Assumptions:
+
+- Active implementation target is `/Volumes/WS4TB/CAM_grok_build/CAM_Codx/codex-cam-methodology-impl`.
+- `CAM_Codx` is a workspace container; `CAM_CAM` is a dependency/corpus engine, not the primary migration target.
+- `claw_codex_mcp` remains a compatibility package name for this pass.
+- Local Grok CLI truth supersedes stale `grokdocs.md`: installed Grok is `grok 0.2.3`, uses `grok -p` for single-prompt headless, and does not recognize `grok build` or top-level `grok --headless`.
+
+Changes made:
+
+- Added Grok-native project rules in `AGENTS.md`.
+- Added repo-local Grok MCP configuration in `.grok/config.toml`.
+- Added standard MCP compatibility config in `.mcp.json`.
+- Added `tools/grok_controller_smoke.py`.
+- Added `tests/codex_mcp/test_grok_controller.py`.
+- Added Content-Length framed stdio support to `src/claw_codex_mcp/__main__.py` while preserving newline JSON-RPC.
+- Added a root `claw_codex_mcp` import shim so required local commands use this checkout's `src/` tree instead of the older registered worktree path.
+- Updated README opening status to Grok-first.
+- Added `IMPLEMENT.md`, `IMPLEMENTATION_PACKET.md`, and `docs/plans/grok-controller-migration.md`.
+
+Verification evidence:
+
+- `python -m claw_codex_mcp --version` -> `0.1.0`
+- `pytest tests/codex_mcp/test_grok_controller.py -q` -> `5 passed in 0.14s`
+- `pytest tests/codex_mcp/ -q` -> `131 passed in 3.45s`
+- `python tools/product_smoke.py` -> `PRODUCT SMOKE PASS work_dir=/private/tmp/cam_codex_mcp_product_smoke`
+- `python tools/grok_controller_smoke.py --skip-headless` -> `GROK CONTROLLER SMOKE PASS`
+- `grok inspect --json` -> discovered `/Volumes/WS4TB/CAM_grok_build/CAM_Codx/codex-cam-methodology-impl/Agents.md` and repo-local `.grok/config.toml`; reported `projectTrusted: false`.
+- `git diff --check` -> passed with no output.
+- `cam_record_outcome` native MCP call attempted for this migration; the CAM transport returned `Transport closed`, so no outcome row was available to record in this pass.
+
+Grok blockers / remaining risks:
+
+- `grok -p "Reply with exactly: grok-cam-ok" ...` failed with `FS_PERMISSION_DENIED` while creating a session. This blocks authenticated headless E2E proof in the current environment.
+- `grok mcp doctor cam_cam --json` starts a `cam_cam` server but reports `handshake failed: connection closed: initialize response`; its source summary reports user `~/.grok/config.toml` has `server_count: 1`, project `.grok/config.toml` and `.mcp.json` are found but `server_count: 0`, and `grok.com` is skipped because auth is expired. Treat this as a Grok trust/auth/config interpretation blocker, not a CAM MCP pytest/product-smoke failure.
+- Existing legacy Codex references remain in historical docs, baseline harnesses, package names, and `.codex/` compatibility assets; `docs/plans/grok-controller-migration.md` classifies them.
+
 ## Rescue Ladder - step `pytest tests/codex_mcp/ -q` - attempt 1
 
 Precondition check: user invoked `rescue_ladder`, but the exact verification command passed in this session. No second consecutive verification failure exists for this step, so the ladder stopped before error-pattern recall, decisions search, diff bisection, or blocker escalation. This avoids inventing failure knowledge.

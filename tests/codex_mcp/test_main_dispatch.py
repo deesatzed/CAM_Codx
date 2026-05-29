@@ -242,6 +242,31 @@ def test_serve_stdio_handles_ping(monkeypatch: pytest.MonkeyPatch, capsys) -> No
     monkeypatch.setattr(main_mod, "_MODE_INFO", None)
 
 
+def test_serve_stdio_handles_content_length_framed_ping(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Grok MCP clients use Content-Length framed JSON-RPC over stdio."""
+    import claw_codex_mcp.__main__ as main_mod
+    monkeypatch.setattr(main_mod, "_MODE_INFO", None)
+    monkeypatch.delenv("CAM_CODEX_MCP_DB_PATH", raising=False)
+    main_mod._get_mode_info()
+
+    payload = json.dumps({"jsonrpc": "2.0", "method": "ping", "id": 101})
+    framed = f"Content-Length: {len(payload.encode('utf-8'))}\r\n\r\n{payload}"
+    fake_stdin = io.StringIO(framed)
+    output_messages: list[dict] = []
+
+    with patch.object(sys, "stdin", fake_stdin):
+        with patch.object(main_mod, "_write_framed_message", side_effect=output_messages.append):
+            exit_code = main_mod._serve_stdio()
+
+    assert exit_code == 0
+    assert len(output_messages) == 1
+    assert output_messages[0]["id"] == 101
+    assert output_messages[0]["result"] == {}
+    monkeypatch.setattr(main_mod, "_MODE_INFO", None)
+
+
 def test_serve_stdio_handles_parse_error(monkeypatch: pytest.MonkeyPatch) -> None:
     """_serve_stdio emits -32700 on malformed JSON and continues."""
     import claw_codex_mcp.__main__ as main_mod
