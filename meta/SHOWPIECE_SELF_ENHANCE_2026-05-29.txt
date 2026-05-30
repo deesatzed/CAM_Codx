@@ -1,0 +1,186 @@
+18:49:54 claw.factory INFO CAM-SEQ feature flags active: a2a_packets, application_packets, component_cards, connectome_seq, critical_slot_policy
+18:49:54 claw.db INFO Connected to SQLite at data/claw.db (sqlite-vec loaded)
+18:49:54 claw.db INFO Database schema initialized successfully
+18:49:54 claw.community.seeder INFO Discovered 4 seed pack(s) in /Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM/src/claw/data/seed
+18:49:54 claw.agent.claude INFO Fallback model chain set: qwen/qwen3.6-flash, deepseek/deepseek-v4-flash, deepseek/deepseek-v4-pro, x-ai/grok-4.3, openai/gpt-4.1-mini
+18:49:54 claw.agent.codex INFO Fallback model chain set: qwen/qwen3.6-flash, deepseek/deepseek-v4-flash, deepseek/deepseek-v4-pro, x-ai/grok-4.3, openai/gpt-4.1-mini
+18:49:54 claw.agent.gemini INFO Fallback model chain set: qwen/qwen3.6-flash, deepseek/deepseek-v4-flash, deepseek/deepseek-v4-pro, x-ai/grok-4.3, openai/gpt-4.1-mini
+18:49:54 claw.agent.grok INFO Fallback model chain set: qwen/qwen3.6-flash, deepseek/deepseek-v4-flash, deepseek/deepseek-v4-pro, x-ai/grok-4.3, openai/gpt-4.1-mini
+18:49:54 claw.factory INFO Kelly sizer enabled: kappa=10.0, f_max=0.40
+18:49:54 claw.dispatcher INFO Dispatcher initialized: agents=['claude', 'codex', 'gemini', 'grok'], exploration_rate=0.10, repository=connected, kelly=enabled
+18:49:54 claw.budget INFO BudgetEnforcer initialized: per_task=$5.00, per_project=$50.00, per_day=$100.00, per_agent=$25.00
+18:49:54 claw.degradation INFO DegradationManager initialized: agents=['claude', 'codex', 'gemini', 'grok'], dispatcher=connected
+18:49:54 claw.memory.lifecycle INFO Lifecycle transition: viable -> thriving for methodology 6a2b9ace-d9bd-4954-8fc3-1246e86a2151
+18:49:54 claw.memory.lifecycle INFO Lifecycle transition: viable -> thriving for methodology 2df723d4-caab-404f-834e-4ddc12c321f1
+18:49:54 claw.memory.lifecycle INFO Lifecycle transition: viable -> thriving for methodology b5331aee-b926-4ad3-9022-804b7a64087f
+18:49:55 claw.memory.lifecycle INFO Periodic sweep transitions: {'viable->thriving': 3}
+18:49:55 claw.memory.governance INFO Governance sweep complete: gc=0, culled=0, episodes=0, transitions={'viable->thriving': 3} (0.20s)
+18:49:55 claw.factory INFO Startup governance sweep: gc=0, culled=0
+18:49:55 claw.mcp_server INFO ClawMCPServer initialized: semantic_memory=connected, verifier=connected, dispatcher=connected, federation=none
+18:49:55 claw.factory INFO MCP server created (transport=stdio)
+18:49:55 claw.factory INFO GapAnalyzer enabled: threshold=3
+18:49:55 claw.factory INFO GanglionRepositoryPool created for federation write-back
+18:49:55 claw.factory INFO ClawContext created: db=data/claw.db, agents=[claude, codex, gemini, grok], evolution=[error_kb, semantic_memory, prompt_evolver, pattern_learner]
+
+CLAW Enhancement: CAM_CAM
+  Repository: /Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM
+  Mode: attended
+  Dry run: no
+  Agents: claude, codex, gemini, grok
+
+Phase 1: Evaluating repository...
+
+                   Repository Analysis: CAM_CAM                    
+┏━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Metric         ┃ Value                                          ┃
+┡━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ Total Files    │ 940                                            │
+│ Git Repository │ Yes                                            │
+│ Has README     │ Yes                                            │
+│ Has Tests      │ Yes                                            │
+│ Languages      │ Python, TypeScript                             │
+│ Config Files   │ pyproject.toml, docker-compose.yml, Dockerfile │
+└────────────────┴────────────────────────────────────────────────┘
+ File Type Breakdown 
+      (Top 10)       
+┏━━━━━━━━━━━┳━━━━━━━┓
+┃ Extension ┃ Count ┃
+┡━━━━━━━━━━━╇━━━━━━━┩
+│ .py       │   335 │
+│ .pyc      │   289 │
+│ .md       │   132 │
+│ .json     │    51 │
+│ .tsx      │    29 │
+│ (no ext)  │    22 │
+│ .sh       │    19 │
+│ .txt      │     8 │
+│ .toml     │     8 │
+│ .html     │     8 │
+└───────────┴───────┘
+
+Expectation Baseline
+  Match score: 1.000
+
+Phase 2: Planning enhancements...
+18:49:55 claw.planner INFO Planner initialized: project_id=513e8662-2324-494e-af2b-e6faff2d4603, repository=connected
+18:49:55 claw.planner INFO Gap analysis produced 1 tasks from 1 evaluation results
+18:49:55 claw.planner INFO Prioritized 1 tasks. Order: [analysis:2]
+  Generated 1 enhancement tasks
+
+Phase 3: Executing 1 tasks...
+
+  Task 1/1: [Analysis] General code quality review for CAM_CAM
+18:49:55 claw.cycle INFO Grabbed task: [Analysis] General code quality review for CAM_CAM (priority=2)
+18:49:55 claw.memory.error_kb INFO Found 0 recurring failure patterns across 1 tasks in project 513e8662-2324-494e-af2b-e6faff2d4603
+18:49:55 claw.memory.semantic INFO Found 25 similar methodologies for: Finding from evaluation prompt 'structural_analysis':
+
+General code quality revi
+18:49:55 claw.cycle INFO CAM-SEQ: built 1 packets for archetype 'cross_language_pattern_transfer' (3 slots)
+18:49:55 claw.cycle INFO Evaluated task: 0 forbidden approaches, 8 hints, 1 packets
+18:49:55 claw.dispatcher INFO Using recommended_agent='claude' for task_type='analysis'
+18:49:55 claw.cycle INFO Decided: routing to agent 'claude'
+18:49:55 claw.agent.claude INFO [Claude Code Agent] Starting: task='[Analysis] General code quality review for CAM_CAM'
+18:49:55 claw.agent.claude INFO Knowledge funnel: retrieved=8, injected=8, chars=12668, budget=32000
+18:49:56 httpx INFO HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+18:50:06 claw.agent.claude INFO [Claude Code Agent] Complete: status=success (11.13s)
+18:50:06 claw.cycle INFO Act complete: agent=claude, tests_passed=True, files=2
+18:50:06 claw.memory.auto_fix INFO Auto-fix applied: missing_import_pytest: added missing 'import pytest' [test_security.py]
+18:50:06 claw.memory.auto_fix INFO Auto-fix applied: missing_import_pytest: added missing 'import pytest' [test_core_models.py]
+18:50:06 claw.memory.auto_fix INFO Auto-fix applied: missing_import_pytest: added missing 'import pytest' [test_mcp_camseq_tools.py]
+18:50:06 claw.memory.auto_fix INFO Auto-fix applied: missing_import_pytest: added missing 'import pytest' [test_reassess_helpers.py]
+18:50:06 claw.memory.auto_fix INFO Auto-fix applied: missing_import_pytest: added missing 'import pytest' [test_ideation_helpers.py]
+18:50:06 claw.memory.auto_fix INFO Auto-fix applied: missing_import_pytest: added missing 'import pytest' [test_create_benchmark_spec.py]
+18:50:06 claw.memory.auto_fix INFO Auto-fix applied: fim_token_leakage: stripped leaked FIM/special tokens [test_auto_fix.py]
+18:50:06 claw.memory.auto_fix INFO Auto-fix applied: fim_token_leakage: stripped leaked FIM/special tokens [auto_fix.py]
+18:50:06 claw.memory.auto_fix INFO Auto-fix applied: callable_vs_isfunction: replaced inspect.isfunction() with callable() [test_auto_fix.py]
+18:50:06 claw.memory.auto_fix INFO Auto-fix applied: callable_vs_isfunction: replaced inspect.isfunction() with callable() [auto_fix.py]
+18:50:06 claw.cycle INFO Proactive auto-fix applied 10 fixes before verification: missing_import_pytest: added missing 'import pytest' [test_security.py]; missing_import_pytest: added missing 'import pytest' [test_core_models.py]; missing_import_pytest: added missing 'import pytest' [test_mcp_camseq_tools.py]; missing_import_pytest: added missing 'import pytest' [test_reassess_helpers.py]; missing_import_pytest: added missing 'import pytest' [test_ideation_helpers.py]; missing_import_pytest: added missing 'import pytest' [test_create_benchmark_spec.py]; fim_token_leakage: stripped leaked FIM/special tokens [test_auto_fix.py]; fim_token_leakage: stripped leaked FIM/special tokens [auto_fix.py]; callable_vs_isfunction: replaced inspect.isfunction() with callable() [test_auto_fix.py]; callable_vs_isfunction: replaced inspect.isfunction() with callable() [auto_fix.py]
+18:50:08 claw.verifier WARNING Drift alignment check failed: Validation error for field 'import_name':
+    TypeError: Unsupported type for field 'import_name': str | None
+18:50:09 httpx INFO HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+18:50:22 claw.verifier INFO pyproject.toml found in /Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM — running pip install -e .
+18:50:26 claw.verifier INFO Auto-install results for /Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM: pip install -e . succeeded
+18:51:51 claw.verifier INFO Tests failed in /Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM (4247 tests, exit code 1, runner=pytest)
+18:51:51 claw.cycle INFO Verify: approved=False, violations=4
+18:51:51 claw.cycle INFO Attempt 1/3 failed for task 59e743d0-67e0-4707-885c-a14ecea51f49 with 4 violations — will retry
+18:51:51 claw.cycle INFO Correction attempt 2/3 for task 59e743d0-67e0-4707-885c-a14ecea51f49
+18:51:52 claw.cycle INFO Workspace restored for correction attempt 2
+18:51:52 claw.agent.claude INFO [Claude Code Agent] Starting: task='[Analysis] General code quality review for CAM_CAM'
+18:51:52 claw.agent.claude INFO Knowledge funnel: retrieved=8, injected=8, chars=12668, budget=32000
+18:51:53 httpx INFO HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+18:52:12 claw.agent.claude INFO [Claude Code Agent] Complete: status=success (20.55s)
+18:52:12 claw.cycle INFO Act complete: agent=claude, tests_passed=True, files=2
+18:52:12 claw.verifier WARNING Drift alignment check failed: Validation error for field 'import_name':
+    TypeError: Unsupported type for field 'import_name': str | None
+18:52:13 httpx INFO HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+18:52:21 claw.verifier INFO pyproject.toml found in /Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM — running pip install -e .
+18:52:24 claw.verifier INFO Auto-install results for /Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM: pip install -e . succeeded
+18:53:51 claw.verifier INFO Tests failed in /Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM (4247 tests, exit code 1, runner=pytest)
+18:53:51 claw.cycle INFO Verify: approved=False, violations=4
+18:53:51 claw.cycle INFO Attempt 2/3 failed for task 59e743d0-67e0-4707-885c-a14ecea51f49 with 4 violations — will retry
+18:53:51 claw.cycle INFO Correction attempt 3/3 for task 59e743d0-67e0-4707-885c-a14ecea51f49
+18:53:51 claw.cycle INFO Workspace restored for correction attempt 3
+18:53:51 claw.agent.claude INFO [Claude Code Agent] Starting: task='[Analysis] General code quality review for CAM_CAM'
+18:53:51 claw.agent.claude INFO Knowledge funnel: retrieved=8, injected=8, chars=12668, budget=32000
+18:53:53 httpx INFO HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+18:54:11 claw.agent.claude INFO [Claude Code Agent] Complete: status=success (20.06s)
+18:54:11 claw.cycle INFO Act complete: agent=claude, tests_passed=True, files=2
+18:54:11 claw.verifier WARNING Drift alignment check failed: Validation error for field 'import_name':
+    TypeError: Unsupported type for field 'import_name': str | None
+18:54:12 httpx INFO HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+18:54:20 claw.verifier INFO LLM deep check PASSED (model=qwen/qwen3.6-flash)
+18:54:20 claw.verifier INFO pyproject.toml found in /Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM — running pip install -e .
+18:54:23 claw.verifier INFO Auto-install results for /Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM: pip install -e . succeeded
+18:55:48 claw.verifier INFO Tests failed in /Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM (4249 tests, exit code 1, runner=pytest)
+18:55:48 claw.cycle INFO Verify: approved=False, violations=1
+18:55:48 claw.cycle INFO Attempt 3/3 failed for task 59e743d0-67e0-4707-885c-a14ecea51f49 with 1 violations — will retry
+18:55:48 claw.cycle WARNING All 3 correction attempts exhausted for task 59e743d0-67e0-4707-885c-a14ecea51f49
+18:55:48 claw.cycle INFO Recorded failure in hypothesis log for task 59e743d0-67e0-4707-885c-a14ecea51f49 (error: unknown)
+18:55:48 claw.evolution.rl_escalation INFO RL Tier 3: Human gate for task 59e743d0-67e0-4707-885c-a14ecea51f49 (category=unknown, infra/unknown)
+18:55:49 claw.cycle INFO Learned: task [Analysis] General code quality review for CAM_CAM failed by claude (error: unknown)
+    completed (354.0s)
+    Agent: claude | Tokens: 27,200
+    Summary: {
+  "summary": "Added a detailed code quality review report and an 
+evidence-weighting configuration file to address the structural_analysis 
+evaluation prompt for CAM_CAM. The report documents current ...
+    Files: cl/config/evaluation.yaml, reports/code_quality_review.md
+    Rejected (1 violation)
+      - test_execution: Tests failed in workspace: =============================
+test session starts ==============================
+platform darwin -- Python 3.13.9, pytest-8.4.1, pluggy-1.6.0
+benchmark: 5.2.3 (defaults: timer=time.perf_counter disable_gc=False 
+min_rounds=5 min_time=0.000005 max_time=1.0 calibration_precision=10 
+warmup=False warmup_iterations=100000)
+Fugue tests will be initialized with options:
+rootdir: /Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM
+configfile: pyproject.toml
+testpaths: tests
+plugins: benchmark-5.2.3, fugue-0.9.3, langsmith-0.8.6, dash-3.3.0, cov-7.1.0, 
+jaxtyping-0.3.9, json-report-1.5.0, timeout-2.4.0, metadata-3.1.1, httpx-0.30.0,
+Faker-38.2.0, asyncio-1.3.0, typeguard-4.4.3, mock-3.12.0, anyio-4.13.0
+timeout: 60.0s
+timeout method: signal
+timeout func_only: False
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=None, 
+asyncio_default_test_loop_scope=function
+collected 4245 items
+
+tests/benchmarks/connectome_suite/test_ablation.py ..                    [  0%]
+tests/benchmarks/connectome_suite/test_connectome_recipe_ablation.py ..  [  0%]
+tests/benchmarks/connectome_suite/test_full_suite.py ...                 [  0%]
+tests/benchmarks/connectome_suite/test_generate_artifacts.py .           [  0%]
+tests/benchmarks/connectome_suite/test_live_run_harness.py ..            [  0%]
+tests/benchmarks/connectome_suite/test_multi_layer_ablation.py ..        [  0%]
+tests/benchmarks/connectome_suite/test_pilot_harness.py ..               [  0%]
+tests/benchmarks/connectome_suite/test_pilot_suite.py ...                [  0%]
+tests/benchmarks/connectome_suite/test_report.py ..                      [  0%]
+tests/benchmarks/connectome_suite/test_seeded_retrograde.py ...          [  0%]
+tests/test_ablation.py .........................                         [  1%]
+tests/test_agents.py ................................................... [  2%]
+..................................                                       [  3%]
+tests/test_application_packet.py ...                              
+  Continue?  18:55:49 claw.db INFO Database connection closed
+18:55:49 claw.factory INFO ClawContext closed
+
+Aborted.
