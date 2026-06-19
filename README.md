@@ -1,8 +1,27 @@
+# CAM_Codx
+
+CAM_Codx is the separate Codex-facing companion repo for CAM_CAM. It defines a thin MCP/methodology bridge that lets OpenAI Codex recall, cite, search, and record outcomes against CAM-style engineering knowledge without turning CAM_CAM itself into the Codex repo.
+
+**New-user status, verified 2026-06-19:** this public checkout is `https://github.com/deesatzed/CAM_Codx.git` on `main`. It is the clean front door and design contract. A separate local implementation workspace exists on `feature/initial-impl`, but it is dirty and ahead of its remote branch, so it is not presented as launch-clean here. See [docs/NEW_USER_AUDIT_2026-06-19.md](docs/NEW_USER_AUDIT_2026-06-19.md).
+
+CAM_CAM is optional. In standalone mode, CAM_Codx records outcomes locally and can search decision records. In connected mode, `CAM_CODEX_MCP_DB_PATH` points at a CAM_CAM `claw.db` so recall and provenance can use the mined-method corpus.
+
+The intended public MCP surface stays deliberately small:
+
+- `cam_recall`
+- `cam_provenance`
+- `cam_decisions_search`
+- `cam_record_outcome`
+
+This repo should make sense to a new visitor as a Codex/CAM bridge, not as CAM_CAM itself and not as a hidden implementation release.
+
+---
+
 # Codex-CAM Methodology
 
 *A thin librarian bridge between OpenAI Codex CLI and the CAM_CAM research engine.*
 
-**Status: DESIGN PHASE (v0.1) — no code yet. Tracking documents: PRD.md, build_specs.md, build_to_do_checklist.md.**
+**Status: DESIGN CONTRACT / PUBLIC FRONT DOOR. Tracking documents: PRD.md, build_specs.md, build_to_do_checklist.md. Implementation-branch work must be promoted separately before it is described as release-ready.**
 
 ---
 
@@ -17,7 +36,7 @@ CAM_CAM (the heavy Python research engine that mines methodologies, runs the ban
 
 A Codex skill (`deepscientist-data-research`) in the workspace today carries a **phantom contract** — it references MCP tools (`claw_query_memory`, `claw_store_finding`) that are not wired anywhere. This methodology supersedes that with a clean four-tool surface and rewrites the skill to use it.
 
-This README frames scope honestly. The corpus has **107 methodologies** (95 viable, 12 embryonic), not the 889 the CAM_CAM README still claims. The bandit has never received outcome signal (`bandit_outcomes = 0`, `fitness_log = 0`) even though there are 96 `usage_log` entries — the loop is open at the "record outcome" step. The design is therefore framed as **seed corpus plus loop closure**, not "mature library on tap." Closing the loop is the v1 centerpiece; everything else in the design exists to make that loop reliable.
+Historical baseline note: early design work used a much smaller CAM_CAM corpus snapshot to keep the bridge contract honest. Do not treat those old 107/889 references as current CAM_CAM launch metrics. Current CAM_CAM corpus metrics live in CAM_CAM's `docs/LAUNCH_METRICS_2026-06-19.md`; this repo should only promise that connected mode reads whatever `CAM_CODEX_MCP_DB_PATH` points to and reports corpus status honestly.
 
 The doctrine adds one line on top of the existing three:
 > *Codex decides. Tests arbitrate. Markdown remembers. **CAM librarian cites.***
@@ -176,7 +195,7 @@ These are non-negotiable for v1. They appear again in PRD.md (success criteria) 
 - **Provenance is mandatory before application.** No recalled pattern may be applied without its provenance row first written to `IMPLEMENT.md`. This is a doctrine line in `.codex/AGENTS.md`, not a soft convention.
 - **Out-of-band only for mining/bandit/defense-chain.** The librarian never triggers CAM_CAM jobs. If a tool implementation reaches for the miner or the dispatcher, the boundary has been crossed.
 - **No silent application above a fitness threshold.** Fitness informs ranking; it never bypasses citation. Every applied pattern is cited regardless of score.
-- **Honest corpus framing in every artifact.** 107 methodologies, not 889. Where the 889 number appears in CAM_CAM's own README, that is a documentation issue tracked separately and not propagated here.
+- **Honest corpus framing in every artifact.** Do not hard-code stale corpus totals into CAM_Codx claims. Connected mode must report the live `claw.db` it is given; standalone mode must report an absent corpus honestly.
 
 ## How a developer will interact
 
@@ -200,9 +219,9 @@ Three short scenarios. "Now" is the present state; "proposed" is the design targ
 
 - Not a fork or rewrite of CAM_CAM. CAM_CAM is an *optional* corpus producer in this design; this repo runs without it.
 - Not a real-time runtime for the bandit, miner, or defense chain. The librarian reads; CAM_CAM's heavy engine writes new methodologies on its own schedule.
-- Not "the 889 patterns." When connected, the live corpus is 107 viable methodologies — framed honestly as a seed corpus, not a mature library.
+- Not a fixed-methodology bundle. When connected, CAM_Codx reads the live CAM_CAM database named by `CAM_CODEX_MCP_DB_PATH`; when standalone, it returns honest empty recall results instead of pretending a corpus exists.
 - Not bundled with a seed/demo corpus. Standalone mode returns an honest empty for `cam_recall`, with a remediation hint pointing at CAM_CAM. **Per workspace policy (no mock / no placeholder / no demo data), a frozen fixture corpus would walk that line.** Install CAM_CAM to get a real corpus.
-- Not production ready. Not complete. This is design phase; the MCP server code has not been written.
+- Not a claim that the dirty `feature/initial-impl` workspace is release-ready. Public `main` is the front-door contract; implementation-branch promotion needs its own cleanup and verification pass.
 - Not opt-in once installed. The Codex skills auto-fire on declared triggers (the `cam_recall_and_cite` skill on feature requests, `rescue_ladder` on the second failure, `outcome_log` after any verified step that used a recalled pattern). Opt-in would mean the loop never closes.
 - Not a carve-out of the existing seventeen-tool MCP. It is a **new** thin server with a separate module, separate process, separate auth token, separate config block.
 
