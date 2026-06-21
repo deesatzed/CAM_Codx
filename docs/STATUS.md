@@ -36,6 +36,9 @@ Verified at `origin/main` on 2026-06-21 before the final public cleanup batch:
 - `docs/repo_inventory/PUBLIC_REPO_CLEANUP_MANIFEST.json` now governs tracked
   public-file cleanup.
 
+Fresh-clone proof has been recorded at
+`docs/reports/CAM_PUBLIC_REPO_DONE_FOREVER_2026-06-21.md`.
+
 ## Intentionally Out Of Scope
 
 - Deleting, moving, renaming, or archiving old folders.

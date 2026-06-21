@@ -62,3 +62,19 @@
   candidates.
 - Committed and pushed CAM_CAM cleanup:
   `9a9d71ade8f6766c8fb564051b2baa308d9abfd1 chore: remove stale public cleanup artifacts`.
+- Committed and pushed CAM_Codx cleanup manifest batch:
+  `7a142e3e4957f270c5179693330030dabb9cbfd0 docs: record final public cleanup manifest`.
+- Created fresh-clone proof directory:
+  `/Volumes/WS4TB/CAM_ALL/clone_proofs/2026-06-21-public-cleanup-104001`.
+- Fresh-clone verification passed for:
+  - `CAM_Codx`: `git diff --check`, JSON validation, TOML validation,
+    required docs/templates, and stale planned-status scan.
+  - `CAM_CAM`: `python -m pytest -q tests/test_repo_necromancer.py`,
+    `git diff --check`, and absence checks for removed stale artifacts.
+  - `moriahcareframe`: `PYTHONPATH=src python -m pytest -q`,
+    `sh scripts/smoke.sh`, and `git diff --check`.
+- Updated `/Volumes/WS4TB/CAM_ALL/repos/*` to current `origin/main` and
+  verified `/Volumes/WS4TB/CAM_ALL/scripts/verify-all.sh` passes.
+- Narrow high-entropy secret scan found only CAM_CAM test fixture strings; no
+  tracked `.env`, database, sqlite, pem, or key files were present in fresh
+  clones.
