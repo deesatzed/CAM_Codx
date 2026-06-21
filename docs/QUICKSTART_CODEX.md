@@ -7,6 +7,12 @@ git clone https://github.com/deesatzed/CAM_Codx.git
 git clone https://github.com/deesatzed/CAM_CAM.git
 ```
 
+Or run the guided setup wizard from a cloned `CAM_Codx` checkout:
+
+```bash
+python tools/cam_setup_wizard.py
+```
+
 Use `CAM_Codx` for Codex goals and workflow docs. Use `CAM_CAM` for runtime
 commands.
 
@@ -39,3 +45,6 @@ repo with runtime code, tests, README, provenance, and a smoke command.
 Copy the public examples under `templates/config/` into local-only config files
 and replace placeholders with your own paths and keys. Do not commit local
 `.env` files, private endpoints, local databases, or real API keys.
+
+For a full clean-machine setup with validation checkpoints, use
+[`NEW_COMPUTER_SETUP_WALKTHROUGH.md`](NEW_COMPUTER_SETUP_WALKTHROUGH.md).

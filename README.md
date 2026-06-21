@@ -44,9 +44,16 @@ git clone https://github.com/deesatzed/CAM_Codx.git
 git clone https://github.com/deesatzed/CAM_CAM.git
 ```
 
+Or use the setup wizard from a cloned `CAM_Codx` checkout:
+
+```bash
+python tools/cam_setup_wizard.py
+```
+
 Then read:
 
 - [Codex quickstart](docs/QUICKSTART_CODEX.md)
+- [New computer setup walkthrough](docs/NEW_COMPUTER_SETUP_WALKTHROUGH.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Repo Necromancer workflow](docs/WORKFLOW_REPO_NECROMANCER.md)
 - [MoriahCareFrame case study](docs/examples/MORIAH_CAREFRAME_CASE_STUDY.md)
