@@ -396,7 +396,8 @@ python scripts/repo_necromancer.py \
   --repo-b "$SOURCE_B" \
   --out-dir "$PACKET_DIR" \
   --product-name "$PRODUCT_NAME" \
-  --standalone-repo "$PRODUCT_REPO"
+  --standalone-repo "$PRODUCT_REPO" \
+  --merger-brief "Build the smallest useful merged repo first. Show what was borrowed, why, and which files are safe to touch next."
 ```
 
 Expected:
@@ -404,6 +405,8 @@ Expected:
 - `PACKET_DIR` contains `CAM_CODEX_GOAL.md`, `evidence.json`, and report docs.
 - `PRODUCT_REPO` is a standalone generated product repo if the generator path
   completed that stage.
+- The merger brief appears in the packet and standalone README so Codex knows
+  the intended outcome.
 - source repos are not intentionally modified.
 
 ## Step 8: Continue The Packet In Codex

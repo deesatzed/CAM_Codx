@@ -13,8 +13,25 @@ python scripts/repo_necromancer.py \
   --repo-b /path/to/source-b \
   --out-dir docs/showpieces/repo_necromancer/my_pair \
   --product-name MyProduct \
-  --standalone-repo /path/to/MyProduct
+  --standalone-repo /path/to/MyProduct \
+  --merger-brief "Build a small, inspectable CLI first; show what was borrowed, why, and what is safe to touch next."
 ```
+
+For longer expectations, use:
+
+```bash
+python scripts/repo_necromancer.py \
+  --repo-a /path/to/source-a \
+  --repo-b /path/to/source-b \
+  --out-dir docs/showpieces/repo_necromancer/my_pair \
+  --product-name MyProduct \
+  --standalone-repo /path/to/MyProduct \
+  --merger-brief-file /path/to/merger-brief.md
+```
+
+The merger brief travels into `evidence.json`, `NECROMANCER_SHOWPIECE.md`,
+`CAM_CODEX_GOAL.md`, and the standalone repo README. Treat it as the user's
+product expectation for the Codex continuation step.
 
 ## Packet Versus Standalone Repo
 
@@ -46,8 +63,10 @@ Useful standalone product evidence includes:
 ## How Codex Continues
 
 1. Read the packet `CAM_CODEX_GOAL.md`.
-2. Verify the source repos remain read-only unless the goal explicitly allows
+2. Read the merger guidance and preserve its outcome constraints unless the
+   evidence proves a safer narrower scope.
+3. Verify the source repos remain read-only unless the goal explicitly allows
    edits.
-3. Work in the standalone repo path.
-4. Run the product tests and smoke command.
-5. Record exact changed files and verification output.
+4. Work in the standalone repo path.
+5. Run the product tests and smoke command.
+6. Record exact changed files and verification output.
