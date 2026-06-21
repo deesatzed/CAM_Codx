@@ -6,11 +6,12 @@
     "CAM_CAM": "c9110447abff2047a8c4df7021679a0847fb151e",
     "moriahcareframe": "a82e42cedd2f70479d44f92bd2dcab7277f86168"
   },
-  "current_pushed_heads": {
-    "CAM_Codx": "23ad6e555127dc2856eec5070c91f2c09c04b238",
+  "proofed_pushed_heads": {
+    "CAM_Codx": "ef1e20f14870bfcc55d0a508e06b1726e6f02e8f",
     "CAM_CAM": "9a9d71ade8f6766c8fb564051b2baa308d9abfd1",
     "moriahcareframe": "a82e42cedd2f70479d44f92bd2dcab7277f86168"
   },
+  "self_referential_sha_note": "If this manifest is changed by a later CAM_Codx status-only correction commit, verify the exact containing commit with git rev-parse HEAD and git ls-remote origin refs/heads/main.",
   "removed_from_public_git": [
     {
       "repo": "CAM_CAM",

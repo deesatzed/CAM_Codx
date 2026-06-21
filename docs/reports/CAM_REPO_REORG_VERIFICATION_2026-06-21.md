@@ -53,13 +53,14 @@ Intentionally not committed:
 
 - `/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM/data/claw.db`
 - `/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM/data/clawBU.db` if retained locally
-- `/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM/claw.toml`
-- `/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM/claw_cheap.toml`
-- `/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM/claw_grok.toml`
 - local `.env` files
 - local Codex/Claude/Grok adapter configs containing machine paths or keys
 
-Public templates were added under `templates/config/`.
+`CAM_CAM/claw.toml`, `CAM_CAM/claw_cheap.toml`,
+`CAM_CAM/claw_dspro.toml`, `CAM_CAM/claw_grok.toml`, and
+`CAM_CAM/.env.example` are tracked public-safe defaults/examples. Private
+overrides, secrets, and local database files remain local-only. Public templates
+were added under `templates/config/`.
 
 ## Commands Run
 
@@ -183,11 +184,14 @@ Result:
 
 ## Remaining Dirty Files
 
-Before final report commit/push:
+Historical state before the first final-report commit:
 
 - CAM_Codx: this report is uncommitted until the final report commit.
 - CAM_CAM: pre-existing untracked `CAM_Codx_last5291pm.txt` remains untouched.
 - MoriahCareFrame: clean.
+
+Current final public cleanup state is recorded in
+`docs/reports/CAM_PUBLIC_REPO_DONE_FOREVER_2026-06-21.md`.
 
 ## Cleanup Recommendations
 

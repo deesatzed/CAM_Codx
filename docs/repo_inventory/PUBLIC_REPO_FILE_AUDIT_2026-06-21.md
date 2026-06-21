@@ -8,7 +8,7 @@ folders under `/Volumes/WS4TB`.
 
 | Repo | Head verified before cleanup | Dirty state before cleanup |
 |---|---|---|
-| `CAM_Codx` | `23ad6e555127dc2856eec5070c91f2c09c04b238` | modified `GOAL.md` |
+| `CAM_Codx` | pre-cleanup `23ad6e555127dc2856eec5070c91f2c09c04b238`; proofed pushed head `ef1e20f14870bfcc55d0a508e06b1726e6f02e8f`; exact containing commit is verified with `git rev-parse HEAD` | clean after final proof/status commits |
 | `CAM_CAM` | pre-cleanup `c9110447abff2047a8c4df7021679a0847fb151e`; current pushed `9a9d71ade8f6766c8fb564051b2baa308d9abfd1` | untracked `CAM_Codx_last5291pm.txt` |
 | `moriahcareframe` | `a82e42cedd2f70479d44f92bd2dcab7277f86168` | clean |
 

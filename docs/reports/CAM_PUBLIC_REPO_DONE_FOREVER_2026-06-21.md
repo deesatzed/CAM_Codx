@@ -11,16 +11,20 @@ manifests record the pushed heads, and fresh-clone verification passed.
 No local workspace folders under `/Volumes/WS4TB` were deleted, moved, renamed,
 or archived.
 
-## Repos And Final Pushed Heads
+## Repos And Pushed Heads
 
 | Repo | GitHub URL | Pushed head verified in fresh clone |
 |---|---|---|
-| `CAM_Codx` | `https://github.com/deesatzed/CAM_Codx` | `7a142e3e4957f270c5179693330030dabb9cbfd0` |
+| `CAM_Codx` | `https://github.com/deesatzed/CAM_Codx` | `ef1e20f14870bfcc55d0a508e06b1726e6f02e8f` |
 | `CAM_CAM` | `https://github.com/deesatzed/CAM_CAM` | `9a9d71ade8f6766c8fb564051b2baa308d9abfd1` |
 | `moriahcareframe` | `https://github.com/deesatzed/moriahcareframe` | `a82e42cedd2f70479d44f92bd2dcab7277f86168` |
 
-This report is committed after the proofed `CAM_Codx` cleanup-manifest commit.
-The final response records the report commit SHA after it is pushed.
+The fresh-clone proof originally checked `CAM_Codx` at cleanup-manifest commit
+`7a142e3e4957f270c5179693330030dabb9cbfd0`; the final pushed head is the report
+commit `ef1e20f14870bfcc55d0a508e06b1726e6f02e8f`. Any later status-only
+correction commit should be verified with `git rev-parse HEAD` and
+`git ls-remote origin refs/heads/main`, because a Markdown file cannot record
+the SHA of the commit that contains its own final SHA without changing that SHA.
 
 ## Fresh-Clone Proof
 

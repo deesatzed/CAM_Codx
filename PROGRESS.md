@@ -78,3 +78,9 @@
 - Narrow high-entropy secret scan found only CAM_CAM test fixture strings; no
   tracked `.env`, database, sqlite, pem, or key files were present in fresh
   clones.
+- Post-claim validation found stale final-head/status wording in CAM_Codx docs.
+  Updated final status/report/manifest wording so the current pushed CAM_Codx
+  proof head is `ef1e20f14870bfcc55d0a508e06b1726e6f02e8f`, later containing
+  commits are verified by `git rev-parse HEAD`, and tracked public-safe
+  `CAM_CAM/claw*.toml` defaults are not mislabeled as uncommitted local-only
+  files.
