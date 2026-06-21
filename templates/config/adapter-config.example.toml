@@ -1,0 +1,17 @@
+[cam]
+codex_hub_path = "/absolute/path/to/CAM_Codx"
+runtime_repo_path = "/absolute/path/to/CAM_CAM"
+runtime_db_path = "/absolute/path/to/CAM_CAM/data/claw.db"
+
+[packets]
+repo_necromancer_packet = "/absolute/path/to/CAM_CAM/docs/showpieces/repo_necromancer/example"
+standalone_repo = "/absolute/path/to/generated-product"
+
+[codex]
+goal_file = "/absolute/path/to/packet/CAM_CODEX_GOAL.md"
+
+[claude_code]
+handoff_file = "/absolute/path/to/templates/claude-code/repo-necromancer-handoff.md"
+
+[grok_build]
+build_brief = "/absolute/path/to/templates/grok-build/BUILD_BRIEF.md"

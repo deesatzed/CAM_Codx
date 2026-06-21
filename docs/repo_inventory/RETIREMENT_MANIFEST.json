@@ -1,0 +1,102 @@
+{
+  "generated_at": "2026-06-21",
+  "policy": "No folders are deleted, moved, renamed, or archived by this goal. This manifest is planning evidence only.",
+  "entries": [
+    {
+      "path": "/Volumes/WS4TB/repo622sn/CAM_Codx",
+      "classification": "keep",
+      "reason": "Canonical Git-backed CAM_Codx hub checkout for this goal.",
+      "remote": "https://github.com/deesatzed/CAM_Codx.git",
+      "latest_commit": "d5df0a5",
+      "risk": "low"
+    },
+    {
+      "path": "/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM",
+      "classification": "keep",
+      "reason": "Runtime/base engine checkout named by GOAL.md.",
+      "remote": "https://github.com/deesatzed/CAM_CAM.git",
+      "latest_commit": "40ba9f1",
+      "risk": "low"
+    },
+    {
+      "path": "/Volumes/WS4TB/WS4TBr/MoriahCareFrame",
+      "classification": "keep",
+      "reason": "Generated standalone product repo named by GOAL.md.",
+      "remote": "https://github.com/deesatzed/moriahcareframe.git",
+      "latest_commit": "a82e42c",
+      "risk": "low"
+    },
+    {
+      "path": "/Volumes/WS4TB/CAM_ALL",
+      "classification": "keep",
+      "reason": "New local clean operating overlay for clones, local_state, scripts, and reports.",
+      "remote": "",
+      "latest_commit": "",
+      "risk": "low"
+    },
+    {
+      "path": "/Volumes/WS4TB/CAM_ARCHIVE",
+      "classification": "keep",
+      "reason": "New non-destructive archive staging area; nothing moved here without approval.",
+      "remote": "",
+      "latest_commit": "",
+      "risk": "low"
+    },
+    {
+      "path": "/Volumes/WS4TB/WS4TBr/CAM_Codx",
+      "classification": "do_not_touch",
+      "reason": "Workspace/container folder containing runtime repos and local Codex config.",
+      "remote": "",
+      "latest_commit": "",
+      "risk": "high"
+    },
+    {
+      "path": "/Volumes/WS4TB/WS4TBr/CAM_Codx/codex-cam-methodology",
+      "classification": "needs_user_review",
+      "reason": "Older implementation branch/worktree has dirty/ahead state and should not be cleaned automatically.",
+      "remote": "https://github.com/deesatzed/CAM_Codx.git",
+      "latest_commit": "a159d20",
+      "risk": "high"
+    },
+    {
+      "path": "/Volumes/WS4TB/CAM_grok_build",
+      "classification": "needs_user_review",
+      "reason": "Grok build workspace may contain adapter-specific work.",
+      "remote": "",
+      "latest_commit": "",
+      "risk": "medium"
+    },
+    {
+      "path": "/Volumes/WS4TB/camcxBU64",
+      "classification": "archive_candidate",
+      "reason": "Backup-style CAM workspace name; requires manual confirmation before archive.",
+      "remote": "",
+      "latest_commit": "",
+      "risk": "medium"
+    },
+    {
+      "path": "/Volumes/WS4TB/CAM_Codx",
+      "classification": "archive_candidate",
+      "reason": "Duplicate CAM_Codx checkout outside the canonical repo622sn path.",
+      "remote": "https://github.com/deesatzed/CAM_Codx.git",
+      "latest_commit": "",
+      "risk": "medium"
+    },
+    {
+      "path": "/Volumes/WS4TB/CAM_Locl",
+      "classification": "do_not_touch",
+      "reason": "Local runtime workspace; may contain local-only state.",
+      "remote": "",
+      "latest_commit": "",
+      "risk": "high"
+    },
+    {
+      "path": "/Volumes/WS4TB/careframe",
+      "classification": "needs_user_review",
+      "reason": "Related product family but not the MoriahCareFrame proof repo.",
+      "remote": "",
+      "latest_commit": "",
+      "risk": "medium"
+    }
+  ]
+}

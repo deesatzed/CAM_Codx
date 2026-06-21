@@ -1,0 +1,41 @@
+# Local Folder Audit
+
+This audit is non-destructive. It records evidence for cleanup planning but
+does not move or delete any folder.
+
+## Commands
+
+```bash
+find /Volumes/WS4TB -maxdepth 4 -type d -name .git 2>/dev/null | sed 's#/.git$##' | sort
+git ls-remote --heads https://github.com/deesatzed/CAM_Codx.git
+git ls-remote --heads https://github.com/deesatzed/CAM_CAM.git
+git ls-remote --heads https://github.com/deesatzed/moriahcareframe.git
+find /Volumes/WS4TB -maxdepth 5 -type d \( -iname '*CAM*' -o -iname '*moriah*' -o -iname '*careframe*' \) 2>/dev/null | sort
+```
+
+## Remote Heads
+
+```text
+CAM_Codx main: d5df0a5b5b4141fc0170c2d6a501710b39cc131d
+CAM_Codx feature/initial-impl: a159d20f017bdcc2f79bae6fc21bb0e5eb17552a
+CAM_CAM main: 40ba9f1e19ff44117e9380d8f99b0bf7ce97870d
+moriahcareframe main: a82e42cedd2f70479d44f92bd2dcab7277f86168
+```
+
+## Observations
+
+- `/Volumes/WS4TB/repo622sn/CAM_Codx` is the Git-backed hub checkout for this
+  goal.
+- `/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM` is the runtime checkout named in
+  the goal and contains the Repo Necromancer showpieces.
+- `/Volumes/WS4TB/WS4TBr/MoriahCareFrame` is the generated product checkout.
+- `/Volumes/WS4TB/WS4TBr/CAM_Codx` is a workspace/container folder, not the
+  canonical hub checkout for this goal.
+- Many other local folders contain `CAM`, `moriah`, or `careframe` in their
+  names. They require review before cleanup because names alone are not enough
+  evidence to delete or archive them.
+
+## Cleanup Rule
+
+Cleanup is only planned in `RETIREMENT_MANIFEST.json`. No destructive cleanup
+was performed.

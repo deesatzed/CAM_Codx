@@ -1,0 +1,22 @@
+[database]
+db_path = "data/claw.db"
+
+[llm]
+base_url = "https://openrouter.ai/api/v1"
+fallback_models = []
+
+[agents.codex]
+enabled = true
+mode = "openrouter"
+api_key_env = "OPENROUTER_API_KEY"
+model = "replace-with-openrouter-model-id"
+
+[adapters.claude_code]
+enabled = true
+packet_path = "replace-with-local-packet-path"
+receipt_policy = "required"
+
+[adapters.grok_build]
+enabled = true
+packet_path = "replace-with-local-packet-path"
+receipt_policy = "required"

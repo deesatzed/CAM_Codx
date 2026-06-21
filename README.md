@@ -1,260 +1,117 @@
 # CAM_Codx
 
-CAM_Codx is the separate Codex-facing companion repo for CAM_CAM. It defines a thin MCP/methodology bridge that lets OpenAI Codex recall, cite, search, and record outcomes against CAM-style engineering knowledge without turning CAM_CAM itself into the Codex repo.
+CAM_Codx is the Codex-native command center for CAM: it lets a developer use
+CAM_CAM's repo intelligence, provenance, and generators from inside the Codex
+workflow they already use.
 
-**New-user status, verified 2026-06-19:** this public checkout is `https://github.com/deesatzed/CAM_Codx.git` on `main`. It is the clean front door and design contract. A separate local implementation workspace exists on `feature/initial-impl`, but it is dirty and ahead of its remote branch, so it is not presented as launch-clean here. See [docs/NEW_USER_AUDIT_2026-06-19.md](docs/NEW_USER_AUDIT_2026-06-19.md).
+Start here when you want Codex to consume CAM artifacts, continue from a
+generated `CAM_CODEX_GOAL.md`, or harden a standalone product created by CAM.
+Use `CAM_CAM` when you are changing the runtime engine, mining corpus, Repo
+Necromancer generator, dashboards, or tests.
 
-CAM_CAM is optional. In standalone mode, CAM_Codx records outcomes locally and can search decision records. In connected mode, `CAM_CODEX_MCP_DB_PATH` points at a CAM_CAM `claw.db` so recall and provenance can use the mined-method corpus.
+## What This Is
 
-The intended public MCP surface stays deliberately small:
+CAM_Codx is a workflow hub. It owns docs, goal contracts, adapter templates,
+case studies, and the clean public explanation for how Codex works with CAM.
+It does not vendor CAM_CAM code, copy CAM_CAM databases, or store generated
+product runtime code.
 
-- `cam_recall`
-- `cam_provenance`
-- `cam_decisions_search`
-- `cam_record_outcome`
+The current repo family is organized as a hub-and-spoke system:
 
-This repo should make sense to a new visitor as a Codex/CAM bridge, not as CAM_CAM itself and not as a hidden implementation release.
+```text
+CAM_CAM runtime engine -> CAM_Codx workflow hub -> generated product repos
+                         -> Claude Code adapter
+                         -> Grok Build adapter
+```
 
----
+## Repo Roles
 
-# Codex-CAM Methodology
-
-*A thin librarian bridge between OpenAI Codex CLI and the CAM_CAM research engine.*
-
-**Status: DESIGN CONTRACT / PUBLIC FRONT DOOR. Tracking documents: PRD.md, build_specs.md, build_to_do_checklist.md. Implementation-branch work must be promoted separately before it is described as release-ready.**
-
----
-
-## What this is
-
-`cam-codex-mcp` is a **standalone MCP server** that gives OpenAI Codex CLI four tools for working with mined software methodologies and cross-repo decision records. It runs in one of two modes auto-detected at startup:
-
-- **Standalone mode** (default): three of the four tools work fully — cross-repo decision search and the local outcome flywheel — with no external dependencies beyond Codex itself. `cam_recall` returns an honest empty result (no fabrication) with a clear remediation hint.
-- **Connected mode**: when `CAM_CODEX_MCP_DB_PATH` points at a CAM_CAM `claw.db` file, all four tools light up — recall returns ranked methodologies with full provenance, and outcomes are recorded back into `claw.db` so CAM_CAM's bandit can ingest them.
-
-CAM_CAM (the heavy Python research engine that mines methodologies, runs the bandit, and produces `claw.db`) is an **optional** corpus producer. This repo works without it. If you have it installed, point one env var at its data file and the recall layer activates.
-
-A Codex skill (`deepscientist-data-research`) in the workspace today carries a **phantom contract** — it references MCP tools (`claw_query_memory`, `claw_store_finding`) that are not wired anywhere. This methodology supersedes that with a clean four-tool surface and rewrites the skill to use it.
-
-Historical baseline note: early design work used a much smaller CAM_CAM corpus snapshot to keep the bridge contract honest. Do not treat those old 107/889 references as current CAM_CAM launch metrics. Current CAM_CAM corpus metrics live in CAM_CAM's `docs/LAUNCH_METRICS_2026-06-19.md`; this repo should only promise that connected mode reads whatever `CAM_CODEX_MCP_DB_PATH` points to and reports corpus status honestly.
-
-The doctrine adds one line on top of the existing three:
-> *Codex decides. Tests arbitrate. Markdown remembers. **CAM librarian cites.***
-
----
-
-## What this repo builds
-
-This repository's deliverable is **`cam-codex-mcp`** — a thin, four-tool, standalone MCP server. It is the core of the methodology. Today the design is locked and the prerequisites are committed; the server code itself lands in `src/claw_codex_mcp/` once Phase 0 gates are green (see `build_to_do_checklist.md`).
-
-| Component | Role | Coupling |
+| Repo | Role | Start here when |
 |---|---|---|
-| **`cam-codex-mcp`** (this repo's deliverable) | 4-tool MCP server consumed by Codex CLI over stdio | none required; works standalone |
-| OpenAI Codex CLI | orchestrator that consumes `cam-codex-mcp` via `.codex/config.toml` | required at runtime |
-| CAM_CAM heavy engine (`claw.db`) | optional corpus producer; mining + bandit run out-of-band | optional; enables `cam_recall` and richer `cam_provenance` |
-| Legacy 17-tool MCP (`claw.mcp_server`) | pre-existing, never wired to Codex; unrelated to this design | not used, not modified |
+| `CAM_Codx` | Codex-native workflow hub | You want Codex goals, handoffs, templates, and onboarding. |
+| `CAM_CAM` | Runtime/base engine | You are mining repos, running Repo Necromancer, or changing CAM internals. |
+| `moriahcareframe` | Generated standalone product | You want to inspect or harden the product repo produced by CAM/Codex. |
 
-This repo speaks raw SQL to `claw.db` when present; it has no Python import dependency on the `claw` package. CAM_CAM's installation, mining cadence, and bandit are entirely its own concern.
+Claude Code and Grok Build are adapter surfaces. They consume CAM packets,
+source receipts, and generated goals; they do not change the ownership model.
 
-### Tool surface preview
+## Quickstart
 
-The full schemas live in `build_specs.md`. This is the one-line summary, including how each tool behaves with and without a CAM_CAM corpus connected.
-
-| Tool | I/O | Connected mode | Standalone mode |
-|---|---|---|---|
-| `cam_recall` | read | top-N viable methodologies with fitness, tags, anti-pattern | `{results: [], corpus_status: "absent", reason: ...}` — honest empty, never fabricates |
-| `cam_provenance` | read | citation block for a `methodology_id` (source repo, path, commit, mined_at, fitness denominators) | `{found: false, corpus_status: "absent"}` |
-| `cam_decisions_search` | read | FTS5 search across cross-repo `DECISIONS.md` records | **identical** — this tool has zero CAM_CAM dependency |
-| `cam_record_outcome` | append-only write | row inserted into `codex_outcome_log` table inside `claw.db` (CAM_CAM's bandit ingests) | row inserted into local SQLite at `~/.cam_codex_mcp/codex_outcome_log.db` |
-
-Every tool response carries a `corpus_status` field with one of: `connected` / `empty` / `absent` / `degraded`. Skills inspect this and surface the mode to the user honestly.
-
-A fifth tool, `cam_match_failure`, was considered and explicitly deferred to v2 — the live `failure_knowledge` table has one row, which is not enough corpus to support the contract.
-
----
-
-## How it works
-
-`cam-codex-mcp` runs in one of two modes, auto-detected at startup. Configuration is three optional environment variables; all have sensible defaults; mode is logged at startup so you always know what you have.
-
-### Standalone mode (default)
-
-Activates when `CAM_CODEX_MCP_DB_PATH` is unset or points to a missing file. Three of the four tools work fully: cross-repo `DECISIONS.md` search via `cam_decisions_search`, outcome logging to a local SQLite ledger at `~/.cam_codex_mcp/codex_outcome_log.db` via `cam_record_outcome`, and the server reports its state honestly. The fourth tool, `cam_recall`, returns an empty result with `corpus_status: "absent"` and a remediation hint — it never fabricates methodologies. This mode is fully useful: cross-repo decision search and the local outcome flywheel both work, just without the mined-pattern recall layer.
-
-### Connected mode
-
-Activates when you set `CAM_CODEX_MCP_DB_PATH` to a CAM_CAM `claw.db` file. `cam_recall` returns ranked methodologies with full provenance (commit SHA, source repo, fitness score with denominator). Outcomes are recorded into the same `claw.db` so CAM_CAM's bandit can ingest them. All four tools fully active.
-
-### Configuration
-
-Three optional environment variables, all with sensible defaults:
-
-| Variable | Purpose | Default |
-|---|---|---|
-| `CAM_CODEX_MCP_DB_PATH` | corpus location (presence triggers connected mode) | unset → standalone |
-| `CAM_CODEX_MCP_OUTCOME_DB_PATH` | outcome ledger location | mode-dependent default |
-| `CAM_CODEX_MCP_DECISIONS_INDEX` | cross-repo decision FTS index | `~/.cam_codex_mcp/codex_decisions_index.db` |
-
-The 4-tool ceiling is enforced by CI in both modes. **No mode silently synthesizes data.**
-
----
-
-## Repository layout
-
-This is its **own git repository** (initialized 2026-05-17, branch `main`), a sibling of `CAM_CAM/`. CAM_CAM stays in its own repo and is **not modified** by this methodology.
-
-```
-/Volumes/WS4TB/WS4TBr/CAM_Codx/
-├── codex-cam-methodology/              ← THIS REPO
-│   ├── .git/
-│   ├── .gitignore
-│   ├── LICENSE                          MIT (matches CAM_CAM)
-│   ├── README.md                        this file — the front door
-│   ├── PRD.md                           product requirements: problem, users, success criteria, scope, risks
-│   ├── build_specs.md                   engineering spec: MCP tool schemas, skill contracts, module layout, DB additions
-│   ├── build_to_do_checklist.md         ordered atomic build tasks; every checkbox has a validation gate
-│   ├── docs/
-│   │   └── _validation_gates.md         per-phase and cross-cutting validation gates (referenced by checklist)
-│   ├── migrations/                      (future) DDL for additive tables on `cam.db` — CAM_CAM's schema is not modified
-│   ├── src/claw_codex_mcp/              (future) the thin librarian MCP — separate top-level package
-│   └── tests/                           (future) unit + integration + e2e
-│
-├── CAM_CAM/                             heavy Python research engine; unchanged by this methodology
-├── .codex/                              Codex CLI install (38 skills, 10 agents, AGENTS.md doctrine); separate config
-└── HANDOFF_LATEST.md                    session continuity packet (symlink to dated handoff)
-```
-
-The README, PRD, build_specs, and build_to_do_checklist form a four-document contract. Nothing else in this repo is load-bearing yet.
-
----
-
-## Quick orientation commands
-
-Three commands a reader can run today to ground themselves in the live state.
-
-**1. Verify the corpus is still in the expected state.** If these numbers have changed, the design framing in PRD.md must be revisited.
+Clone the hub and engine side by side:
 
 ```bash
-sqlite3 /Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM/data/claw.db \
-  "SELECT lifecycle_state, COUNT(*) FROM methodologies GROUP BY lifecycle_state;"
+git clone https://github.com/deesatzed/CAM_Codx.git
+git clone https://github.com/deesatzed/CAM_CAM.git
 ```
 
-Expected output:
-```
-viable|95
-embryonic|12
-```
+Then read:
 
-**2. List the Codex skills already present.** Two of them (`repo_recon`, `deepscientist-data-research`) are explicitly touched by this design.
+- [Codex quickstart](docs/QUICKSTART_CODEX.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [Repo Necromancer workflow](docs/WORKFLOW_REPO_NECROMANCER.md)
+- [MoriahCareFrame case study](docs/examples/MORIAH_CAREFRAME_CASE_STUDY.md)
+
+## Repo Necromancer Example
+
+Repo Necromancer runs from `CAM_CAM` and emits a packet that Codex can continue
+from. The tested command shape is:
 
 ```bash
-ls /Volumes/WS4TB/WS4TBr/CAM_Codx/.codex/skills | head
+python scripts/repo_necromancer.py \
+  --repo-a /path/to/source-a \
+  --repo-b /path/to/source-b \
+  --out-dir docs/showpieces/repo_necromancer/my_pair \
+  --product-name MyProduct \
+  --standalone-repo /path/to/MyProduct
 ```
 
-**3. Read the doctrine.** The new methodology adds one line; everything else is preserved.
+The packet is evidence. The standalone repo is the product. Do not count a
+packet directory as completion unless the goal explicitly asks only for a
+packet.
 
-```bash
-cat /Volumes/WS4TB/WS4TBr/CAM_Codx/.codex/AGENTS.md
+## Compatibility
+
+- [Claude Code integration](docs/integrations/CLAUDE_CODE.md) explains how
+  Claude Code should consume CAM packets while preserving source read-only
+  boundaries.
+- [Grok Build integration](docs/integrations/GROK_BUILD.md) explains the same
+  packet and receipt contract for Grok Build.
+
+Templates live under:
+
+- `templates/goals/`
+- `templates/claude-code/`
+- `templates/grok-build/`
+- `templates/config/`
+
+## Local Runtime State
+
+Runtime-critical local state stays out of this repo. In this workspace,
+`CAM_CAM/data/claw.db` is a local database used by CAM runtime tools. CAM_Codx
+documents how to point at it, but does not copy it into GitHub.
+
+The local clean operating overlay is:
+
+```text
+/Volumes/WS4TB/CAM_ALL
 ```
 
----
+The non-destructive cleanup staging area is:
 
-## Core concepts
+```text
+/Volumes/WS4TB/CAM_ARCHIVE
+```
 
-A short glossary. Each term appears in PRD.md and build_specs.md with the same meaning.
+## Current Status
 
-**Methodology.** A mined, scored, lifecycle-tracked pattern stored in `claw.db`. Every row carries `notes` and `tags` populated at mining time. 107 rows live today.
+Verified on 2026-06-21:
 
-**Provenance.** The one-line citation Codex must show before applying any recalled pattern. Shape: `{methodology_id, source_repo, source_path, source_commit_sha, mined_at, last_verified_at, fitness_score, green_count, red_count}`. The display contract is *"fitness 0.87, 8 green / 0 red, source: <repo>/<path>"* — score with denominator, never bare.
+- `CAM_Codx` remote: `https://github.com/deesatzed/CAM_Codx.git`
+- `CAM_CAM` remote: `https://github.com/deesatzed/CAM_CAM.git`
+- `moriahcareframe` remote: `https://github.com/deesatzed/moriahcareframe.git`
+- `CAM_CAM/data/claw.db` exists locally and is treated as local runtime state.
+- No old folders should be deleted, moved, renamed, or archived without a
+  separate explicit approval.
 
-**Fitness.** An outcome-based score that today sits at zero across the corpus because no outcomes have been written. The v1 of this methodology exists to start populating it via `cam_record_outcome`.
-
-**The boundary rule.** A single decision everything follows from:
-> Stateful + cross-repo + computational → MCP.
-> Doctrine + workflow + output schema → Skill.
-> Anything that fits in markdown → Markdown.
-
-This rule is what keeps the MCP surface at four tools.
-
-**Rescue ladder.** A Codex skill that auto-fires on the **second consecutive verification failure**, before the user is asked. It queries `cam_recall` for `error_handling` patterns matching the failure surface, applies the top result with provenance, and escalates if the third attempt also fails. It is doctrine, not an auto-fix engine.
-
-**The flywheel.** The loop the methodology is built to close: *recall → cite → apply → verify → record outcome → corpus improves → next recall is smarter.* Today the loop is open at the "record outcome" step; closing it is the v1 deliverable.
-
-**Phantom contract.** What currently exists: `.codex/skills/deepscientist-data-research/SKILL.md` references `claw_query_memory` and `claw_store_finding` on lines 25, 65, 135, 162, and 168, but `.codex/config.toml` has no `[mcp_servers.cam_cam]` block. The skill silently no-ops. v1 rewrites this skill to the new four-tool surface; no back-compat is pursued.
-
-**Out-of-band.** CAM_CAM mining, bandit updates, and defense-chain runs happen on a schedule the user controls, never inline during a Codex turn. The librarian reads what mining has already produced; it does not trigger mining.
-
----
-
-## Design guardrails
-
-These are non-negotiable for v1. They appear again in PRD.md (success criteria) and build_specs.md (CI enforcement).
-
-- **Four-tool ceiling on the librarian MCP**, enforced by a test that fails CI if a fifth tool is registered. The boundary rule above is the only reason to add a tool; scope creep through the librarian is the failure mode the seventeen-tool server already proves.
-- **No write tool besides `cam_record_outcome`**, and that one is append-only. The librarian never mutates a methodology row, never edits provenance, never deletes.
-- **Provenance is mandatory before application.** No recalled pattern may be applied without its provenance row first written to `IMPLEMENT.md`. This is a doctrine line in `.codex/AGENTS.md`, not a soft convention.
-- **Out-of-band only for mining/bandit/defense-chain.** The librarian never triggers CAM_CAM jobs. If a tool implementation reaches for the miner or the dispatcher, the boundary has been crossed.
-- **No silent application above a fitness threshold.** Fitness informs ranking; it never bypasses citation. Every applied pattern is cited regardless of score.
-- **Honest corpus framing in every artifact.** Do not hard-code stale corpus totals into CAM_Codx claims. Connected mode must report the live `claw.db` it is given; standalone mode must report an absent corpus honestly.
-
-## How a developer will interact
-
-Three short scenarios. "Now" is the present state; "proposed" is the design target. The provenance shape in each example is the contract — score with denominator, plus source repo and path. No bare numbers.
-
-**1. Adding rate limiting to an existing repo.**
-*Now:* Codex grep-searches the local repo, finds nothing relevant, writes a plausible-looking implementation, lands a subtle off-by-one.
-*Proposed:* the `cam_recall_and_cite` skill fires on the user's request; `cam_recall` returns the top viable pattern (e.g. `token-bucket-rate-limit-ts`, fitness 0.87, 8 green / 0 red, source: `ABXorcist/lib/rate-limit.ts`) plus one anti-pattern. Codex writes the provenance row into `IMPLEMENT.md` *before* any code, then applies the pattern, then `outcome_log` records the verification result via `cam_record_outcome`. The bandit gains its first real signal.
-
-**2. Codex hits two consecutive test failures.**
-*Now:* Codex retries with a slightly different patch, sometimes spirals into a third or fourth attempt, eventually asks the user.
-*Proposed:* `rescue_ladder` auto-fires on the second failure (doctrine, not opt-in). It calls `cam_recall` filtered to `error_handling` patterns matching the failure signature, applies the top result with provenance, and on a third failure escalates to the user with the full ladder trace recorded in `DECISIONS.md`. The escalation is structured — the user sees what was tried, what was cited, and why each attempt failed.
-
-**3. Greenfield repo.**
-*Now:* Codex scaffolds from its own priors and whatever the user pastes.
-*Proposed:* `repo_recon` (modified) calls `cam_decisions_search` for similar greenfield setups, composes a blueprint from cited fragments, and writes lineage (`source_repo + commit_sha` for each fragment) into `AGENTS.md` so the next session can audit what came from where. The scaffolding becomes auditable rather than an opaque guess.
-
----
-
-## What this is NOT
-
-- Not a fork or rewrite of CAM_CAM. CAM_CAM is an *optional* corpus producer in this design; this repo runs without it.
-- Not a real-time runtime for the bandit, miner, or defense chain. The librarian reads; CAM_CAM's heavy engine writes new methodologies on its own schedule.
-- Not a fixed-methodology bundle. When connected, CAM_Codx reads the live CAM_CAM database named by `CAM_CODEX_MCP_DB_PATH`; when standalone, it returns honest empty recall results instead of pretending a corpus exists.
-- Not bundled with a seed/demo corpus. Standalone mode returns an honest empty for `cam_recall`, with a remediation hint pointing at CAM_CAM. **Per workspace policy (no mock / no placeholder / no demo data), a frozen fixture corpus would walk that line.** Install CAM_CAM to get a real corpus.
-- Not a claim that the dirty `feature/initial-impl` workspace is release-ready. Public `main` is the front-door contract; implementation-branch promotion needs its own cleanup and verification pass.
-- Not opt-in once installed. The Codex skills auto-fire on declared triggers (the `cam_recall_and_cite` skill on feature requests, `rescue_ladder` on the second failure, `outcome_log` after any verified step that used a recalled pattern). Opt-in would mean the loop never closes.
-- Not a carve-out of the existing seventeen-tool MCP. It is a **new** thin server with a separate module, separate process, separate auth token, separate config block.
-
----
-
-## How to contribute / what's next
-
-The four documents in this folder are designed to be read in order.
-
-1. **PRD.md** — start here. Problem framing, user definition, success criteria, scope decisions, open questions, and the explicit v2 deferrals (notably `cam_match_failure`, which the live `failure_knowledge = 1` row cannot yet support).
-2. **build_specs.md** — read second. MCP tool schemas for `cam_recall`, `cam_provenance`, `cam_decisions_search`, and `cam_record_outcome`. Skill contracts for `cam_recall_and_cite`, `rescue_ladder`, `outcome_log`, the modified `repo_recon`, and the rewritten `deepscientist-data-research`. Module layout. Any additive (never destructive) `claw.db` schema needs for the fitness ledger.
-3. **build_to_do_checklist.md** — execute in order. Every checkbox has an explicit validation gate; no checkbox is closed without its gate passing. The workspace rule of "no step advances without validation" applies. Baseline measurements on five unfamiliar real repos must land before any methodology code, per the validation plan.
-4. **HANDOFF_LATEST.md** (one level up) — the session continuity packet. Re-read before resuming a paused dialogue.
-
-All open decisions are tracked in PRD.md under "Open Questions." If a question is not in that list and you find yourself making an assumption, add it to that list before proceeding. The build_to_do_checklist references PRD decisions by anchor — if an anchor moves, both files update together.
-
----
-
-## References
-
-- [`./PRD.md`](./PRD.md) — product requirements
-- [`./build_specs.md`](./build_specs.md) — engineering spec
-- [`./build_to_do_checklist.md`](./build_to_do_checklist.md) — ordered build tasks with validation gates
-- [`../HANDOFF_LATEST.md`](../HANDOFF_LATEST.md) — session continuity packet
-- [`../.codex/AGENTS.md`](../.codex/AGENTS.md) — Codex doctrine (the one line this methodology extends)
-
----
-
-## License and attribution
-
-License: MIT (matches CAM_CAM's `pyproject.toml`).
-
-Built on:
-- **OpenAI Codex CLI** — orchestrator plane
-- **`mcp` (official Python SDK)** — stdio transport for the new librarian server
-- **`claw` package (CAM_CAM)** — corpus, schemas, and the engine the librarian reads from
+See [status](docs/STATUS.md), [repo map](docs/REPO_MAP.md), and
+[FAQ](docs/FAQ.md) for the live public framing.
