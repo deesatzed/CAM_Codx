@@ -21,12 +21,16 @@ Verified on 2026-06-21.
 
 ## Pushed To GitHub
 
-This reorganization batch has not been pushed yet.
+Pushed to GitHub on 2026-06-21:
+
+- CAM_Codx through `7eec8bc docs: record CAM repo reorg verification`.
+- CAM_CAM through `c911044 docs: link CAM_CAM runtime to CAM_Codx hub`.
+- MoriahCareFrame had no changes to push and remains at `a82e42c`.
 
 ## Planned
 
 - Run cross-repo verification.
-- Commit and push verified batches.
+- Review the retirement manifest before any cleanup.
 
 ## Intentionally Out Of Scope
 

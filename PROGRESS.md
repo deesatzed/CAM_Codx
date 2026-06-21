@@ -30,7 +30,12 @@
 ### Verification After Commits
 
 - CAM_Codx commit: `287ed4a docs: reorganize CAM_Codx as CAM workflow hub`.
+- CAM_Codx verification report commit:
+  `7eec8bc docs: record CAM repo reorg verification`.
 - CAM_CAM commit: `c911044 docs: link CAM_CAM runtime to CAM_Codx hub`.
+- Pushed CAM_Codx `main` to GitHub through `7eec8bc`.
+- Pushed CAM_CAM `main` to GitHub through `c911044`.
+- MoriahCareFrame had no changes to push and remained at `a82e42c`.
 - CAM_Codx `git diff --check`: passed.
 - CAM_CAM `python -m pytest -q tests/test_repo_necromancer.py`: `6 passed`.
 - MoriahCareFrame `PYTHONPATH=src python -m pytest -q`: `5 passed`.
