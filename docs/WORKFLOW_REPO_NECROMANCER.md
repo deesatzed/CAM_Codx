@@ -60,6 +60,14 @@ Useful standalone product evidence includes:
 - provenance or patch docs,
 - a smoke command.
 
+## Current Product Proofs
+
+- [MoriahCareFrame](examples/MORIAH_CAREFRAME_CASE_STUDY.md): proof that a
+  Repo Necromancer packet can become a standalone runtime repo.
+- [MyLoc](examples/MYLOC_HARDENING_CASE_STUDY.md): proof that CAM can evaluate
+  and harden a generated Repo Necromancer product with boundary checks and JSON
+  patch-plan output.
+
 ## How Codex Continues
 
 1. Read the packet `CAM_CODEX_GOAL.md`.

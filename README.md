@@ -31,6 +31,7 @@ CAM_CAM runtime engine -> CAM_Codx workflow hub -> generated product repos
 | `CAM_Codx` | Codex-native workflow hub | You want Codex goals, handoffs, templates, and onboarding. |
 | `CAM_CAM` | Runtime/base engine | You are mining repos, running Repo Necromancer, or changing CAM internals. |
 | `moriahcareframe` | Generated standalone product | You want to inspect or harden the product repo produced by CAM/Codex. |
+| `MyLoc` | Generated product dogfood proof | You want to see CAM evaluate and harden a Repo Necromancer output repo. |
 
 Claude Code and Grok Build are adapter surfaces. They consume CAM packets,
 source receipts, and generated goals; they do not change the ownership model.
@@ -57,6 +58,7 @@ Then read:
 - [Architecture](docs/ARCHITECTURE.md)
 - [Repo Necromancer workflow](docs/WORKFLOW_REPO_NECROMANCER.md)
 - [MoriahCareFrame case study](docs/examples/MORIAH_CAREFRAME_CASE_STUDY.md)
+- [MyLoc hardening case study](docs/examples/MYLOC_HARDENING_CASE_STUDY.md)
 
 ## Repo Necromancer Example
 
@@ -75,6 +77,11 @@ python scripts/repo_necromancer.py \
 The packet is evidence. The standalone repo is the product. Do not count a
 packet directory as completion unless the goal explicitly asks only for a
 packet.
+
+The current dogfood proof is MyLoc: CAM generated the repo, then CAM evaluated,
+preflighted, camified, self-mined, security-scanned, and helped harden it with
+source-boundary verification plus JSON patch-plan output. See the
+[MyLoc hardening case study](docs/examples/MYLOC_HARDENING_CASE_STUDY.md).
 
 ## Compatibility
 
