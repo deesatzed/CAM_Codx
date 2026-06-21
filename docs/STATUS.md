@@ -21,16 +21,20 @@ Verified on 2026-06-21.
 
 ## Pushed To GitHub
 
-Pushed to GitHub on 2026-06-21:
+Verified at `origin/main` on 2026-06-21 before the final public cleanup batch:
 
-- CAM_Codx through `7eec8bc docs: record CAM repo reorg verification`.
-- CAM_CAM through `c911044 docs: link CAM_CAM runtime to CAM_Codx hub`.
+- CAM_Codx through `23ad6e5 docs: update CAM reorg push status`.
+- CAM_CAM through `9a9d71a chore: remove stale public cleanup artifacts`.
 - MoriahCareFrame had no changes to push and remains at `a82e42c`.
 
-## Planned
+## Verification Status
 
-- Run cross-repo verification.
-- Review the retirement manifest before any cleanup.
+- Working-checkout cross-repo verification passed in the previous batch and is
+  recorded in `docs/reports/CAM_REPO_REORG_VERIFICATION_2026-06-21.md`.
+- The final cleanup batch still must run fresh-clone proof under
+  `/Volumes/WS4TB/CAM_ALL/clone_proofs/`.
+- `docs/repo_inventory/PUBLIC_REPO_CLEANUP_MANIFEST.json` now governs tracked
+  public-file cleanup.
 
 ## Intentionally Out Of Scope
 

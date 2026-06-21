@@ -16,11 +16,15 @@ find /Volumes/WS4TB -maxdepth 5 -type d \( -iname '*CAM*' -o -iname '*moriah*' -
 ## Remote Heads
 
 ```text
-CAM_Codx main: d5df0a5b5b4141fc0170c2d6a501710b39cc131d
+CAM_Codx main: 23ad6e555127dc2856eec5070c91f2c09c04b238
 CAM_Codx feature/initial-impl: a159d20f017bdcc2f79bae6fc21bb0e5eb17552a
-CAM_CAM main: 40ba9f1e19ff44117e9380d8f99b0bf7ce97870d
+CAM_CAM main: 9a9d71ade8f6766c8fb564051b2baa308d9abfd1
 moriahcareframe main: a82e42cedd2f70479d44f92bd2dcab7277f86168
 ```
+
+`d5df0a5` and `40ba9f1` are historical pre-reorganization heads from the first
+audit pass. `c911044` is the pre-cleanup CAM_CAM head retained in the archive
+manifest as the source commit for removed tracked files.
 
 ## Observations
 
@@ -37,5 +41,6 @@ moriahcareframe main: a82e42cedd2f70479d44f92bd2dcab7277f86168
 
 ## Cleanup Rule
 
-Cleanup is only planned in `RETIREMENT_MANIFEST.json`. No destructive cleanup
-was performed.
+Local folder cleanup is only planned in `RETIREMENT_MANIFEST.json`. No local
+folder was deleted, moved, renamed, or archived. Tracked public GitHub file
+cleanup is governed separately by `PUBLIC_REPO_CLEANUP_MANIFEST.json`.

@@ -7,7 +7,7 @@
       "classification": "keep",
       "reason": "Canonical Git-backed CAM_Codx hub checkout for this goal.",
       "remote": "https://github.com/deesatzed/CAM_Codx.git",
-      "latest_commit": "d5df0a5",
+      "latest_commit": "23ad6e555127dc2856eec5070c91f2c09c04b238",
       "risk": "low"
     },
     {
@@ -15,7 +15,7 @@
       "classification": "keep",
       "reason": "Runtime/base engine checkout named by GOAL.md.",
       "remote": "https://github.com/deesatzed/CAM_CAM.git",
-      "latest_commit": "40ba9f1",
+      "latest_commit": "9a9d71ade8f6766c8fb564051b2baa308d9abfd1",
       "risk": "low"
     },
     {

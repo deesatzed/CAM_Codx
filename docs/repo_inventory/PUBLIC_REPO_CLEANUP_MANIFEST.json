@@ -1,0 +1,110 @@
+{
+  "generated_at": "2026-06-21",
+  "policy": "Tracked public GitHub files may be removed only after classification here. Local workspace folders under /Volumes/WS4TB are never deleted, moved, renamed, or archived by this manifest.",
+  "pre_cleanup_heads": {
+    "CAM_Codx": "23ad6e555127dc2856eec5070c91f2c09c04b238",
+    "CAM_CAM": "c9110447abff2047a8c4df7021679a0847fb151e",
+    "moriahcareframe": "a82e42cedd2f70479d44f92bd2dcab7277f86168"
+  },
+  "current_pushed_heads": {
+    "CAM_Codx": "23ad6e555127dc2856eec5070c91f2c09c04b238",
+    "CAM_CAM": "9a9d71ade8f6766c8fb564051b2baa308d9abfd1",
+    "moriahcareframe": "a82e42cedd2f70479d44f92bd2dcab7277f86168"
+  },
+  "removed_from_public_git": [
+    {
+      "repo": "CAM_CAM",
+      "path": "batch_run/results/batch_results.json",
+      "classification": "remove_from_public_git",
+      "reason": "Generated batch output with local repo paths and stale run details; not required for clone-and-run onboarding.",
+      "risk": "low",
+      "replacement_current_source": "Re-run local batch tooling when needed; active public proof is current tests and showpieces."
+    },
+    {
+      "repo": "CAM_CAM",
+      "path": "batch_run/results/batch_summary.json",
+      "classification": "remove_from_public_git",
+      "reason": "Generated batch summary with local repo paths and stale run details; not required for clone-and-run onboarding.",
+      "risk": "low",
+      "replacement_current_source": "Re-run local batch tooling when needed; active public proof is current tests and showpieces."
+    },
+    {
+      "repo": "CAM_CAM",
+      "path": "coverage-baseline-2026-03-31.txt",
+      "classification": "remove_from_public_git",
+      "reason": "Old local coverage snapshot; live tests and CI are the current proof surface.",
+      "risk": "low",
+      "replacement_current_source": "Run pytest/coverage in the current checkout or fresh clone."
+    },
+    {
+      "repo": "CAM_CAM",
+      "path": "docs/LAUNCH_METRICS_2026-06-19.md",
+      "classification": "remove_from_public_git",
+      "reason": "Stale launch metrics snapshot with local DB hashes and old head references.",
+      "risk": "low",
+      "replacement_current_source": "Use current README, runtime docs, and live verification output."
+    },
+    {
+      "repo": "CAM_CAM",
+      "path": "docs/reports/CAM_CAM_LAUNCH_AUDIT_2026-06-19.md",
+      "classification": "remove_from_public_git",
+      "reason": "Stale launch audit snapshot superseded by current public cleanup verification.",
+      "risk": "low",
+      "replacement_current_source": "Use current README, runtime docs, and final CAM public repo report."
+    },
+    {
+      "repo": "CAM_CAM",
+      "path": "docs/reports/CAM_CAM_LAUNCH_REFRESH_2026-06-19.md",
+      "classification": "remove_from_public_git",
+      "reason": "Stale launch refresh report superseded by current public cleanup verification.",
+      "risk": "low",
+      "replacement_current_source": "Use current README, runtime docs, and final CAM public repo report."
+    },
+    {
+      "repo": "CAM_CAM",
+      "path": "docs/reports/CAM_CAM_TOP6_FEATURES_2026-06-19.md",
+      "classification": "remove_from_public_git",
+      "reason": "Stale enhancement report; current feature behavior should be read from app/runtime docs and tests.",
+      "risk": "low",
+      "replacement_current_source": "Use app README files, runtime docs, and tests."
+    }
+  ],
+  "retained_legacy_looking": [
+    {
+      "repo": "CAM_Codx",
+      "path": "PRD.md, build_specs.md, build_to_do_checklist.md, _design_approval.md",
+      "classification": "keep_public",
+      "reason": "Background and design provenance for the hub; not runtime clutter."
+    },
+    {
+      "repo": "CAM_Codx",
+      "path": "meta/HANDOFF_2026-05-17.md, meta/HANDOFF_LATEST.md",
+      "classification": "keep_public",
+      "reason": "Historical handoff evidence for the public workflow hub."
+    },
+    {
+      "repo": "CAM_CAM",
+      "path": "docs/plans/*",
+      "classification": "keep_public",
+      "reason": "Runtime design provenance retained until a separate docs archive pass."
+    },
+    {
+      "repo": "CAM_CAM",
+      "path": "docs/announcements/*, docs/blog/*",
+      "classification": "keep_public",
+      "reason": "Public history/marketing docs retained because they do not affect clone-and-run proof."
+    },
+    {
+      "repo": "moriahcareframe",
+      "path": "patches/patch_plan.md, docs/provenance/source_profiles.json",
+      "classification": "keep_public",
+      "reason": "Generated product proof artifacts that support provenance and smoke behavior."
+    }
+  ],
+  "local_folder_changes": {
+    "deleted": [],
+    "moved": [],
+    "renamed": [],
+    "archived": []
+  }
+}

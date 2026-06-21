@@ -41,3 +41,24 @@
 - MoriahCareFrame `PYTHONPATH=src python -m pytest -q`: `5 passed`.
 - MoriahCareFrame `sh scripts/smoke.sh`: passed and left git status clean.
 - CAM_ALL `verify-all.sh`: passed for clean clones.
+
+### Final Public Cleanup Continuation
+
+- Re-read active `GOAL.md`; scope is now the final public repo cleanup and
+  fresh-clone proof pass, not just the initial hub reorganization.
+- Verified current pushed heads before cleanup:
+  - `CAM_Codx`: `23ad6e555127dc2856eec5070c91f2c09c04b238`
+  - `CAM_CAM`: `c9110447abff2047a8c4df7021679a0847fb151e`
+  - `moriahcareframe`: `a82e42cedd2f70479d44f92bd2dcab7277f86168`
+- Confirmed current dirty state before edits:
+  - `CAM_Codx`: modified `GOAL.md`.
+  - `CAM_CAM`: untracked `CAM_Codx_last5291pm.txt`, left untouched.
+  - `MoriahCareFrame`: clean.
+- Identified stale current-state references in status/report/inventory docs and
+  public config docs that mislabeled tracked public-safe `CAM_CAM/claw*.toml`
+  defaults as local-only.
+- Started cleanup classification with generated CAM_CAM batch outputs, stale
+  launch reports, and dated coverage baseline as low-risk public Git removal
+  candidates.
+- Committed and pushed CAM_CAM cleanup:
+  `9a9d71ade8f6766c8fb564051b2baa308d9abfd1 chore: remove stale public cleanup artifacts`.

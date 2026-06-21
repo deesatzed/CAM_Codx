@@ -17,8 +17,8 @@ No old folders were deleted, moved, renamed, or archived.
 
 | Repo | Path | Remote | Commit |
 |---|---|---|---|
-| CAM_Codx | `/Volumes/WS4TB/repo622sn/CAM_Codx` | `https://github.com/deesatzed/CAM_Codx.git` | `287ed4a docs: reorganize CAM_Codx as CAM workflow hub` |
-| CAM_CAM | `/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM` | `https://github.com/deesatzed/CAM_CAM.git` | `c911044 docs: link CAM_CAM runtime to CAM_Codx hub` |
+| CAM_Codx | `/Volumes/WS4TB/repo622sn/CAM_Codx` | `https://github.com/deesatzed/CAM_Codx.git` | `23ad6e5 docs: update CAM reorg push status` |
+| CAM_CAM | `/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM` | `https://github.com/deesatzed/CAM_CAM.git` | `9a9d71a chore: remove stale public cleanup artifacts` |
 | MoriahCareFrame | `/Volumes/WS4TB/WS4TBr/MoriahCareFrame` | `https://github.com/deesatzed/moriahcareframe.git` | no changes, verified at `a82e42c` |
 
 This report is added after the two implementation commits.
@@ -75,8 +75,11 @@ git ls-remote --heads https://github.com/deesatzed/moriahcareframe.git
 
 Results:
 
-- CAM_Codx remote head before work: `d5df0a5` on `main`.
-- CAM_CAM remote head before work: `40ba9f1` on `main`.
+- CAM_Codx remote head before the first reorganization batch: `d5df0a5` on
+  `main`; current verified pushed head before final cleanup is `23ad6e5`.
+- CAM_CAM remote head before the first reorganization batch: `40ba9f1` on
+  `main`; pre-cleanup hub-linked head was `c911044`; current verified pushed
+  head after public cleanup is `9a9d71a`.
 - moriahcareframe remote head: `a82e42c` on `main`.
 
 ### Inventory

@@ -7,9 +7,10 @@ Verified on 2026-06-21 using metadata-only commands.
 | Local file | Observed state | Role | Public handling |
 |---|---|---|---|
 | `/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM/data/claw.db` | 109 MB SQLite DB | CAM runtime corpus and outcome/state database | Never copy into CAM_Codx or GitHub. |
-| `/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM/claw.toml` | 21 KB | CAM runtime config | Map shape to a sanitized template. |
-| `/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM/claw_cheap.toml` | 20 KB | Alternate local runtime config | Local-only unless sanitized. |
-| `/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM/claw_grok.toml` | 20 KB | Grok-oriented local runtime config | Local-only unless sanitized. |
+| `/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM/claw.toml` | tracked public-safe TOML | CAM runtime default config | Safe to keep tracked while secrets and local overrides stay out of Git. |
+| `/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM/claw_cheap.toml` | tracked public-safe TOML | Alternate runtime route | Safe to keep tracked while secrets and local overrides stay out of Git. |
+| `/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM/claw_dspro.toml` | tracked public-safe TOML | DeepSeek-oriented runtime route | Safe to keep tracked while secrets and local overrides stay out of Git. |
+| `/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM/claw_grok.toml` | tracked public-safe TOML | Grok-oriented runtime route | Safe to keep tracked while secrets and local overrides stay out of Git. |
 | `/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM/.env.example` | 3.4 KB | Public environment example in CAM_CAM | Safe to reference; do not copy secrets. |
 | `/Volumes/WS4TB/WS4TBr/CAM_Codx/.codex/config.toml` | present | Local Codex wiring | Do not publish directly; use placeholder template. |
 
@@ -40,4 +41,7 @@ their local `CAM_CODEX_MCP_DB_PATH` to that file. They should not commit the DB.
 
 The local overlay path is `/Volumes/WS4TB/CAM_ALL/local_state`. It contains
 documented placeholders for local-only runtime state. This pass did not copy
-`claw.db`; the placeholder points back to the current local DB path.
+`claw.db`; the placeholder points back to the current local DB path. Tracked
+public-safe `CAM_CAM/claw*.toml` defaults are not local state; only private
+overrides, real `.env` files, endpoints, machine paths, and databases are
+local-only.
