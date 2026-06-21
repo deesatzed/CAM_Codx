@@ -26,3 +26,13 @@
   - `/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM/docs/showpieces/repo_necromancer/USER_GUIDE.md`
   - `/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM/docs/integrations/CAM_CODEX.md`
 - No old folders were deleted, moved, renamed, or archived.
+
+### Verification After Commits
+
+- CAM_Codx commit: `287ed4a docs: reorganize CAM_Codx as CAM workflow hub`.
+- CAM_CAM commit: `c911044 docs: link CAM_CAM runtime to CAM_Codx hub`.
+- CAM_Codx `git diff --check`: passed.
+- CAM_CAM `python -m pytest -q tests/test_repo_necromancer.py`: `6 passed`.
+- MoriahCareFrame `PYTHONPATH=src python -m pytest -q`: `5 passed`.
+- MoriahCareFrame `sh scripts/smoke.sh`: passed and left git status clean.
+- CAM_ALL `verify-all.sh`: passed for clean clones.
