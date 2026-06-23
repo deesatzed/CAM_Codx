@@ -1,0 +1,25 @@
+{
+  "mcp": {
+    "allowed": [
+      "cam"
+    ],
+    "excluded": []
+  },
+  "mcpServers": {
+    "cam": {
+      "args": [
+        "mcp",
+        "--transport",
+        "stdio"
+      ],
+      "command": "cam",
+      "env": {
+        "CLAW_CONFIG": "$CAM_CAM_CLAW_CONFIG",
+        "CLAW_DB_PATH": "$CAM_CAM_DB_PATH",
+        "CLAW_MCP_AUTH_TOKEN": "$CLAW_MCP_AUTH_TOKEN"
+      },
+      "timeout": 600000,
+      "trust": false
+    }
+  }
+}

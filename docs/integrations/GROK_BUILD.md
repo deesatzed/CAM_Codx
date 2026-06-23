@@ -4,6 +4,10 @@ Grok Build can consume the same CAM packets as Codex and Claude Code. The
 adapter contract is evidence-first: packets, receipts, source boundaries, and
 verification output decide whether a build is complete.
 
+The current generated pack lives at `agent-packs/grok-build/`. It is generated
+from the shared contract at
+`agent-packs/contract/cam_agent_capabilities.json`.
+
 ## What Grok Build Consumes
 
 - `CAM_CODEX_GOAL.md`
@@ -33,3 +37,28 @@ Grok Build briefs should preserve:
 
 Build reports should include changed files, test results, source-boundary
 status, and any remaining product gaps.
+
+## Pack Setup
+
+Use the generated files in `agent-packs/grok-build/`:
+
+- `AGENTS.md` for project-level behavior rules.
+- `.grok/config.toml.example` for local CAM MCP config.
+- `.grok/skills/cam-agent/SKILL.md` for CAM usage instructions.
+- `.grok/hooks/pre-tool-cam-guard.sh` as an optional mutating-tool guard.
+- `headless-smoke.sh` as a starting smoke command when Grok credentials are
+  available.
+
+The default CAM runtime command is:
+
+```bash
+cam mcp --transport stdio
+```
+
+Verify discovery with:
+
+```bash
+grok inspect
+```
+
+Keep xAI Remote MCP endpoint credentials outside Git.

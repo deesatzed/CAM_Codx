@@ -1,0 +1,15 @@
+# Generated CAM Grok Build config example.
+# Copy to .grok/config.toml and replace placeholders outside Git.
+
+[mcp_servers.cam]
+command = "cam"
+args = ["mcp", "--transport", "stdio"]
+timeout_ms = 600000
+
+[mcp_servers.cam.env]
+CLAW_CONFIG = "/absolute/path/to/CAM_CAM/claw.toml"
+CLAW_DB_PATH = "/absolute/path/to/CAM_CAM/data/claw.db"
+CLAW_MCP_AUTH_TOKEN = "${CLAW_MCP_AUTH_TOKEN}"
+
+[skills]
+paths = [".grok/skills"]

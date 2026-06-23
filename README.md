@@ -21,6 +21,7 @@ The current repo family is organized as a hub-and-spoke system:
 ```text
 CAM_CAM runtime engine -> CAM_Codx workflow hub -> generated product repos
                          -> Claude Code adapter
+                         -> Gemini adapter
                          -> Grok Build adapter
 ```
 
@@ -33,8 +34,9 @@ CAM_CAM runtime engine -> CAM_Codx workflow hub -> generated product repos
 | `moriahcareframe` | Generated standalone product | You want to inspect or harden the product repo produced by CAM/Codex. |
 | `MyLoc` | Generated product dogfood proof | You want to see CAM evaluate and harden a Repo Necromancer output repo. |
 
-Claude Code and Grok Build are adapter surfaces. They consume CAM packets,
-source receipts, and generated goals; they do not change the ownership model.
+Claude Code, Gemini, and Grok Build are adapter surfaces. They consume CAM
+packets, source receipts, generated goals, and CAM MCP/CLI tools; they do not
+change the ownership model.
 
 ## Quickstart
 
@@ -83,18 +85,34 @@ preflighted, camified, self-mined, security-scanned, and helped harden it with
 source-boundary verification plus JSON patch-plan output. See the
 [MyLoc hardening case study](docs/examples/MYLOC_HARDENING_CASE_STUDY.md).
 
+## CAM Agent Packs
+
+CAM_Codx now publishes generated host packs from one shared capability contract:
+
+- [Agent pack overview](docs/AGENT_PACKS.md)
+- [Capability contract](agent-packs/contract/CAPABILITY_CONTRACT.md)
+- [Claude Code pack](agent-packs/claude-code/README.md)
+- [Gemini pack](agent-packs/gemini/README.md)
+- [Grok Build pack](agent-packs/grok-build/README.md)
+
+The packs map the same CAM runtime capabilities to host-native instructions and
+MCP configuration examples. CAM_CAM remains the runtime/MCP owner; CAM_Codx owns
+the generated pack docs, tests, and generator.
+
 ## Compatibility
 
-- [Claude Code integration](docs/integrations/CLAUDE_CODE.md) explains how
-  Claude Code should consume CAM packets while preserving source read-only
-  boundaries.
-- [Grok Build integration](docs/integrations/GROK_BUILD.md) explains the same
-  packet and receipt contract for Grok Build.
+- [Claude Code integration](docs/integrations/CLAUDE_CODE.md) explains the
+  Claude-specific pack and packet workflow.
+- [Gemini integration](docs/integrations/GEMINI.md) explains the Gemini pack,
+  CLI/API split, and Remote MCP caveats.
+- [Grok Build integration](docs/integrations/GROK_BUILD.md) explains the Grok
+  Build pack, skills/hooks layout, and receipt contract.
 
 Templates live under:
 
 - `templates/goals/`
 - `templates/claude-code/`
+- `agent-packs/gemini/`
 - `templates/grok-build/`
 - `templates/config/`
 
@@ -118,7 +136,7 @@ The non-destructive cleanup staging area is:
 
 ## Current Status
 
-Verified on 2026-06-21:
+Verified on 2026-06-23:
 
 - `CAM_Codx` remote: `https://github.com/deesatzed/CAM_Codx.git`
 - `CAM_CAM` remote: `https://github.com/deesatzed/CAM_CAM.git`

@@ -84,3 +84,44 @@
   commits are verified by `git rev-parse HEAD`, and tracked public-safe
   `CAM_CAM/claw*.toml` defaults are not mislabeled as uncommitted local-only
   files.
+
+## 2026-06-23 CAM Agent Packs Goal
+
+- Replaced the prior final-public-cleanup `GOAL.md` with a new autonomous
+  completion contract for CAM Agent Packs.
+- Locked the ownership decision: CAM_Codx remains the main workflow hub;
+  CAM_CAM remains the runtime/MCP core; Claude Code, Gemini, and Grok Build are
+  generated host-specific packs, not separate product forks.
+- Included proof gates for a shared capability contract, deterministic pack
+  generator, host-specific packs, tests, CAM_CAM runtime verification, official
+  host-doc rechecks, and no-secret hygiene.
+- Current local verification for this goal-authoring step: `git diff --check`
+  passed after editing `GOAL.md`.
+- Implemented `agent-packs/contract/cam_agent_capabilities.json` with the CAM
+  runtime ownership model, checked external docs, required host packs, and 19
+  CAM CLI/MCP capabilities.
+- Added `tools/generate_agent_packs.py`, generated
+  `agent-packs/contract/CAPABILITY_CONTRACT.md`, `docs/AGENT_PACKS.md`, and
+  generated packs for Claude Code, Gemini, and Grok Build.
+- Added `tests/test_agent_packs.py` covering required capabilities, host-pack
+  required files, generated-output freshness, JSON example parsing, and
+  no-secret/no-local-DB hygiene.
+- Updated README, status, repo map, and integration docs for Claude Code,
+  Gemini, and Grok Build.
+- Rechecked CAM_CAM runtime ownership from `src/claw/mcp_server.py`,
+  `src/claw/tools/schemas.py`, `docs/MCP_INTEGRATION_GUIDE.md`, and `cam premine`
+  CLI wiring.
+- CAM_Codx verification passed:
+  `python -m json.tool agent-packs/contract/cam_agent_capabilities.json`,
+  `python tools/generate_agent_packs.py --check`,
+  `python -m pytest -q tests/test_agent_packs.py` with 6 tests, and
+  `git diff --check`.
+- CAM_CAM runtime verification passed:
+  `python -m pytest -q tests/test_tool_schemas.py tests/test_integration_wiring.py`
+  with 74 tests, and `git diff --check`.
+- Host CLI availability checks:
+  `claude mcp list` exits 0 but currently lists only Claude Google connectors
+  that need authentication; CAM is not installed there yet.
+  `gemini mcp list` exits 0 and reports no MCP servers configured.
+  `grok inspect` exits 0 and reports no project MCP servers configured for this
+  CAM_Codx checkout.

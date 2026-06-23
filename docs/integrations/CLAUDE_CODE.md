@@ -3,6 +3,10 @@
 Claude Code can consume CAM artifacts as a bounded worker surface. CAM_Codx
 remains the hub that defines the goal, proof gates, and provenance contract.
 
+The current generated pack lives at
+`agent-packs/claude-code/`. It is generated from the shared contract at
+`agent-packs/contract/cam_agent_capabilities.json`.
+
 ## What Claude Code Consumes
 
 - `CAM_CODEX_GOAL.md`
@@ -25,6 +29,26 @@ remains the hub that defines the goal, proof gates, and provenance contract.
 Use `templates/claude-code/repo-necromancer-handoff.md` for a bounded prompt.
 It should tell Claude Code what it may edit, what it must not touch, and what
 Markdown report format to return.
+
+## MCP Setup
+
+Use `agent-packs/claude-code/.mcp.json.example` as the starting point for a
+project-scoped Claude Code MCP config. Keep real local paths and tokens out of
+Git unless they are placeholders.
+
+The default CAM runtime command is:
+
+```bash
+cam mcp --transport stdio
+```
+
+Verify from Claude Code with:
+
+```bash
+claude mcp list
+```
+
+Then check `/mcp` inside Claude Code.
 
 ## Completion Evidence
 

@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "cam": {
+      "args": [
+        "mcp",
+        "--transport",
+        "stdio"
+      ],
+      "command": "cam",
+      "env": {
+        "CLAW_CONFIG": "${CAM_CAM_CLAW_CONFIG:-/absolute/path/to/CAM_CAM/claw.toml}",
+        "CLAW_DB_PATH": "${CAM_CAM_DB_PATH:-/absolute/path/to/CAM_CAM/data/claw.db}",
+        "CLAW_MCP_AUTH_TOKEN": "${CLAW_MCP_AUTH_TOKEN:-}"
+      },
+      "timeout": 600000
+    }
+  }
+}
