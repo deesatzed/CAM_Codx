@@ -102,3 +102,17 @@ Both arms will use the same XTtape app spec and the same `/goal GOAL.md`
 launch method. The control arm may not use CAM_Codx or `claw.db`; the CAM arm
 may use them for methodology recall and troubleshooting. Human help after
 launch is counted as an intervention metric, not as normal collaboration.
+
+## Model-Ladder Follow-Up
+
+The next planned refinement is a CAM-assisted model-ladder comparison against
+the existing no-CAM control:
+
+- [Model-ladder design](../plans/2026-06-26-xttape-cam-model-ladder-design.md)
+- [Model-ladder setup plan](../plans/2026-06-26-xttape-cam-model-ladder.md)
+
+The purpose is to find the lowest-cost or lowest-reasoning model tier where
+CAM_Codx can still match the existing XTtape control outcome. The planned arms
+are `gpt-5.5` with low reasoning, `gpt-5.4`, `gpt-5.4-mini`, and
+`gpt-5.3-codex-spark`, all CAM-assisted. New direct/no-CAM controls should be
+added only after the inflection point is visible.
