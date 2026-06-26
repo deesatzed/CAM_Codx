@@ -90,3 +90,15 @@ Use the final XTtape build brain as the source of truth for a separate product
 repo. The planned app root from the local run was
 `/Volumes/WS4TB/ccxt/XTtape-app`, but a new user can choose any clean product
 repo path as long as the final truth files and evidence gates are preserved.
+
+## Next Comparison
+
+The next planned showpiece is a `/goal GOAL.md` A/B build comparison:
+
+- [A/B experiment design](../plans/2026-06-26-xttape-goal-ab-build-comparison-design.md)
+- [A/B setup implementation plan](../plans/2026-06-26-xttape-goal-ab-build-comparison.md)
+
+Both arms will use the same XTtape app spec and the same `/goal GOAL.md`
+launch method. The control arm may not use CAM_Codx or `claw.db`; the CAM arm
+may use them for methodology recall and troubleshooting. Human help after
+launch is counted as an intervention metric, not as normal collaboration.
