@@ -1,0 +1,38 @@
+OpenRouter MCP Verification
+Date checked: 2026-06-26
+Repo: /Volumes/WS4TB/repo622sn/CAM_Codx
+
+Commands run:
+
+- codex mcp get openrouter
+  - before registration: failed with "No MCP server named 'openrouter' found."
+
+- codex mcp add openrouter --url https://mcp.openrouter.ai/mcp
+  - result: added global MCP server "openrouter"
+  - result: detected OAuth support and started OAuth flow
+  - user/browser OAuth approval was required
+  - result after approval: "Successfully logged in."
+
+- codex mcp get openrouter
+  - result: openrouter enabled=true
+  - transport: streamable_http
+  - url: https://mcp.openrouter.ai/mcp
+  - bearer_token_env_var: none
+
+- codex mcp list
+  - result: openrouter appears in the HTTP MCP server list
+  - status: enabled
+  - auth column displayed "Unsupported" even though the OAuth flow completed successfully during add/login
+
+Current-session tool visibility:
+
+- tool discovery in the already-running Codex session did not expose OpenRouter tools.
+- likely action: start a fresh Codex session and check tool discovery again.
+
+Important interpretation:
+
+- OpenRouter MCP registration succeeded.
+- This proves OpenRouter MCP can be configured for Codex as an MCP tool server.
+- This does not prove that `codex exec -c 'model_provider="openrouter"'` works.
+- The Codex model-provider failure remains a separate issue from MCP registration.
+
