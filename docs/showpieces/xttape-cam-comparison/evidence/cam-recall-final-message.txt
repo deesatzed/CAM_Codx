@@ -1,0 +1,15 @@
+Created the five requested project-brain files in `/Volumes/WS4TB/ccxt/showpiece/runs/cam_recall`:
+
+- [AGENTS.md](/Volumes/WS4TB/ccxt/showpiece/runs/cam_recall/AGENTS.md)
+- [GOAL.md](/Volumes/WS4TB/ccxt/showpiece/runs/cam_recall/GOAL.md)
+- [DECISIONS.md](/Volumes/WS4TB/ccxt/showpiece/runs/cam_recall/DECISIONS.md)
+- [PROGRESS.md](/Volumes/WS4TB/ccxt/showpiece/runs/cam_recall/PROGRESS.md)
+- [CAM_MEMORY_APPLIED.md](/Volumes/WS4TB/ccxt/showpiece/runs/cam_recall/CAM_MEMORY_APPLIED.md)
+
+Verified fresh after writing:
+
+- `find . -maxdepth 1 -type f -print | sort` shows exactly those five files.
+- Extra-file scan returned no output.
+- ASCII scan returned no non-ASCII matches.
+- No app code, scaffold, schema, services, or tests were created.
+- `CAM_MEMORY_APPLIED.md` explicitly lists the CAM packet items that changed XTtape from a generic smart ticker plan into a source-receipted, idempotent, MCP-governed, replayable, evidence-gated ambient intelligence plan.

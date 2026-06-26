@@ -2,6 +2,8 @@
 
 > **For Codex:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
+> **Status:** Superseded by the completed XTtape showpiece bundle in `docs/showpieces/xttape-cam-comparison/`. The completed run intentionally excludes `XTtapeNotes.md`; use `docs/showpieces/xttape-cam-comparison/INITIAL_REQUEST.md`, `COMPARISON_SUMMARY.md`, `runs/final/`, and `docs/plans/2026-06-25-xttape-live-ai-news-ticker.md` as the current source of truth.
+
 **Goal:** Compare two independently generated XTtape project-brain outputs before building any app code, so we can decide whether CAM_Codx and `claw.db` materially improve the app plan.
 
 **Architecture:** This is a controlled documentation experiment. One output is generated from the raw XTtape request without CAM memory; the second uses the same input plus CAM_Codx methodology recall from local `claw.db`. A scorecard decides whether to build, revise, or stop.

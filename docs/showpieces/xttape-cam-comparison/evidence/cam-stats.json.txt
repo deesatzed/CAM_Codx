@@ -1,0 +1,26 @@
+{
+  "ganglion": "general",
+  "ganglion_description": "General-purpose AI development patterns, code quality, testing, architecture",
+  "methodology_count": 2315,
+  "active_methodology_count": 2315,
+  "source_repo_count": 184,
+  "lifecycle_states": {
+    "declining": 17,
+    "embryonic": 2151,
+    "thriving": 3,
+    "viable": 144
+  },
+  "federation_enabled": true,
+  "sibling_count": 1,
+  "db_path": "/Volumes/WS4TB/ccxt/data/claw.db",
+  "cag": {
+    "ganglion": "general",
+    "methodology_count": 0,
+    "built_at": null,
+    "stale": true,
+    "corpus_tokens_approx": 0,
+    "loaded": false,
+    "pointer_count": 0,
+    "shorthand_compression": false
+  }
+}

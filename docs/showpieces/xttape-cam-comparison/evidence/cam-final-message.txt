@@ -1,0 +1,13 @@
+Created the five requested files in `/Volumes/WS4TB/ccxt/showpiece/runs/cam`:
+
+- [AGENTS.md](/Volumes/WS4TB/ccxt/showpiece/runs/cam/AGENTS.md)
+- [GOAL.md](/Volumes/WS4TB/ccxt/showpiece/runs/cam/GOAL.md)
+- [DECISIONS.md](/Volumes/WS4TB/ccxt/showpiece/runs/cam/DECISIONS.md)
+- [PROGRESS.md](/Volumes/WS4TB/ccxt/showpiece/runs/cam/PROGRESS.md)
+- [CAM_MEMORY_APPLIED.md](/Volumes/WS4TB/ccxt/showpiece/runs/cam/CAM_MEMORY_APPLIED.md)
+
+Major stance: XTtape is framed as a standalone professional ambient-awareness app, with FastAPI as the orchestration/API layer, optional TypeScript services where they earn their place, Prisma/Postgres for structured persistence, and MCP as the external source/tool boundary. The docs make source receipts, provenance, credential gating, and non-doomscrolling UX explicit requirements.
+
+Blockers recorded: X/xAI credentials and terms, paid source/API choices, AI provider and budget guardrails, frontend choice, tenancy model, and source licensing/storage rules.
+
+Verification: confirmed the directory contains exactly those five files, no extra files or directories, no app code, no TODO/FIXME/HACK markers, and ASCII-only content. This directory is not currently a git repo.

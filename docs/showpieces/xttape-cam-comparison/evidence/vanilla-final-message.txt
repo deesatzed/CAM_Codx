@@ -1,0 +1,12 @@
+Created only the four requested project-brain files:
+
+- [AGENTS.md](/Volumes/WS4TB/ccxt/showpiece/runs/vanilla/AGENTS.md)
+- [GOAL.md](/Volumes/WS4TB/ccxt/showpiece/runs/vanilla/GOAL.md)
+- [DECISIONS.md](/Volumes/WS4TB/ccxt/showpiece/runs/vanilla/DECISIONS.md)
+- [PROGRESS.md](/Volumes/WS4TB/ccxt/showpiece/runs/vanilla/PROGRESS.md)
+
+Architecture stance: XTtape is framed as an ambient professional awareness ticker, not a feed clone. FastAPI is the core backend, Prisma handles durable structured persistence, Node/TypeScript is reserved for useful services like feed workers or streaming adapters, external integrations sit behind an MCP boundary, and X/xAI is credential-gated.
+
+Main blockers before implementation: choosing MVP feed/source targets, defining the credential-free dev path, settling MCP responsibilities, sketching persistence entities, choosing AI/model strategy, and defining privacy/retention controls for learned user preferences.
+
+Verified all four target files exist. No app code was written, and I did not use `XTtapeNotes.md`, CAM, `claw.db`, or external memory.
