@@ -21,6 +21,23 @@ generated products keep their own repo history and tests.
 
 Start with CAM_Codx.
 
+## What should a new user learn from the XTtape showpiece?
+
+XTtape shows CAM_Codx working as a planning and evidence amplifier before app
+code. The experiment compared a vanilla Codex plan with a CAM-recall-guided
+plan for a live AI news ticker. The CAM recall run added source receipts,
+read-only connector boundaries, replay fixtures, duplicate-ingestion
+protection, freshness/confidence scoring, provider fallback, and learning audit
+records.
+
+The inference for a new user is practical: do not expect CAM_Codx to magically
+make a complete app just because `claw.db` exists. Use CAM_Codx to mine or
+recall relevant methods, compare alternatives, write better project truth
+files, and only then build.
+
+See `docs/examples/XTTAPE_CAM_SHOWPIECE_CASE_STUDY.md` and
+`docs/showpieces/xttape-cam-comparison/`.
+
 ## What repo should a runtime contributor start with?
 
 Start with CAM_CAM.
@@ -30,6 +47,13 @@ Start with CAM_CAM.
 It is a separate repo created from CAM/Codex evidence and goals. The packet is
 not the product. The product repo needs its own runtime code, tests, README,
 provenance, and smoke command.
+
+## Is XTtape a generated product repo?
+
+Not yet. The published XTtape artifact is a showpiece planning bundle and
+implementation contract. It contains prompts, comparison evidence, final
+project-brain files, and the next build plan. The app runtime should be created
+later as a separate product repo from that contract.
 
 ## How do Claude Code and Grok Build fit?
 

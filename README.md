@@ -9,6 +9,12 @@ generated `CAM_CODEX_GOAL.md`, or harden a standalone product created by CAM.
 Use `CAM_CAM` when you are changing the runtime engine, mining corpus, Repo
 Necromancer generator, dashboards, or tests.
 
+The clearest current showpiece is XTtape: a controlled vanilla-vs-CAM planning
+comparison for a live AI news ticker app. It demonstrates that CAM_Codx is most
+valuable before coding, when it helps Codex recall proven methods, compare
+alternatives, and turn a rough product idea into an evidence-backed build
+contract.
+
 ## What This Is
 
 CAM_Codx is a workflow hub. It owns docs, goal contracts, adapter templates,
@@ -58,9 +64,35 @@ Then read:
 - [Codex quickstart](docs/QUICKSTART_CODEX.md)
 - [New computer setup walkthrough](docs/NEW_COMPUTER_SETUP_WALKTHROUGH.md)
 - [Architecture](docs/ARCHITECTURE.md)
+- [XTtape CAM showpiece case study](docs/examples/XTTAPE_CAM_SHOWPIECE_CASE_STUDY.md)
+- [XTtape showpiece artifact bundle](docs/showpieces/xttape-cam-comparison/COMPARISON_SUMMARY.md)
 - [Repo Necromancer workflow](docs/WORKFLOW_REPO_NECROMANCER.md)
 - [MoriahCareFrame case study](docs/examples/MORIAH_CAREFRAME_CASE_STUDY.md)
 - [MyLoc hardening case study](docs/examples/MYLOC_HARDENING_CASE_STUDY.md)
+
+## XTtape Showpiece
+
+XTtape is a novice-friendly demonstration of how to use CAM_Codx without
+drifting into app code too early. The experiment compared:
+
+- a vanilla Codex project brain,
+- a CAM-shaped run that did not actually use recalled methodology,
+- a corrected CAM recall run using mined methodology context,
+- a prior incumbent plan used only as design evidence.
+
+The result was a final merged build brain and implementation plan for a
+browser-first live AI news ticker. The CAM recall run scored higher than the
+vanilla run because it added concrete engineering requirements: source
+receipts, read-only connector boundaries, replay fixtures, duplicate-ingestion
+protection, freshness/confidence scoring, provider fallback, and user-learning
+audit records.
+
+Start with the [case study](docs/examples/XTTAPE_CAM_SHOWPIECE_CASE_STUDY.md),
+then inspect the full [artifact bundle](docs/showpieces/xttape-cam-comparison/).
+The final app-build contract lives in
+[`runs/final`](docs/showpieces/xttape-cam-comparison/runs/final/) and the next
+implementation plan lives at
+[`docs/plans/2026-06-25-xttape-live-ai-news-ticker.md`](docs/showpieces/xttape-cam-comparison/docs/plans/2026-06-25-xttape-live-ai-news-ticker.md).
 
 ## Repo Necromancer Example
 
@@ -136,11 +168,13 @@ The non-destructive cleanup staging area is:
 
 ## Current Status
 
-Verified on 2026-06-23:
+Verified on 2026-06-26:
 
 - `CAM_Codx` remote: `https://github.com/deesatzed/CAM_Codx.git`
 - `CAM_CAM` remote: `https://github.com/deesatzed/CAM_CAM.git`
 - `moriahcareframe` remote: `https://github.com/deesatzed/moriahcareframe.git`
+- XTtape showpiece results are published under
+  `docs/showpieces/xttape-cam-comparison/`.
 - `CAM_CAM/data/claw.db` exists locally and is treated as local runtime state.
 - No old folders should be deleted, moved, renamed, or archived without a
   separate explicit approval.

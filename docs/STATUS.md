@@ -1,6 +1,6 @@
 # Status
 
-Verified on 2026-06-23 for the CAM Agent Packs addition.
+Verified on 2026-06-26 after publishing the XTtape CAM showpiece results.
 
 ## Implemented
 
@@ -12,6 +12,10 @@ Verified on 2026-06-23 for the CAM Agent Packs addition.
 - A shared capability contract exists at
   `agent-packs/contract/cam_agent_capabilities.json`.
 - `docs/AGENT_PACKS.md` explains the generated-pack architecture.
+- XTtape showpiece artifacts exist under
+  `docs/showpieces/xttape-cam-comparison/`.
+- The XTtape case study exists at
+  `docs/examples/XTTAPE_CAM_SHOWPIECE_CASE_STUDY.md`.
 - Local overlay directories exist at `/Volumes/WS4TB/CAM_ALL`.
 - Archive staging exists at `/Volumes/WS4TB/CAM_ARCHIVE`.
 
@@ -24,16 +28,17 @@ Verified on 2026-06-23 for the CAM Agent Packs addition.
 - CAM_CAM MCP runtime ownership was inspected from
   `src/claw/mcp_server.py`, `src/claw/tools/schemas.py`, and
   `docs/MCP_INTEGRATION_GUIDE.md`.
+- XTtape showpiece evidence was checked for stale CAM paths, excluded source
+  material, and obvious secret patterns before commit.
+- The XTtape comparison published a final merged build brain and app
+  implementation plan, but no XTtape runtime app code.
 
 ## Pushed To GitHub
 
-Verified at `origin/main` on 2026-06-21 after the final public cleanup proof.
-The CAM Agent Packs work is verified by the local commands below; verify the
-exact pushed head after the pack commit with `git rev-parse HEAD` and
-`git ls-remote origin refs/heads/main`.
+Verified at `origin/main` on 2026-06-26 after the XTtape showpiece commit.
 
-- CAM_Codx through the status-correction commit containing this file. Verify
-  the exact pushed head with `git rev-parse HEAD` and
+- CAM_Codx includes the XTtape showpiece results and public documentation
+  framing. Verify the exact pushed head with `git rev-parse HEAD` and
   `git ls-remote origin refs/heads/main`.
 - CAM_CAM through `9a9d71a chore: remove stale public cleanup artifacts`.
 - MoriahCareFrame had no changes to push and remains at `a82e42c`.
@@ -49,6 +54,8 @@ exact pushed head after the pack commit with `git rev-parse HEAD` and
 - Agent pack verification is:
   `python tools/generate_agent_packs.py --check`,
   `python -m pytest -q tests/test_agent_packs.py`, and `git diff --check`.
+- XTtape showpiece verification included `git diff --check`, secret-pattern
+  scan over the committed showpiece docs, and remote head verification.
 
 ## Intentionally Out Of Scope
 
@@ -57,3 +64,5 @@ exact pushed head after the pack commit with `git rev-parse HEAD` and
 - Publishing real API keys or local-only config.
 - Merging CAM_CAM, CAM_Codx, and generated products into one monorepo.
 - Creating separate `CAM_Claude`, `CAM_Gemini`, or `CAM_Grok` product forks.
+- Claiming that XTtape app runtime code has been built. The published XTtape
+  artifact is a planning/evidence showpiece and implementation contract.
