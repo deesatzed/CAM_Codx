@@ -90,6 +90,7 @@ Expected: commit contains only the OpenRouter MCP planning/evidence files unless
 **Files:**
 - Modify: `/Volumes/WS4TB/ccxt/xttape-model-ladder/experiments/product-gap/README.md`
 - Modify: `/Volumes/WS4TB/ccxt/xttape-model-ladder/experiments/product-gap/scripts/run_all_experiments.sh`
+- Evidence: `/Volumes/WS4TB/ccxt/xttape-model-ladder/experiments/product-gap/reports/openrouter_codex_provider_check-<arm>.txt`
 - Evidence: `/Volumes/WS4TB/ccxt/xttape-model-ladder/experiments/product-gap/reports/openrouter_codex_provider_check.txt`
 
 **Step 1: Document the distinction**
@@ -108,9 +109,10 @@ In `run_all_experiments.sh`, before launching an OpenRouter arm, run a tiny Code
 codex exec -C "$ROOT" -m "$model" -c 'model_provider="openrouter"' --ephemeral 'Reply OK.'
 ```
 
-Capture stdout/stderr to:
+Capture stdout/stderr to a per-arm evidence file and update a latest pointer:
 
 ```text
+experiments/product-gap/reports/openrouter_codex_provider_check-<arm>.txt
 experiments/product-gap/reports/openrouter_codex_provider_check.txt
 ```
 
@@ -119,7 +121,7 @@ experiments/product-gap/reports/openrouter_codex_provider_check.txt
 If the preflight reports `Model provider 'openrouter' not found`, write a blocked result that says:
 
 ```text
-OpenRouter MCP may be configured, but this Codex build does not expose OpenRouter as a model provider. Use native provider support if available or run the separate OpenRouter API worker.
+OpenRouter MCP may be configured, but this Codex build does not expose OpenRouter as a model provider. Use native provider support if available or run the separate OpenRouter API worker. See reports/openrouter_codex_provider_check-<arm>.txt.
 ```
 
 **Step 4: Dry-run**
@@ -150,7 +152,7 @@ Run:
 
 ```bash
 cd /Volumes/WS4TB/ccxt/xttape-model-ladder
-git add experiments/product-gap/README.md experiments/product-gap/scripts/run_all_experiments.sh experiments/product-gap/reports/openrouter_codex_provider_check.txt
+git add experiments/product-gap/README.md experiments/product-gap/scripts/run_all_experiments.sh experiments/product-gap/reports/openrouter_codex_provider_check*.txt
 git commit -m "test: clarify OpenRouter provider preflight"
 ```
 
@@ -183,4 +185,3 @@ Default recommendation: start with `proposal-only` because it is easier to const
 **Step 3: Implement only after approval**
 
 Do not build the worker until the hosted MCP and provider-preflight results prove whether native Codex/OpenRouter execution is unavailable.
-
