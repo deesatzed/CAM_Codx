@@ -90,4 +90,3 @@ This is a larger build than MCP registration. It should be treated as a separate
 - OAuth login succeeds or the failure mode is documented.
 - XTtape experiment docs distinguish MCP lookup/probing from model-provider execution.
 - The OpenRouter child-worker path is either explicitly out of scope or implemented behind a separate command.
-

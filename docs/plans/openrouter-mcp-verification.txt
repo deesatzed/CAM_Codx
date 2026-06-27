@@ -35,4 +35,3 @@ Important interpretation:
 - This proves OpenRouter MCP can be configured for Codex as an MCP tool server.
 - This does not prove that `codex exec -c 'model_provider="openrouter"'` works.
 - The Codex model-provider failure remains a separate issue from MCP registration.
-
