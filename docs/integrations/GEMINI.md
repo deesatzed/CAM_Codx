@@ -35,6 +35,13 @@ gemini mcp list
 Inside Gemini CLI or Code Assist surfaces, use `/mcp` and `/tools` where
 available.
 
+After discovery passes and `.gemini/settings.json` has real local CAM paths, run
+the pack smoke script from the target project:
+
+```bash
+./smoke.sh
+```
+
 ## Operating Rules
 
 - Use `cam premine` before cloning unfamiliar GitHub repositories.

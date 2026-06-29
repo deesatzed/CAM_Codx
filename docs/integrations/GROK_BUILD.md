@@ -46,8 +46,7 @@ Use the generated files in `agent-packs/grok-build/`:
 - `.grok/config.toml.example` for local CAM MCP config.
 - `.grok/skills/cam-agent/SKILL.md` for CAM usage instructions.
 - `.grok/hooks/pre-tool-cam-guard.sh` as an optional mutating-tool guard.
-- `headless-smoke.sh` as a starting smoke command when Grok credentials are
-  available.
+- `smoke.sh` as the standard smoke command when Grok credentials are available.
 
 The default CAM runtime command is:
 
@@ -59,6 +58,13 @@ Verify discovery with:
 
 ```bash
 grok inspect
+```
+
+After discovery passes and `.grok/config.toml` has real local CAM paths, run the
+pack smoke script from the target project:
+
+```bash
+./smoke.sh
 ```
 
 Keep xAI Remote MCP endpoint credentials outside Git.

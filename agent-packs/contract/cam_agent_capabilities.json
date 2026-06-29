@@ -372,7 +372,7 @@
       "display_name": "Claude Code",
       "default_transport": "stdio",
       "remote_transport": "http",
-      "required_files": ["README.md", ".mcp.json.example", "CLAUDE.md", "commands/cam-premine.md", "skills/cam-agent/SKILL.md"],
+      "required_files": ["README.md", ".mcp.json.example", "CLAUDE.md", "commands/cam-premine.md", "skills/cam-agent/SKILL.md", "smoke.sh"],
       "supported_capabilities": ["premine", "query_memory", "store_finding", "verify_claim", "request_specialist", "route_agent", "escalate", "export_specialist_exchange", "import_specialist_exchange", "list_specialist_exchanges", "bridge_specialist_exchange"],
       "verification_commands": ["claude mcp list", "/mcp", "Ask Claude to call claw_query_memory and claw_verify_claim against a safe workspace."],
       "notes": "Prefer project-scoped .mcp.json for teams and local scope for private paths or credentials."
@@ -381,7 +381,7 @@
       "display_name": "Gemini",
       "default_transport": "stdio",
       "remote_transport": "http",
-      "required_files": ["README.md", "settings.json.example", "GEMINI.md", "skills/cam-agent/SKILL.md"],
+      "required_files": ["README.md", "settings.json.example", "GEMINI.md", "skills/cam-agent/SKILL.md", "smoke.sh"],
       "supported_capabilities": ["premine", "query_memory", "store_finding", "verify_claim", "request_specialist", "route_agent", "escalate", "export_specialist_exchange", "import_specialist_exchange", "list_specialist_exchanges"],
       "verification_commands": ["gemini mcp list", "/mcp", "/tools", "Ask Gemini to call claw_query_memory and then summarize with source ids."],
       "notes": "Gemini CLI and Gemini API/Interactions are different surfaces; Remote MCP constraints must be rechecked before API claims."
@@ -390,7 +390,7 @@
       "display_name": "Grok Build",
       "default_transport": "stdio",
       "remote_transport": "streaming-http-or-sse",
-      "required_files": ["README.md", "AGENTS.md", ".grok/config.toml.example", ".grok/skills/cam-agent/SKILL.md", ".grok/hooks/pre-tool-cam-guard.sh", "headless-smoke.sh"],
+      "required_files": ["README.md", "AGENTS.md", ".grok/config.toml.example", ".grok/skills/cam-agent/SKILL.md", ".grok/hooks/pre-tool-cam-guard.sh", "smoke.sh"],
       "supported_capabilities": ["premine", "query_memory", "store_finding", "verify_claim", "request_specialist", "route_agent", "escalate", "export_specialist_exchange", "import_specialist_exchange", "list_specialist_exchanges", "bridge_specialist_exchange"],
       "verification_commands": ["grok inspect", "/mcps", "grok --no-auto-update -p \"Use CAM to query memory for retry patterns\" --output-format json"],
       "notes": "Grok also reads Claude Code compatibility files; keep Grok-specific AGENTS.md explicit anyway."

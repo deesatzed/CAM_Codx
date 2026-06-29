@@ -63,6 +63,48 @@ def test_required_pack_files_exist() -> None:
             assert (host_dir / required_file).is_file(), f"{host_id}/{required_file}"
 
 
+def test_pack_readmes_use_uniform_setup_and_test_sections() -> None:
+    contract = _contract()
+    required_sections = [
+        "## Quick Start",
+        "## Configure CAM MCP",
+        "## Verify Discovery",
+        "## Smoke Test",
+        "## CAM Capabilities",
+        "## Safety Policy",
+        "## Files",
+    ]
+
+    for host_id in contract["host_packs"]:
+        readme = (ROOT / "agent-packs" / host_id / "README.md").read_text(encoding="utf-8")
+        for section in required_sections:
+            assert section in readme, f"{host_id} missing {section}"
+
+
+def test_every_pack_has_executable_smoke_script() -> None:
+    contract = _contract()
+    for host_id, pack in contract["host_packs"].items():
+        smoke_script = ROOT / "agent-packs" / host_id / "smoke.sh"
+        assert "smoke.sh" in pack["required_files"], host_id
+        assert smoke_script.is_file(), host_id
+        assert smoke_script.stat().st_mode & 0o111, host_id
+
+    assert not (ROOT / "agent-packs" / "grok-build" / "headless-smoke.sh").exists()
+
+
+def test_landing_page_links_uniform_agent_pack_setup() -> None:
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    required = [
+        "Uniform setup and test flow",
+        "agent-packs/claude-code/smoke.sh",
+        "agent-packs/gemini/smoke.sh",
+        "agent-packs/grok-build/smoke.sh",
+    ]
+
+    for text in required:
+        assert text in readme
+
+
 def test_generated_files_are_current() -> None:
     contract = generate_agent_packs.load_contract()
     expected_outputs = generate_agent_packs.render_files(contract)

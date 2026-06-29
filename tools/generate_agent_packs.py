@@ -170,8 +170,13 @@ def render_host_capabilities(contract: dict[str, Any], host_id: str) -> str:
         "## CAM Capabilities",
         "",
         render_capability_table(contract, pack["supported_capabilities"]),
-        "",
-        "Default policy:",
+    ]
+    return "\n".join(lines)
+
+
+def render_safety_policy() -> str:
+    lines = [
+        "## Safety Policy",
         "",
         "- Read-only CAM calls may run without extra approval.",
         "- Mutating CAM calls require explicit operator approval unless the active goal says otherwise.",
@@ -181,12 +186,43 @@ def render_host_capabilities(contract: dict[str, Any], host_id: str) -> str:
     return "\n".join(lines)
 
 
-def render_verification(pack: dict[str, Any]) -> str:
-    lines = ["## Verification", ""]
-    lines.extend(f"- `{command}`" if " " in command else f"- {command}" for command in pack["verification_commands"])
+def format_verification_command(command: str) -> str:
+    if command.startswith("/"):
+        return f"- In the host session: `{command}`"
+    if command.startswith("Ask "):
+        return f"- Prompt check: {command}"
+    return f"- Shell: `{command}`"
+
+
+def render_verify_discovery(pack: dict[str, Any]) -> str:
+    lines = [
+        "## Verify Discovery",
+        "",
+        "Run these checks after the MCP config is in the target project:",
+        "",
+    ]
+    lines.extend(format_verification_command(command) for command in pack["verification_commands"])
     lines.append("")
-    lines.append("Do not claim this pack is end-to-end verified until those host commands pass locally.")
+    lines.append("Discovery passing only proves the host can see the CAM server; run the smoke test before claiming end-to-end pack verification.")
     return "\n".join(lines)
+
+
+def render_smoke_test(host_id: str) -> str:
+    return "\n".join(
+        [
+            "## Smoke Test",
+            "",
+            "Run the included smoke script from the target project after replacing placeholders and authenticating the host CLI:",
+            "",
+            "```bash",
+            "./smoke.sh",
+            "```",
+            "",
+            f"When testing directly from this repository, inspect `agent-packs/{host_id}/smoke.sh` first and run it only in a project where the matching config has been copied into place.",
+            "",
+            "Do not claim this pack is end-to-end verified until the smoke script passes locally.",
+        ]
+    )
 
 
 def render_claude_readme(contract: dict[str, Any]) -> str:
@@ -202,23 +238,33 @@ def render_claude_readme(contract: dict[str, Any]) -> str:
             "",
             "CAM_Codx owns this pack. CAM_CAM owns the `cam mcp --transport stdio` runtime.",
             "",
-            "## Install",
+            "## Quick Start",
             "",
-            "Copy `.mcp.json.example` to the project root as `.mcp.json`, then adjust "
-            "`CLAW_CONFIG` and `CLAW_DB_PATH` for your local CAM_CAM checkout.",
+            "1. Copy this pack into the target project.",
+            "2. Copy `.mcp.json.example` to `.mcp.json`.",
+            "3. Replace CAM_CAM path placeholders and keep private values out of Git.",
+            "4. Run discovery checks, then `./smoke.sh`.",
+            "",
+            "## Configure CAM MCP",
+            "",
+            "Use `.mcp.json.example` as the project-scoped Claude Code MCP config. "
+            "Adjust `CLAW_CONFIG` and `CLAW_DB_PATH` for your local CAM_CAM checkout.",
             "",
             "```bash",
-            "claude mcp list",
-            "claude",
-            "# inside Claude Code: /mcp",
+            "cp .mcp.json.example .mcp.json",
+            "claude --mcp-config .mcp.json",
             "```",
             "",
             "Project-scoped `.mcp.json` is suitable for teams only when it contains no secrets.",
             "Use local scope for private machine paths or credentials.",
             "",
+            render_verify_discovery(pack),
+            "",
+            render_smoke_test("claude-code"),
+            "",
             render_host_capabilities(contract, "claude-code"),
             "",
-            render_verification(pack),
+            render_safety_policy(),
             "",
             "## Files",
             "",
@@ -226,6 +272,7 @@ def render_claude_readme(contract: dict[str, Any]) -> str:
             "- `CLAUDE.md`: project instructions for CAM use.",
             "- `commands/cam-premine.md`: slash-command prompt template.",
             "- `skills/cam-agent/SKILL.md`: reusable skill instructions.",
+            "- `smoke.sh`: discovery plus read-only CAM query smoke test.",
             "",
         ]
     )
@@ -298,6 +345,25 @@ def render_claude_command(contract: dict[str, Any]) -> str:
     )
 
 
+def render_claude_smoke(contract: dict[str, Any]) -> str:
+    return "\n".join(
+        [
+            "#!/usr/bin/env sh",
+            "set -eu",
+            "",
+            'CONFIG_PATH="${CAM_CLAUDE_MCP_CONFIG:-.mcp.json}"',
+            'if [ ! -f "$CONFIG_PATH" ]; then',
+            '  echo "Missing $CONFIG_PATH. Copy .mcp.json.example to .mcp.json and replace placeholders first." >&2',
+            "  exit 2",
+            "fi",
+            "",
+            "claude mcp list",
+            'claude --mcp-config "$CONFIG_PATH" -p "Use the configured cam MCP server to call claw_query_memory for retry patterns. Summarize source ids only; do not edit files." --output-format text',
+            "",
+        ]
+    )
+
+
 def render_skill(contract: dict[str, Any], host_name: str) -> str:
     return "\n".join(
         [
@@ -342,24 +408,41 @@ def render_gemini_readme(contract: dict[str, Any]) -> str:
             "",
             "CAM_Codx owns this pack. CAM_CAM owns the runtime MCP server.",
             "",
-            "## CLI Install",
+            "## Quick Start",
             "",
-            "Copy `settings.json.example` into `.gemini/settings.json` or merge its "
-            "`mcpServers.cam` entry into your existing Gemini settings.",
+            "1. Copy this pack into the target project.",
+            "2. Copy `settings.json.example` to `.gemini/settings.json` or merge its `mcpServers.cam` entry.",
+            "3. Keep `trust` false unless the operator explicitly opts in.",
+            "4. Run discovery checks, then `./smoke.sh`.",
+            "",
+            "## Configure CAM MCP",
+            "",
+            "Use `settings.json.example` as the Gemini CLI settings source. It configures the shared CAM runtime:",
             "",
             "```bash",
-            "gemini mcp list",
-            "# inside Gemini CLI: /mcp",
-            "# inside Gemini CLI: /tools",
+            "mkdir -p .gemini",
+            "cp settings.json.example .gemini/settings.json",
+            "gemini",
             "```",
             "",
             "For Gemini API or Interactions API workflows, use Remote MCP only after "
             "checking current model and transport support. Keep function-calling fallback "
             "available when Remote MCP is unavailable.",
             "",
+            render_verify_discovery(pack),
+            "",
+            render_smoke_test("gemini"),
+            "",
             render_host_capabilities(contract, "gemini"),
             "",
-            render_verification(pack),
+            render_safety_policy(),
+            "",
+            "## Files",
+            "",
+            "- `settings.json.example`: local stdio CAM MCP server config for Gemini CLI.",
+            "- `GEMINI.md`: project instructions for CAM use.",
+            "- `skills/cam-agent/SKILL.md`: reusable skill instructions.",
+            "- `smoke.sh`: discovery plus read-only CAM query smoke test.",
             "",
         ]
     )
@@ -410,6 +493,25 @@ def render_gemini_instructions(contract: dict[str, Any]) -> str:
     )
 
 
+def render_gemini_smoke(contract: dict[str, Any]) -> str:
+    return "\n".join(
+        [
+            "#!/usr/bin/env sh",
+            "set -eu",
+            "",
+            'SETTINGS_PATH="${GEMINI_CAM_SETTINGS:-.gemini/settings.json}"',
+            'if [ ! -f "$SETTINGS_PATH" ]; then',
+            '  echo "Missing $SETTINGS_PATH. Copy settings.json.example to .gemini/settings.json or merge mcpServers.cam first." >&2',
+            "  exit 2",
+            "fi",
+            "",
+            "gemini mcp list",
+            'gemini -p "Use the configured cam MCP server to call claw_query_memory for retry patterns. Summarize source ids only; do not edit files." --allowed-mcp-server-names cam --output-format json',
+            "",
+        ]
+    )
+
+
 def render_grok_readme(contract: dict[str, Any]) -> str:
     pack = host_pack(contract, "grok-build")
     return "\n".join(
@@ -421,22 +523,40 @@ def render_grok_readme(contract: dict[str, Any]) -> str:
             "Use this pack when Grok Build should consume CAM tools, provenance rules, "
             "and packet workflows while CAM_Codx remains the hub.",
             "",
-            "## Install",
+            "## Quick Start",
             "",
-            "Copy the `.grok/` directory and `AGENTS.md` into the target project, then "
-            "adjust `.grok/config.toml` from `.grok/config.toml.example`.",
+            "1. Copy this pack into the target project.",
+            "2. Copy `.grok/config.toml.example` to `.grok/config.toml`.",
+            "3. Replace CAM_CAM path placeholders and keep private values out of Git.",
+            "4. Run discovery checks, then `./smoke.sh`.",
+            "",
+            "## Configure CAM MCP",
+            "",
+            "Use `.grok/config.toml.example` as the local Grok Build config source. It configures the shared CAM runtime:",
             "",
             "```bash",
+            "cp .grok/config.toml.example .grok/config.toml",
             "grok inspect",
-            "grok --no-auto-update -p \"Use CAM to query memory for retry patterns\" --output-format json",
             "```",
             "",
             "Use xAI Remote MCP only when a remote CAM MCP endpoint exists and credentials "
             "are configured outside Git.",
             "",
+            render_verify_discovery(pack),
+            "",
+            render_smoke_test("grok-build"),
+            "",
             render_host_capabilities(contract, "grok-build"),
             "",
-            render_verification(pack),
+            render_safety_policy(),
+            "",
+            "## Files",
+            "",
+            "- `AGENTS.md`: project-level behavior rules.",
+            "- `.grok/config.toml.example`: local stdio CAM MCP server config.",
+            "- `.grok/skills/cam-agent/SKILL.md`: reusable skill instructions.",
+            "- `.grok/hooks/pre-tool-cam-guard.sh`: optional mutating-tool guard.",
+            "- `smoke.sh`: discovery plus read-only CAM query smoke test.",
             "",
         ]
     )
@@ -510,13 +630,20 @@ def render_grok_hook(contract: dict[str, Any]) -> str:
     )
 
 
-def render_grok_headless(contract: dict[str, Any]) -> str:
+def render_grok_smoke(contract: dict[str, Any]) -> str:
     return "\n".join(
         [
             "#!/usr/bin/env sh",
             "set -eu",
+            "",
+            'CONFIG_PATH="${GROK_CAM_CONFIG:-.grok/config.toml}"',
+            'if [ ! -f "$CONFIG_PATH" ]; then',
+            '  echo "Missing $CONFIG_PATH. Copy .grok/config.toml.example to .grok/config.toml and replace placeholders first." >&2',
+            "  exit 2",
+            "fi",
+            "",
             "grok inspect",
-            "grok --no-auto-update -p \"Use CAM to query memory for retry patterns, then summarize sources only.\" --output-format json",
+            'grok -p "Use the configured cam MCP server to call claw_query_memory for retry patterns. Summarize source ids only; do not edit files." --output-format json --permission-mode default --disable-web-search',
             "",
         ]
     )
@@ -557,11 +684,22 @@ def render_agent_packs_doc(contract: dict[str, Any]) -> str:
             "",
             "## Host Packs",
             "",
-            "| Pack | Use When | Primary Setup |",
-            "| --- | --- | --- |",
-            "| `agent-packs/claude-code` | Claude Code should use CAM from a project. | Project `.mcp.json` with local stdio. |",
-            "| `agent-packs/gemini` | Gemini CLI/API workflows should use CAM. | Gemini `settings.json` for CLI; Remote MCP only after current API support is confirmed. |",
-            "| `agent-packs/grok-build` | Grok Build should use CAM in TUI/headless/API flows. | `.grok/config.toml`, `AGENTS.md`, skills, and optional hooks. |",
+            "| Pack | Use When | Primary Setup | Smoke Test |",
+            "| --- | --- | --- | --- |",
+            "| `agent-packs/claude-code` | Claude Code should use CAM from a project. | Project `.mcp.json` with local stdio. | `agent-packs/claude-code/smoke.sh` |",
+            "| `agent-packs/gemini` | Gemini CLI/API workflows should use CAM. | Gemini `settings.json` for CLI; Remote MCP only after current API support is confirmed. | `agent-packs/gemini/smoke.sh` |",
+            "| `agent-packs/grok-build` | Grok Build should use CAM in TUI/headless/API flows. | `.grok/config.toml`, `AGENTS.md`, skills, and optional hooks. | `agent-packs/grok-build/smoke.sh` |",
+            "",
+            "## Uniform Setup And Test Flow",
+            "",
+            "Each pack follows the same order:",
+            "",
+            "1. Copy the pack files into the target project.",
+            "2. Copy or merge the host MCP config example.",
+            "3. Replace local CAM_CAM placeholders outside Git.",
+            "4. Run host discovery commands.",
+            "5. Run `./smoke.sh` only after host credentials and CAM paths are configured.",
+            "6. Record the discovery and smoke results before claiming the pack is verified.",
             "",
             "## Source Docs Checked",
             "",
@@ -590,16 +728,18 @@ def render_files(contract: dict[str, Any]) -> dict[Path, str]:
         AGENT_PACKS_DIR / "claude-code" / "CLAUDE.md": render_claude_instructions(contract),
         AGENT_PACKS_DIR / "claude-code" / "commands" / "cam-premine.md": render_claude_command(contract),
         AGENT_PACKS_DIR / "claude-code" / "skills" / "cam-agent" / "SKILL.md": render_skill(contract, "Claude Code"),
+        AGENT_PACKS_DIR / "claude-code" / "smoke.sh": render_claude_smoke(contract),
         AGENT_PACKS_DIR / "gemini" / "README.md": render_gemini_readme(contract),
         AGENT_PACKS_DIR / "gemini" / "settings.json.example": render_gemini_settings(contract),
         AGENT_PACKS_DIR / "gemini" / "GEMINI.md": render_gemini_instructions(contract),
         AGENT_PACKS_DIR / "gemini" / "skills" / "cam-agent" / "SKILL.md": render_skill(contract, "Gemini"),
+        AGENT_PACKS_DIR / "gemini" / "smoke.sh": render_gemini_smoke(contract),
         AGENT_PACKS_DIR / "grok-build" / "README.md": render_grok_readme(contract),
         AGENT_PACKS_DIR / "grok-build" / "AGENTS.md": render_grok_agents(contract),
         AGENT_PACKS_DIR / "grok-build" / ".grok" / "config.toml.example": render_grok_config(contract),
         AGENT_PACKS_DIR / "grok-build" / ".grok" / "skills" / "cam-agent" / "SKILL.md": render_skill(contract, "Grok Build"),
         AGENT_PACKS_DIR / "grok-build" / ".grok" / "hooks" / "pre-tool-cam-guard.sh": render_grok_hook(contract),
-        AGENT_PACKS_DIR / "grok-build" / "headless-smoke.sh": render_grok_headless(contract),
+        AGENT_PACKS_DIR / "grok-build" / "smoke.sh": render_grok_smoke(contract),
     }
 
 

@@ -50,6 +50,13 @@ claude mcp list
 
 Then check `/mcp` inside Claude Code.
 
+After discovery passes and `.mcp.json` has real local CAM paths, run the pack
+smoke script from the target project:
+
+```bash
+./smoke.sh
+```
+
 ## Completion Evidence
 
 Claude Code recommendations are not accepted until Codex classifies them as

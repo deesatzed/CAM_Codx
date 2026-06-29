@@ -125,3 +125,10 @@
   `gemini mcp list` exits 0 and reports no MCP servers configured.
   `grok inspect` exits 0 and reports no project MCP servers configured for this
   CAM_Codx checkout.
+- Standardized the generated Claude Code, Gemini, and Grok Build pack READMEs
+  around the same setup and test sections: Quick Start, Configure CAM MCP,
+  Verify Discovery, Smoke Test, CAM Capabilities, Safety Policy, and Files.
+- Added one executable `smoke.sh` per host pack and removed the Grok-only
+  `headless-smoke.sh` name so every pack has the same test entrypoint.
+- Added the uniform setup/test flow and smoke-script links to the CAM_Codx
+  landing README and aligned the Claude, Gemini, and Grok integration docs.

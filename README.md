@@ -131,6 +131,21 @@ The packs map the same CAM runtime capabilities to host-native instructions and
 MCP configuration examples. CAM_CAM remains the runtime/MCP owner; CAM_Codx owns
 the generated pack docs, tests, and generator.
 
+Uniform setup and test flow:
+
+1. Copy the chosen pack into the target project.
+2. Copy or merge its MCP config example.
+3. Replace local CAM_CAM placeholders outside Git.
+4. Run the host discovery command.
+5. Run the pack smoke script after host credentials are configured.
+6. Record the output before claiming the pack is verified.
+
+Smoke scripts:
+
+- `agent-packs/claude-code/smoke.sh`
+- `agent-packs/gemini/smoke.sh`
+- `agent-packs/grok-build/smoke.sh`
+
 ## Compatibility
 
 - [Claude Code integration](docs/integrations/CLAUDE_CODE.md) explains the
