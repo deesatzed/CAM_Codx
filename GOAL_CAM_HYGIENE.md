@@ -57,15 +57,15 @@ This session surfaced four concrete, evidence-backed problems:
 ## Workstreams & Tasks
 
 ### WS1 — Preserve unique work (P0, do first; nothing destructive until done)
-- [ ] Review the 23 dirty files in `repo622sn/CAM_Codx` (docs, agent-packs, tools); commit keepers. **GATE: human review of diff.**
-- [ ] Push the 4 unpushed commits (OpenRouter MCP plan/verification, session-skill design) to `deesatzed/CAM_Codx`.
-- [ ] In `repo622sn/CAM_CAM`: revert the stray `src/claw/cli/_monolith.py` edit; deliberately KEEP `RISK_NOTES.md` (E-001) and `mining_registry.json`.
-- **Done when:** `repo622sn/CAM_Codx` is `ahead=0`, working trees hold only intended changes.
+- [x] Review dirty files in `repo622sn/CAM_Codx`; commit keepers. Agent-packs refresh validated (test_agent_packs.py 9/9) and committed as `3f973bf`; session hygiene docs committed as `2336db5`; stray `hist627.txt` shell-history dump gitignored (not committed).
+- [ ] **Push** the 6 unpushed commits (4 prior + 2 new) to `deesatzed/CAM_Codx`. ← AWAITING HUMAN GO-AHEAD (outward action).
+- [x] In `repo622sn/CAM_CAM`: reverted the stray `src/claw/cli/_monolith.py` edit; KEPT `RISK_NOTES.md` (E-001), `claw.toml` fix, `mining_registry.json`, corpus backups.
+- **Done when:** `repo622sn/CAM_Codx` is `ahead=0` (needs push), working trees hold only intended changes (✅).
 
 ### WS2 — Lock the canonical engine (P1)
-- [ ] Confirm `WS4TBr/CAM_Codx/CAM_CAM` is clean and == GitHub `f900dfc`; resolve the stray untracked `CAM_Codx_last5291pm.txt`.
-- [ ] Keep the editable install pointed there. (Optional: re-clone to a flat path; not required.)
-- **Done when:** `python3 -c "import claw.cli._monolith as m; print(m.__file__)"` prints the WS4TBr path and `git status` there is clean.
+- [x] Confirmed `WS4TBr/CAM_Codx/CAM_CAM` == GitHub `f900dfc` (ahead=0 behind=0); editable install + `cam` resolve there. Stray `CAM_Codx_last5291pm.txt` (Claude Code TUI dump) gitignored, not deleted. One pending change: `.gitignore` +1 line (awaiting push approval).
+- [x] Editable install stays pointed there. (Flat-path re-clone deferred; not required.)
+- **Done when:** `import claw.cli._monolith` prints the WS4TBr path (✅) and engine tree is clean (✅, modulo the gitignore commit/push).
 
 ### WS3 — Make data self-documenting (P1, Goal-2)
 - [ ] Adopt naming convention: live=`claw.<profile>.live.db`, backup=`claw.<profile>.backup-YYYYMMDD-HHMMSS.db`, experiment=`claw.<profile>.exp-<slug>.db`; ganglia stay `instances/<brain>/claw.db`.
@@ -74,9 +74,22 @@ This session surfaced four concrete, evidence-backed problems:
 - **Done when:** every `claw.db` on the drive has a registry row and every toml has a purpose header.
 
 ### WS4 — Fix the config trap + the one real bug (P1/P2)
-- [ ] **P1:** Remove/repair the stale ganglion entries in `claw.toml` (the `/Volumes/WS4TB/a_aSatzClaw/multiclaw/*` paths whose DBs lack a `methodologies` table). This unblocks `kb *`, `learn *`, `doctor *` (currently exit nonzero with "no such table: methodologies").
-- [ ] **P2:** Fix `cam enrich --include-ganglia` in the ENGINE clone: replace `DatabaseEngine(str(path))` + `g_engine.initialize()` with `DatabaseEngine(DatabaseConfig(db_path=str(path)))` → `await connect()` → `await apply_migrations()`. Re-run to verify no error rows.
-- **Done when:** read-only commands exit 0 against a clean config; `enrich --include-ganglia` runs without `'DatabaseEngine' object has no attribute 'initialize'`.
+- [x] **CORRECTION (2026-06-29):** The "read-only commands exit nonzero" finding was a
+  **misdiagnosis** — `cam kb brains`/`learn report`/`doctor *` return **rc=0 when run
+  directly** (verified: separate stdout/stderr, EXIT=0, full output). The earlier rc=2
+  came from a **shell test-harness artifact** (`cam` as non-first command inside a `for`
+  loop returns 2 under zsh job control). There was no command failure to fix.
+- [x] **Real (cosmetic) finding kept:** the 6 configured sibling ganglia point at
+  `multiclaw/*` DBs with no `methodologies` table, so federated commands print
+  "Skipping <name>: no such table" NOISE (harmless). Disabled them in working-dir
+  `claw.toml` (commented, reversible). NOTE: the running CLI loads the ENGINE's default
+  `claw.toml` (`<engine>/claw.toml`), so fully removing the noise requires editing the
+  engine config — deferred (touches the GitHub engine repo; low value).
+- [ ] **P2 (real bug):** Fix `cam enrich --include-ganglia` in the ENGINE clone:
+  `DatabaseEngine(DatabaseConfig(db_path=str(path)))` → `await connect()` →
+  `await apply_migrations()` (replaces non-existent `g_engine.initialize()`).
+- **Done when:** `enrich --include-ganglia` runs without `'DatabaseEngine' object has no
+  attribute 'initialize'`. (Read-only-command item closed: no fix needed.)
 
 ### WS5 — Contract the CLI surface (P2, Goal/CLI)
 Target ~10 top-level verbs + tight groups (full analysis: `CAM_Codx/CAM_CLI_ASSESSMENT.md`).
