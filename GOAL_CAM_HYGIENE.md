@@ -85,14 +85,18 @@ This session surfaced four concrete, evidence-backed problems:
   `claw.toml` (commented, reversible). NOTE: the running CLI loads the ENGINE's default
   `claw.toml` (`<engine>/claw.toml`), so fully removing the noise requires editing the
   engine config — deferred (touches the GitHub engine repo; low value).
-- [ ] **P2 (real bug):** Fix `cam enrich --include-ganglia` in the ENGINE clone:
-  `DatabaseEngine(DatabaseConfig(db_path=str(path)))` → `await connect()` →
-  `await apply_migrations()` (replaces non-existent `g_engine.initialize()`).
-- **Done when:** `enrich --include-ganglia` runs without `'DatabaseEngine' object has no
-  attribute 'initialize'`. (Read-only-command item closed: no fix needed.)
+- [x] **P2 (real bug) FIXED + VERIFIED:** `cam enrich --include-ganglia` now uses
+  `DatabaseEngine(DatabaseConfig(db_path=...))` → `connect()` → `apply_migrations()`.
+  On branch `fix/enrich-include-ganglia` (commit `ffc5173`) in the engine repo — NOT on
+  main, NOT pushed. Verified: connects to rust+typescript ganglia and completes cleanly
+  (was: `'DatabaseEngine' object has no attribute 'initialize'`).
+- **Done when:** `enrich --include-ganglia` runs without the init error (✅). Remaining:
+  merge branch → main + push (awaiting approval).
 
-### WS5 — Contract the CLI surface (P2, Goal/CLI)
-Target ~10 top-level verbs + tight groups (full analysis: `CAM_Codx/CAM_CLI_ASSESSMENT.md`).
+### WS5 — Contract the CLI surface (P2, Goal/CLI) — SPEC READY
+Full old→new mapping written: `CAM_Codx/WS5_CLI_REFACTOR_SPEC.md` (back-compat aliases,
+`--config` everywhere, `preflight` estimate-language removal). Ready to implement on
+approval (engine branch). Tasks below are the spec's scope:
 - [ ] Collapse `mine` / `mine-workspace` / `mine-all` / `mine-self` / `mine-report` into a `mine` group.
 - [ ] Move `status`→`doctor status`, `stats`→`kb stats`, `gaps`→`kb gaps`; drop duplicate top-level `benchmark` (keep `forge benchmark`).
 - [ ] Stop double-exposing the 14 hidden top-level commands AND their grouped aliases; keep the group form canonical.
@@ -102,11 +106,13 @@ Target ~10 top-level verbs + tight groups (full analysis: `CAM_Codx/CAM_CLI_ASSE
 - [ ] Confirm-or-hide research surfaces: `chat`, `ab-test`, `evolution`, `federate`.
 - **Done when:** `cam --help` shows a contracted, grouped surface with no duplicate aliases and consistent `--config`.
 
-### WS6 — Drive reorganization (P2, Goal-3; after WS1)
-- [ ] Capture dirty state on backup clones (`camcxBU64/CAM_CAM`, `buccx623/CAM_Codx`) before touching them.
-- [ ] `mv` (never `rm`) the 7 fully-on-github stale clones into `/Volumes/WS4TB/CAM_ARCHIVE/<flattened-path>/`.
-- [ ] Record a retention policy in `DB_REGISTRY.md` (when archived backups may be deleted).
-- **Done when:** active tree = canonical engine + hub + data root; stale clones live under one archive dir; nothing deleted.
+### WS6 — Drive reorganization (P2, Goal-3; after WS1) — SCRIPT READY (dry-run verified)
+- [x] Archive script written + dry-run verified: `CAM_Codx/scripts/ws6_archive_clones.sh`.
+  Captures dirty diffs to patches, REFUSES any clone with unpushed commits, moves never
+  deletes, reversible. Re-verified the 7 clones are `ahead=0` on 2026-06-29.
+- [x] Retention policy recorded in `DB_REGISTRY.md`.
+- [ ] EXECUTE: `bash scripts/ws6_archive_clones.sh --execute` (awaiting approval; requires WS1 pushed first per guardrail).
+- **Done when:** active tree = canonical engine + hub + data root; stale clones under `/Volumes/WS4TB/CAM_ARCHIVE/`; nothing deleted.
 
 ---
 
