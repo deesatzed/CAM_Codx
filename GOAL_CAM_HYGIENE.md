@@ -67,11 +67,11 @@ This session surfaced four concrete, evidence-backed problems:
 - [x] Editable install stays pointed there. (Flat-path re-clone deferred; not required.)
 - **Done when:** `import claw.cli._monolith` prints the WS4TBr path (✅) and engine tree is clean (✅, modulo the gitignore commit/push).
 
-### WS3 — Make data self-documenting (P1, Goal-2)
-- [ ] Adopt naming convention: live=`claw.<profile>.live.db`, backup=`claw.<profile>.backup-YYYYMMDD-HHMMSS.db`, experiment=`claw.<profile>.exp-<slug>.db`; ganglia stay `instances/<brain>/claw.db`.
-- [ ] Create `CAM_Codx/DB_REGISTRY.md`: one row per `claw.db` — path, purpose, owning_repo, profile, status (live/backup/exp/ganglion), created_by, last_used, notes. Seed from this session's audit.
-- [ ] Add a header comment block to each `claw_*.toml` stating purpose, model set, when to use, and target `db_path`.
-- **Done when:** every `claw.db` on the drive has a registry row and every toml has a purpose header.
+### WS3 — Make data self-documenting (P1, Goal-2) ✅ DONE
+- [x] Naming convention documented in `DB_REGISTRY.md` (live/backup/exp/ganglion). Renames deferred (would touch live paths; convention recorded for future files).
+- [x] Created `CAM_Codx/DB_REGISTRY.md` — all ~29 `claw.db` files cataloged with methods/size/mtime/status/why. Committed `52b8679`. Live = repo622sn/CAM_CAM/claw.db (2474).
+- [x] Added purpose-header comment blocks to all 4 profiles: `claw.toml` (glm/active), `claw_cheap.toml`, `claw_dspro.toml`, `claw_grok.toml`. All parse-verified.
+- **Done when:** every `claw.db` has a registry row (✅) and every toml has a purpose header (✅).
 
 ### WS4 — Fix the config trap + the one real bug (P1/P2)
 - [x] **CORRECTION (2026-06-29):** The "read-only commands exit nonzero" finding was a
