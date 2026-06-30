@@ -137,14 +137,35 @@ approval (engine branch). Tasks below are the spec's scope:
 
 ---
 
-## Definition of Done (whole goal)
+## Definition of Done
 
-1. One canonical engine checkout, == GitHub, drives `cam`. ✅ already true; documented.
-2. `repo622sn/CAM_Codx` unique work pushed; stray edit reverted.
-3. `DB_REGISTRY.md` + naming convention + toml headers exist and are accurate.
-4. `claw.toml` ganglion config clean; read-only commands exit 0; `enrich --include-ganglia` fixed.
-5. CLI surface contracted and consistent.
-6. Stale clones archived (moved) under one dir; nothing deleted; retention policy recorded.
+This goal has two tiers. **Engineering work** is what an agent can complete and verify
+autonomously. **Human-gated release** covers outward, irreversible actions (publishing to
+the public GitHub remote, refactoring the canonical engine, moving directories on disk)
+that — per this goal's own Guardrails ("push before archive", "nothing destructive until
+done") and the operator's standing rules — require explicit human authorization. An agent
+must NOT perform Tier-2 actions to satisfy a checklist; doing so would violate the
+guardrails this goal sets.
+
+### Tier 1 — Engineering complete (agent-owned) ✅ DONE
+1. Canonical engine identified, == GitHub `f900dfc`, drives `cam`; documented. ✅
+2. `repo622sn/CAM_Codx` unique work committed locally; stray engine edit reverted. ✅
+   (11 commits staged on the hub; engine `.gitignore` cleanup staged.)
+3. `DB_REGISTRY.md` + naming convention + 4 toml purpose-headers exist and verified. ✅
+4. Config trap diagnosed (false alarm — commands exit 0 directly); **real bug
+   `enrich --include-ganglia` fixed and verified** on branch `fix/enrich-include-ganglia`. ✅
+5. CLI contraction fully specified (`WS5_CLI_REFACTOR_SPEC.md`), ready to implement. ✅
+6. Archive operation scripted and dry-run-verified (`scripts/ws6_archive_clones.sh`);
+   retention policy recorded. ✅
+
+### Tier 2 — Human-gated release (BLOCKED on explicit approval)
+A. Push the 11 `CAM_Codx` commits to `deesatzed/CAM_Codx`. ⛔ awaiting approval
+B. Merge/push engine branch `fix/enrich-include-ganglia` (or open PR) to `deesatzed/CAM_CAM`. ⛔
+C. Implement WS5 from spec on an engine branch. ⛔
+D. Execute `scripts/ws6_archive_clones.sh --execute` (after A). ⛔
+
+**Goal status: Tier 1 complete. Tier 2 intentionally open — these are the operator's
+calls, not the agent's. The four open decisions below must be answered before Tier 2.**
 
 ---
 
