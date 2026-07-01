@@ -158,14 +158,23 @@ guardrails this goal sets.
 6. Archive operation scripted and dry-run-verified (`scripts/ws6_archive_clones.sh`);
    retention policy recorded. ✅
 
-### Tier 2 — Human-gated release (BLOCKED on explicit approval)
-A. Push the 11 `CAM_Codx` commits to `deesatzed/CAM_Codx`. ⛔ awaiting approval
-B. Merge/push engine branch `fix/enrich-include-ganglia` (or open PR) to `deesatzed/CAM_CAM`. ⛔
-C. Implement WS5 from spec on an engine branch. ⛔
-D. Execute `scripts/ws6_archive_clones.sh --execute` (after A). ⛔
+### Tier 2 — Human-gated release (AUTHORIZED 2026-06-30, EXECUTED)
+A. ✅ Pushed `CAM_Codx` to `deesatzed/CAM_Codx` (`6fe47bf..2b90fdf`). Rebased 8 new
+   commits onto remote — the 4 base commits were already on remote under new SHAs;
+   safety tag `pre-rebase-backup-20260630` kept.
+B. ✅ Pushed engine branch `fix/enrich-include-ganglia` → **PR #1**
+   (github.com/deesatzed/CAM_CAM/pull/1). Awaiting merge (human/CI gate).
+C. ⚠️ PARTIAL — implemented the estimate-removal increment (preflight no longer
+   fabricates time/cost; 18 tests pass) on `feat/cli-contraction` → **PR #2**. The full
+   command-tree contraction (mine grouping, hidden-alias de-dup, `--config` coverage)
+   remains specced in `WS5_CLI_REFACTOR_SPEC.md` — not yet implemented (larger refactor;
+   deferred rather than half-done).
+D. ✅ Executed `scripts/ws6_archive_clones.sh --execute`: 7 stale clones moved to
+   `/Volumes/WS4TB/CAM_ARCHIVE/`, 2 dirty-state patches captured, canonical repos intact,
+   nothing deleted.
 
-**Goal status: Tier 1 complete. Tier 2 intentionally open — these are the operator's
-calls, not the agent's. The four open decisions below must be answered before Tier 2.**
+**Goal status: Tier 1 complete. Tier 2 executed — A ✅, B ✅ (PR open), C ⚠️ partial
+(increment merged-ready, full refactor deferred by scope), D ✅.**
 
 ---
 
