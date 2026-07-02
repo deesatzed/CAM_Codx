@@ -158,43 +158,30 @@ guardrails this goal sets.
 6. Archive operation scripted and dry-run-verified (`scripts/ws6_archive_clones.sh`);
    retention policy recorded. ✅
 
-### Tier 2 — Human-gated release (AUTHORIZED 2026-06-30, EXECUTED)
-A. ✅ Pushed `CAM_Codx` to `deesatzed/CAM_Codx` (`6fe47bf..2b90fdf`). Rebased 8 new
-   commits onto remote — the 4 base commits were already on remote under new SHAs;
+### Tier 2 — Human-gated release (AUTHORIZED 2026-06-30 / 2026-07-02, COMPLETE)
+A. ✅ Pushed `CAM_Codx` to `deesatzed/CAM_Codx`. Rebased 8 new commits onto remote;
    safety tag `pre-rebase-backup-20260630` kept.
-B. ✅ Pushed engine branch `fix/enrich-include-ganglia` → **PR #1**
-   (github.com/deesatzed/CAM_CAM/pull/1). Awaiting merge (human/CI gate).
-C. ⚠️ PARTIAL — implemented the estimate-removal increment (preflight no longer
-   fabricates time/cost; 18 tests pass) on `feat/cli-contraction` → **PR #2**. The full
-   command-tree contraction (mine grouping, hidden-alias de-dup, `--config` coverage)
-   remains specced in `WS5_CLI_REFACTOR_SPEC.md` — not yet implemented (larger refactor;
-   deferred rather than half-done).
+B. ✅ **MERGED** — `fix/enrich-include-ganglia` → **PR #1** merged to canonical
+   `deesatzed/CAM_CAM` main (`2fe9c1e`). Verified: `enrich --include-ganglia` connects to
+   rust+typescript ganglia and completes cleanly in the synced engine.
+C. ✅ **MERGED (increment)** — preflight estimate-removal → **PR #2** merged to canonical
+   main (`b114d9a`). Fabricated time/cost estimates removed per operator policy. The full
+   command-tree contraction (mine grouping, alias de-dup, `--config` coverage) remains
+   specced in `WS5_CLI_REFACTOR_SPEC.md` as **deferred future work** (P2) — a separate,
+   larger refactor, not part of this goal's completion.
 D. ✅ Executed `scripts/ws6_archive_clones.sh --execute`: 7 stale clones moved to
-   `/Volumes/WS4TB/CAM_ARCHIVE/`, 2 dirty-state patches captured, canonical repos intact,
-   nothing deleted.
+   `/Volumes/WS4TB/CAM_ARCHIVE/`, canonical repos intact, nothing deleted.
 
-**Goal status: Tier 1 complete. Tier 2 executed — A ✅, B ✅ (PR open), C ⚠️ partial
-(increment merged-ready, full refactor deferred by scope), D ✅.**
+**Goal status: Tier 1 complete ✅. Tier 2 complete ✅ — A/B/C/D all done; all three
+engine PRs merged to canonical `main`. The only remaining item (WS5 full CLI contraction)
+is explicitly DEFERRED future work, not a completion requirement of this goal.**
 
-### BLOCKER — PR merge gated on a model-governance decision (operator-only)
-PRs #1 and #2 cannot merge green because engine `main` has a **pre-existing, unrelated
-CI failure**: `tests/test_serial_evolution.py::TestApprovedModelConfig` fails because
-`claw.toml` `fallback_models` lists two models absent from the `APPROVED_MODEL_IDS`
-allowlist (`src/claw/evolution/serial.py:36`):
-- `moonshotai/kimi-k2.7-code`  (likely intentional — cf. commit "route CAM mining through GLM and Kimi")
-- `nvidia/nemotron-3-ultra-550b-a55b`
-
-This is NOT caused by the agent's changes (reproduces on `main`). Per the standing rule
-that **the operator selects all model versions**, the agent will not edit the allowlist or
-the config to force CI green. **Operator decision required:**
-- If these two models are APPROVED → add them to `APPROVED_MODEL_IDS` (serial.py:36). CI greens; PRs mergeable.
-- If NOT approved → remove them from `fallback_models` in the 4 `claw.toml` profiles. CI greens.
-(Separately: primary model `z-ai/glm-5.2` is also not in the allowlist, but is not in
-`fallback_models`, so it does not trip this test — worth reviewing.)
-
-Until this one-line, operator-owned decision is made, "merge PRs #1/#2 into canonical
-`main`" cannot be completed without either shipping red CI or overstepping model
-governance. This is a genuine human gate, not deferred agent work.
+### BLOCKER — RESOLVED ✅ (2026-07-02)
+The model-governance decision was made by the operator: `z-ai/glm-5.2`,
+`moonshotai/kimi-k2.7-code`, and `nvidia/nemotron-3-ultra-550b-a55b` were **APPROVED** and
+added to `APPROVED_MODEL_IDS` (`src/claw/evolution/serial.py`) via **PR #3** (`09fb3dc`).
+`TestApprovedModelConfig` now passes 8/8 across all 4 config profiles; CI is green. PRs #1
+and #2 were rebased onto the fixed main and merged. No blocker remains.
 
 ---
 
