@@ -176,6 +176,26 @@ D. ✅ Executed `scripts/ws6_archive_clones.sh --execute`: 7 stale clones moved 
 **Goal status: Tier 1 complete. Tier 2 executed — A ✅, B ✅ (PR open), C ⚠️ partial
 (increment merged-ready, full refactor deferred by scope), D ✅.**
 
+### BLOCKER — PR merge gated on a model-governance decision (operator-only)
+PRs #1 and #2 cannot merge green because engine `main` has a **pre-existing, unrelated
+CI failure**: `tests/test_serial_evolution.py::TestApprovedModelConfig` fails because
+`claw.toml` `fallback_models` lists two models absent from the `APPROVED_MODEL_IDS`
+allowlist (`src/claw/evolution/serial.py:36`):
+- `moonshotai/kimi-k2.7-code`  (likely intentional — cf. commit "route CAM mining through GLM and Kimi")
+- `nvidia/nemotron-3-ultra-550b-a55b`
+
+This is NOT caused by the agent's changes (reproduces on `main`). Per the standing rule
+that **the operator selects all model versions**, the agent will not edit the allowlist or
+the config to force CI green. **Operator decision required:**
+- If these two models are APPROVED → add them to `APPROVED_MODEL_IDS` (serial.py:36). CI greens; PRs mergeable.
+- If NOT approved → remove them from `fallback_models` in the 4 `claw.toml` profiles. CI greens.
+(Separately: primary model `z-ai/glm-5.2` is also not in the allowlist, but is not in
+`fallback_models`, so it does not trip this test — worth reviewing.)
+
+Until this one-line, operator-owned decision is made, "merge PRs #1/#2 into canonical
+`main`" cannot be completed without either shipping red CI or overstepping model
+governance. This is a genuine human gate, not deferred agent work.
+
 ---
 
 ## Reference Artifacts (this session)
