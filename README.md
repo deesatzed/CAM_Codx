@@ -169,6 +169,11 @@ Runtime-critical local state stays out of this repo. In this workspace,
 `CAM_CAM/data/claw.db` is a local database used by CAM runtime tools. CAM_Codx
 documents how to point at it, but does not copy it into GitHub.
 
+> **New machine?** [`SETUP_ON_LAPTOP.md`](SETUP_ON_LAPTOP.md) is a beginner-friendly, step-by-step
+> guide to stand up a working CAM copy on a laptop — clone both repos, install the engine, and
+> hand-copy the gitignored `claw.db` brain and `.env`. The authoritative source of truth for
+> which corpus is current is [`DB_REGISTRY.md`](DB_REGISTRY.md).
+
 The local clean operating overlay is:
 
 ```text

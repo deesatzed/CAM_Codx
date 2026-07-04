@@ -78,6 +78,10 @@ snapshot**, NOT current — it is only where the code lives, not where the live 
 
 **Invocation contract:** `cd /Volumes/WS4TB/repo622sn/CAM_CAM && cam <command>`
 
+**Copying this brain to another machine?** See [`SETUP_ON_LAPTOP.md`](SETUP_ON_LAPTOP.md) — a
+beginner guide to cloning the repos and hand-copying the gitignored `claw.db` (this CURRENT
+corpus) plus `claw.toml`/`.env` onto a laptop.
+
 ## Summary
 
 - **1 LIVE** corpus (repo622sn/CAM_CAM, 2474) + its 2 ganglia.
