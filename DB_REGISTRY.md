@@ -59,6 +59,25 @@ why each exists, and which are safe to archive.* See `GOAL_CAM_HYGIENE.md` WS3.
 
 ---
 
+## Authoritative binding — the ONE current version (Consolidation goal WS-C2)
+
+**Verified 2026-07-03.** There is exactly one live run configuration. Any CAM run (CAM_Codx
+or manual) should use this and nothing else:
+
+| Layer | Authoritative value |
+|---|---|
+| **Run location (CWD)** | `/Volumes/WS4TB/repo622sn/CAM_CAM` |
+| **Config read** | `claw.toml` in that dir (glm/active profile; `db_path = "claw.db"`) |
+| **CURRENT corpus** | `repo622sn/CAM_CAM/claw.db` — **2474 methodologies**, most recent mine+enrich |
+| **Engine code executed** | `WS4TBr/CAM_Codx/CAM_CAM/src/claw` (editable install; `which cam` in py313 env) |
+| **Engine remote** | `deesatzed/CAM_CAM` `main` |
+
+**No split brain:** the config's `db_path = "claw.db"` resolves, from the run location, to the
+CURRENT corpus above. The engine clone's `data/claw.db` (2304 methods, 2026-06-20) is a **stale
+snapshot**, NOT current — it is only where the code lives, not where the live brain is.
+
+**Invocation contract:** `cd /Volumes/WS4TB/repo622sn/CAM_CAM && cam <command>`
+
 ## Summary
 
 - **1 LIVE** corpus (repo622sn/CAM_CAM, 2474) + its 2 ganglia.
