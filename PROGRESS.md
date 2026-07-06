@@ -156,3 +156,14 @@
   `/Volumes/WS4TB/codxswarm/scripts/cam-codx status` passed and reported all
   four agents executable; `/Volumes/WS4TB/codxswarm/scripts/cam-codx stats`
   passed and reported 2,474 active methodologies.
+- Added the final novice setup step: `tools/cam_setup_wizard.py
+  --install-codex-skill` now installs
+  `templates/skills/cam-codx-setup` into the user's Codex skills directory and
+  auto-detects side-by-side clones at `<CAM_HOME>/CAM_CAM`.
+- Verification for the novice setup path:
+  `python -m pytest -q tests/test_cam_setup_wizard.py tests/test_agent_packs.py`
+  passed with 19 tests, and
+  `python tools/cam_setup_wizard.py --cam-home /Volumes/WS4TB/codxswarm
+  --skip-clone --install-codex-skill --codex-home
+  /tmp/cam_codx_fake_codex_home --non-interactive` created the wrapper and
+  installed the skill into the temporary Codex home.

@@ -66,10 +66,7 @@ For Codex sessions, generate the narrow CAM wrapper after `CAM_CAM` has a venv,
 python tools/cam_setup_wizard.py \
   --cam-home ~/CAM \
   --skip-clone \
-  --wrapper-cam-cam ~/CAM/CAM_CAM \
-  --wrapper-db ~/CAM/CAM_CAM/claw.db \
-  --wrapper-config ~/CAM/CAM_CAM/claw.toml \
-  --wrapper-env ~/CAM/CAM_CAM/.env \
+  --install-codex-skill \
   --non-interactive
 ```
 
@@ -78,6 +75,12 @@ local DB or SQLite sidecars:
 
 ```text
 ~/CAM/scripts/cam-codx
+```
+
+After that, start Codex in a target repo and ask for the installed skill:
+
+```text
+Use cam-codx-setup to verify CAM.
 ```
 
 Then read:

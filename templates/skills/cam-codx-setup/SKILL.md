@@ -25,10 +25,22 @@ CAM_Codx owns setup guidance and workflow assets. CAM_CAM owns the runtime,
 python tools/cam_setup_wizard.py \
   --cam-home <CAM_HOME> \
   --skip-clone \
+  --install-codex-skill \
+  --non-interactive
+```
+
+If CAM_CAM is not in `<CAM_HOME>/CAM_CAM` or `<CAM_HOME>/repos/CAM_CAM`, pass
+the explicit runtime paths:
+
+```bash
+python tools/cam_setup_wizard.py \
+  --cam-home <CAM_HOME> \
+  --skip-clone \
   --wrapper-cam-cam <CAM_CAM> \
   --wrapper-db <CAM_CAM>/claw.db \
   --wrapper-config <CAM_CAM>/claw.toml \
   --wrapper-env <CAM_CAM>/.env \
+  --install-codex-skill \
   --non-interactive
 ```
 

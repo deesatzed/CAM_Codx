@@ -182,6 +182,8 @@ Add a dated `PROGRESS.md` entry with implemented files and verification.
 
 **Files:**
 - Create: `templates/skills/cam-codx-setup/SKILL.md`
+- Modify: `tools/cam_setup_wizard.py`
+- Test: `tests/test_cam_setup_wizard.py`
 
 **Step 1: Create concise skill body**
 
@@ -198,6 +200,23 @@ The skill should instruct Codex to:
 
 Do not include generated local paths. Use placeholders such as
 `<CAM_HOME>/scripts/cam-codx`.
+
+**Step 3: Install the skill through the setup wizard**
+
+Add `--install-codex-skill` and `--codex-home` so setup copies
+`templates/skills/cam-codx-setup` to
+`<CODEX_HOME or ~/.codex>/skills/cam-codx-setup`.
+
+**Step 4: Support side-by-side novice clones**
+
+Make default wrapper detection check `<CAM_HOME>/CAM_CAM` before
+`<CAM_HOME>/repos/CAM_CAM`, so the beginner flow works after:
+
+```bash
+mkdir -p ~/CAM && cd ~/CAM
+git clone https://github.com/deesatzed/CAM_CAM.git
+git clone https://github.com/deesatzed/CAM_Codx.git
+```
 
 ### Task 6: Verify
 

@@ -191,10 +191,7 @@ cd ~/CAM/CAM_Codx
 python tools/cam_setup_wizard.py \
   --cam-home ~/CAM \
   --skip-clone \
-  --wrapper-cam-cam ~/CAM/CAM_CAM \
-  --wrapper-db ~/CAM/CAM_CAM/claw.db \
-  --wrapper-config ~/CAM/CAM_CAM/claw.toml \
-  --wrapper-env ~/CAM/CAM_CAM/.env \
+  --install-codex-skill \
   --non-interactive
 ```
 
@@ -202,6 +199,7 @@ The wizard writes:
 
 ```text
 ~/CAM/scripts/cam-codx
+~/.codex/skills/cam-codx-setup/SKILL.md
 ```
 
 Use that wrapper when Codex needs CAM:
@@ -219,6 +217,19 @@ When Codex asks for permission, approve only this narrow command prefix:
 
 That lets CAM update your local `claw.db` and SQLite sidecar files without
 giving Codex arbitrary write access outside the project.
+
+Now start Codex inside the repo you want CAM to help with:
+
+```bash
+cd /path/to/your/project
+codex
+```
+
+Inside Codex, say:
+
+```text
+Use cam-codx-setup to verify CAM.
+```
 
 ---
 
@@ -283,10 +294,7 @@ cam <command>
 # One-time Codex wrapper setup
 cd ~/CAM/CAM_Codx
 python tools/cam_setup_wizard.py --cam-home ~/CAM --skip-clone \
-  --wrapper-cam-cam ~/CAM/CAM_CAM \
-  --wrapper-db ~/CAM/CAM_CAM/claw.db \
-  --wrapper-config ~/CAM/CAM_CAM/claw.toml \
-  --wrapper-env ~/CAM/CAM_CAM/.env \
+  --install-codex-skill \
   --non-interactive
 ~/CAM/scripts/cam-codx stats
 ```

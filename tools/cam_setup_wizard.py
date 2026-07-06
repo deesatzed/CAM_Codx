@@ -69,6 +69,12 @@ class CamCodxWrapper:
     approval_prefix: str
 
 
+@dataclass(frozen=True)
+class CodexSkillInstall:
+    source: Path
+    dest: Path
+
+
 def local_state_paths(cam_home: Path) -> LocalStatePaths:
     cam_home = cam_home.expanduser().resolve()
     return LocalStatePaths(
@@ -296,28 +302,44 @@ exec "$CAM_CLI" "$@" -c "$CLAW_CONFIG"
 
 def create_default_cam_codx_wrapper(cam_home: Path) -> CamCodxWrapper | None:
     paths = local_state_paths(cam_home)
-    cam_cam = paths.repos / "CAM_CAM"
-    candidates = [
-        (
-            paths.cam_cam_data / "claw.db",
-            paths.cam_cam_config / "claw.local.toml",
-            paths.cam_cam_env / ".env",
-        ),
-        (
-            cam_cam / "claw.db",
-            cam_cam / "claw.toml",
-            cam_cam / ".env",
-        ),
-        (
-            cam_cam / "data" / "claw.db",
-            cam_cam / "claw.toml",
-            cam_cam / ".env",
-        ),
+    cam_cam_roots = [
+        cam_home.expanduser().resolve() / "CAM_CAM",
+        paths.repos / "CAM_CAM",
     ]
-    for db, config, env_file in candidates:
-        if (cam_cam / ".venv" / "bin" / "cam").exists() and db.exists() and config.exists() and env_file.exists():
-            return create_cam_codx_wrapper(cam_home, cam_cam, db, config, env_file)
+    for cam_cam in cam_cam_roots:
+        candidates = [
+            (
+                paths.cam_cam_data / "claw.db",
+                paths.cam_cam_config / "claw.local.toml",
+                paths.cam_cam_env / ".env",
+            ),
+            (
+                cam_cam / "claw.db",
+                cam_cam / "claw.toml",
+                cam_cam / ".env",
+            ),
+            (
+                cam_cam / "data" / "claw.db",
+                cam_cam / "claw.toml",
+                cam_cam / ".env",
+            ),
+        ]
+        for db, config, env_file in candidates:
+            if (cam_cam / ".venv" / "bin" / "cam").exists() and db.exists() and config.exists() and env_file.exists():
+                return create_cam_codx_wrapper(cam_home, cam_cam, db, config, env_file)
     return None
+
+
+def install_codex_skill(source: Path, codex_home: Path) -> Path:
+    source = source.expanduser().resolve()
+    codex_home = codex_home.expanduser().resolve()
+    dest = codex_home / "skills" / source.name
+    if not (source / "SKILL.md").is_file():
+        raise FileNotFoundError(f"skill template missing SKILL.md: {source}")
+    if dest.exists():
+        shutil.rmtree(dest)
+    shutil.copytree(source, dest)
+    return dest
 
 
 def write_report(
@@ -327,6 +349,7 @@ def write_report(
     template_result: ImportResult,
     import_result: ImportResult | None,
     wrapper: CamCodxWrapper | None = None,
+    skill_install: CodexSkillInstall | None = None,
 ) -> Path:
     paths = local_state_paths(cam_home)
     report = paths.reports / "setup_report.md"
@@ -362,6 +385,12 @@ def write_report(
         lines.append(f"- config: `{wrapper.config}`")
         lines.append(f"- env file: `{wrapper.env_file}`")
         lines.append(f"- Codex approval prefix: `{wrapper.approval_prefix}`")
+    lines.extend(["", "## Codex Skill Install", ""])
+    if skill_install is None:
+        lines.append("- not installed")
+    else:
+        lines.append(f"- source: `{skill_install.source}`")
+        lines.append(f"- installed: `{skill_install.dest}`")
     lines.extend(["", "## Local State", ""])
     local_state = validate_local_state(cam_home)
     lines.extend(f"- {item}" for item in local_state) if local_state else lines.append("- empty")
@@ -404,6 +433,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--wrapper-config", type=Path)
     parser.add_argument("--wrapper-env", type=Path)
     parser.add_argument("--skip-wrapper", action="store_true")
+    parser.add_argument("--install-codex-skill", action="store_true")
+    parser.add_argument("--codex-home", type=Path, default=Path(os.environ.get("CODEX_HOME", Path.home() / ".codex")))
     parser.add_argument("--non-interactive", action="store_true")
     parser.add_argument("--skip-clone", action="store_true")
     return parser.parse_args(argv)
@@ -457,7 +488,21 @@ def main(argv: list[str] | None = None) -> int:
         else:
             wrapper = create_default_cam_codx_wrapper(cam_home)
 
-    report = write_report(cam_home, cam_archive, clone_results, template_result, import_result, wrapper)
+    skill_install: CodexSkillInstall | None = None
+    if args.install_codex_skill:
+        skill_source = Path(__file__).resolve().parents[1] / "templates" / "skills" / "cam-codx-setup"
+        skill_dest = install_codex_skill(skill_source, args.codex_home)
+        skill_install = CodexSkillInstall(source=skill_source, dest=skill_dest)
+
+    report = write_report(
+        cam_home,
+        cam_archive,
+        clone_results,
+        template_result,
+        import_result,
+        wrapper,
+        skill_install,
+    )
     print(f"Setup report written: {report}")
     print("")
     if wrapper is not None:
@@ -465,6 +510,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  {wrapper.path}")
         print("Approve this narrow command prefix in Codex when CAM needs DB writes:")
         print(f"  {wrapper.approval_prefix}")
+        print("")
+    if skill_install is not None:
+        print("Codex skill installed:")
+        print(f"  {skill_install.dest}")
         print("")
     print("Next:")
     print(f"  cd {paths.repos / 'CAM_Codx'}")

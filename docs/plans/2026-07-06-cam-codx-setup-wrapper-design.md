@@ -30,7 +30,8 @@ or changing global filesystem permissions.
 `tools/cam_setup_wizard.py` remains the setup entrypoint. It already creates a
 CAM overlay under `CAM_HOME`, imports private runtime state into
 `local_state/`, and writes a setup report. The new behavior adds a generated
-script under `CAM_HOME/scripts/cam-codx`.
+script under `CAM_HOME/scripts/cam-codx` and can install the
+`cam-codx-setup` skill into the user's Codex skills directory.
 
 The wrapper:
 
@@ -55,6 +56,7 @@ Inputs:
 Output:
 
 - executable wrapper at `CAM_HOME/scripts/cam-codx`;
+- installed Codex skill at `<CODEX_HOME or ~/.codex>/skills/cam-codx-setup`;
 - setup report section explaining the wrapper and the Codex approval prefix.
 
 ## Safety
@@ -83,6 +85,6 @@ Tests should verify:
 
 ## Follow-On Skill
 
-A reusable Codex skill named `cam-codx-setup` should call the wizard, verify the
-wrapper, run `cam-codx status` and `cam-codx stats`, and ask the user to approve
-the narrow wrapper prefix when Codex needs unsandboxed writes.
+A reusable Codex skill named `cam-codx-setup` calls the wizard, verifies the
+wrapper, runs `cam-codx status` and `cam-codx stats`, and asks the user to
+approve the narrow wrapper prefix when Codex needs unsandboxed writes.

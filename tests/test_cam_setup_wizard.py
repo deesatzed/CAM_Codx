@@ -5,7 +5,9 @@ import subprocess
 from tools.cam_setup_wizard import (
     ImportResult,
     create_cam_codx_wrapper,
+    create_default_cam_codx_wrapper,
     ensure_layout,
+    install_codex_skill,
     import_existing_runtime_state,
     local_state_paths,
     write_report,
@@ -228,3 +230,32 @@ def test_write_report_includes_cam_codx_wrapper(tmp_path: Path) -> None:
     assert "cam-codx" in text
     assert "Codex approval prefix" in text
     assert str(wrapper.path) in text
+
+
+def test_default_wrapper_detects_side_by_side_cam_cam_clone(tmp_path: Path) -> None:
+    cam_home = tmp_path / "CAM"
+    ensure_layout(cam_home, tmp_path / "CAM_ARCHIVE")
+    cam_cam, _calls = create_fake_cam_runtime(cam_home)
+
+    wrapper = create_default_cam_codx_wrapper(cam_home)
+
+    assert wrapper is not None
+    assert wrapper.cam_cam == cam_cam.resolve()
+    assert wrapper.db == (cam_cam / "claw.db").resolve()
+    assert wrapper.config == (cam_cam / "claw.toml").resolve()
+    assert wrapper.env_file == (cam_cam / ".env").resolve()
+
+
+def test_install_codex_skill_copies_template_to_codex_home(tmp_path: Path) -> None:
+    codex_home = tmp_path / ".codex"
+    source = tmp_path / "CAM_Codx" / "templates" / "skills" / "cam-codx-setup"
+    source.mkdir(parents=True)
+    (source / "SKILL.md").write_text(
+        "---\nname: cam-codx-setup\ndescription: test\n---\n",
+        encoding="utf-8",
+    )
+
+    dest = install_codex_skill(source, codex_home)
+
+    assert dest == codex_home / "skills" / "cam-codx-setup"
+    assert (dest / "SKILL.md").read_text(encoding="utf-8").startswith("---")
