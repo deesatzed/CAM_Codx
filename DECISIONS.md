@@ -62,3 +62,16 @@ test failure while still leaving the generated files readable for users.
 Constraint: generated pack examples may contain placeholders and environment
 variable names, but they must not contain real API keys, auth data, local
 databases, or machine-private runtime files.
+
+## 2026-07-06: Use A Setup-Generated CAM Wrapper For Codex Approval
+
+Decision: CAM_Codx setup generates a narrow `cam-codx` wrapper under the local
+CAM overlay instead of asking users to grant broad filesystem or shell access.
+
+Reason: Codex sandboxes may be able to read a CAM_CAM install but not write
+SQLite sidecars or evaluation records beside `claw.db`. A stable wrapper pins
+the CAM_CAM checkout, `.env`, `claw.db`, and `claw.toml`, giving users one
+specific command prefix to approve while keeping secrets out of logs and Git.
+
+Constraint: the wrapper does not bypass user approval or authorize live CAM
+mutation by itself. It only makes the requested approval bounded and repeatable.

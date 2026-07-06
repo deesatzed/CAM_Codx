@@ -132,3 +132,27 @@
   `headless-smoke.sh` name so every pack has the same test entrypoint.
 - Added the uniform setup/test flow and smoke-script links to the CAM_Codx
   landing README and aligned the Claude, Gemini, and Grok integration docs.
+
+## 2026-07-06 CAM_Codx Setup Wrapper
+
+- Designed the third setup option for Codex/CAM permissions: generate a narrow
+  `cam-codx` wrapper instead of asking users to grant broad writes to the
+  CAM_CAM install directory.
+- Added design and implementation-plan docs:
+  - `docs/plans/2026-07-06-cam-codx-setup-wrapper-design.md`
+  - `docs/plans/2026-07-06-cam-codx-setup-wrapper.md`
+- Extended `tools/cam_setup_wizard.py` with wrapper generation and explicit
+  `--wrapper-cam-cam`, `--wrapper-db`, `--wrapper-config`, and `--wrapper-env`
+  arguments.
+- Updated setup documentation to explain the Codex approval prefix:
+  `<CAM_HOME>/scripts/cam-codx`.
+- Current targeted verification:
+  `python -m pytest -q tests/test_cam_setup_wizard.py` passed with 8 tests.
+- Full targeted verification passed:
+  `python -m pytest -q tests/test_cam_setup_wizard.py tests/test_agent_packs.py`
+  passed with 17 tests, `python tools/generate_agent_packs.py --check` passed,
+  and `git diff --check` passed.
+- Live wrapper proof for this machine:
+  `/Volumes/WS4TB/codxswarm/scripts/cam-codx status` passed and reported all
+  four agents executable; `/Volumes/WS4TB/codxswarm/scripts/cam-codx stats`
+  passed and reported 2,474 active methodologies.

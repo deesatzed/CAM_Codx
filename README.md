@@ -59,6 +59,27 @@ Or use the setup wizard from a cloned `CAM_Codx` checkout:
 python tools/cam_setup_wizard.py
 ```
 
+For Codex sessions, generate the narrow CAM wrapper after `CAM_CAM` has a venv,
+`claw.db`, `claw.toml`, and `.env`:
+
+```bash
+python tools/cam_setup_wizard.py \
+  --cam-home ~/CAM \
+  --skip-clone \
+  --wrapper-cam-cam ~/CAM/CAM_CAM \
+  --wrapper-db ~/CAM/CAM_CAM/claw.db \
+  --wrapper-config ~/CAM/CAM_CAM/claw.toml \
+  --wrapper-env ~/CAM/CAM_CAM/.env \
+  --non-interactive
+```
+
+Then approve this narrow command prefix in Codex when CAM needs to update its
+local DB or SQLite sidecars:
+
+```text
+~/CAM/scripts/cam-codx
+```
+
 Then read:
 
 - [Codex quickstart](docs/QUICKSTART_CODEX.md)
@@ -168,6 +189,11 @@ Templates live under:
 Runtime-critical local state stays out of this repo. In this workspace,
 `CAM_CAM/data/claw.db` is a local database used by CAM runtime tools. CAM_Codx
 documents how to point at it, but does not copy it into GitHub.
+
+Codex should use the setup-generated `cam-codx` wrapper for CAM runtime commands
+that need DB writes. The wrapper pins the runtime directory, `.env`, `claw.db`,
+and `claw.toml`, so users can approve one bounded command instead of broad
+filesystem access.
 
 > **New machine?** [`SETUP_ON_LAPTOP.md`](SETUP_ON_LAPTOP.md) is a beginner-friendly, step-by-step
 > guide to stand up a working CAM copy on a laptop — clone both repos, install the engine, and

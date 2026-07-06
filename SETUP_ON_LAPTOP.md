@@ -177,6 +177,51 @@ the laptop is running the *same* CAM knowledge as the main machine. 🎉
 
 ---
 
+## Step 7 — Create the Codex-safe CAM wrapper
+
+Codex may run in a sandbox that can read your CAM files but cannot write SQLite
+sidecar files beside `claw.db`. Do not fix that by granting broad shell or
+folder access. Instead, create one narrow wrapper command that pins the CAM
+runtime, brain, config, and `.env`.
+
+Run this from the CAM_Codx checkout:
+
+```bash
+cd ~/CAM/CAM_Codx
+python tools/cam_setup_wizard.py \
+  --cam-home ~/CAM \
+  --skip-clone \
+  --wrapper-cam-cam ~/CAM/CAM_CAM \
+  --wrapper-db ~/CAM/CAM_CAM/claw.db \
+  --wrapper-config ~/CAM/CAM_CAM/claw.toml \
+  --wrapper-env ~/CAM/CAM_CAM/.env \
+  --non-interactive
+```
+
+The wizard writes:
+
+```text
+~/CAM/scripts/cam-codx
+```
+
+Use that wrapper when Codex needs CAM:
+
+```bash
+~/CAM/scripts/cam-codx status
+~/CAM/scripts/cam-codx stats
+```
+
+When Codex asks for permission, approve only this narrow command prefix:
+
+```text
+~/CAM/scripts/cam-codx
+```
+
+That lets CAM update your local `claw.db` and SQLite sidecar files without
+giving Codex arbitrary write access outside the project.
+
+---
+
 ## The one rule that avoids all confusion
 
 CAM finds its config and brain **relative to the folder you are standing in** when you run it.
@@ -191,6 +236,12 @@ cam <command>
 If you run `cam` from some other folder, it won't find `claw.toml`/`claw.db` and will act like
 it has an empty brain. That's the #1 beginner surprise. Stand in `~/CAM/CAM_CAM`.
 
+When you are inside Codex, prefer the wrapper:
+
+```bash
+~/CAM/scripts/cam-codx <command>
+```
+
 > **Advanced/optional:** you can force a specific brain file regardless of folder by setting
 > `export CLAW_DB_PATH=/full/path/to/claw.db` before running `cam`. Beginners can ignore this.
 
@@ -202,6 +253,7 @@ it has an empty brain. That's the #1 beginner surprise. Stand in `~/CAM/CAM_CAM`
 |---|---|---|
 | `cam: command not found` | venv not active | `source ~/CAM/CAM_CAM/.venv/bin/activate` |
 | `cam stats` shows 0 methodologies | `claw.db` missing or in wrong folder | Put `claw.db` in `~/CAM/CAM_CAM/` next to `claw.toml`; check `ls -lh claw.db` |
+| Codex says CAM files are readable but not writable | CAM lives outside the active Codex workspace | Use `~/CAM/scripts/cam-codx` and approve that exact prefix |
 | Errors mentioning API key / 401 | `.env` missing or key wrong | Redo Step 5; verify the OpenRouter key is valid and funded |
 | `claw.db` copied but only a few KB | transfer was interrupted | Copy it again; confirm ~117M |
 | `pip install` fails on Python version | Python older than 3.12 | Install Python 3.12+, recreate the venv |
@@ -227,6 +279,16 @@ cd ~/CAM/CAM_CAM
 source .venv/bin/activate
 cam stats                   # sanity check: ~2474 methodologies
 cam <command>
+
+# One-time Codex wrapper setup
+cd ~/CAM/CAM_Codx
+python tools/cam_setup_wizard.py --cam-home ~/CAM --skip-clone \
+  --wrapper-cam-cam ~/CAM/CAM_CAM \
+  --wrapper-db ~/CAM/CAM_CAM/claw.db \
+  --wrapper-config ~/CAM/CAM_CAM/claw.toml \
+  --wrapper-env ~/CAM/CAM_CAM/.env \
+  --non-interactive
+~/CAM/scripts/cam-codx stats
 ```
 
 ---

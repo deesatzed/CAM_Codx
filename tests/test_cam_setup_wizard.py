@@ -1,9 +1,14 @@
 from pathlib import Path
+import os
+import subprocess
 
 from tools.cam_setup_wizard import (
+    ImportResult,
+    create_cam_codx_wrapper,
     ensure_layout,
     import_existing_runtime_state,
     local_state_paths,
+    write_report,
 )
 
 
@@ -69,3 +74,157 @@ def test_import_existing_runtime_state_skips_missing_optional_files(tmp_path: Pa
     assert result.copied == []
     assert "data/claw.db" in result.skipped
     assert ".env" in result.skipped
+
+
+def create_fake_cam_runtime(tmp_path: Path) -> tuple[Path, Path]:
+    cam_cam = tmp_path / "CAM_CAM"
+    bin_dir = cam_cam / ".venv" / "bin"
+    bin_dir.mkdir(parents=True)
+    calls = tmp_path / "calls.txt"
+    cam = bin_dir / "cam"
+    cam.write_text(
+        "#!/usr/bin/env bash\n"
+        "printf '%s\\n' \"$PWD\" > \"$CAM_FAKE_CALLS\"\n"
+        "printf '%s\\n' \"$CLAW_DB_PATH\" >> \"$CAM_FAKE_CALLS\"\n"
+        "printf '%s\\n' \"$CAM_CODEX_MCP_DB_PATH\" >> \"$CAM_FAKE_CALLS\"\n"
+        "printf '%s\\n' \"$@\" >> \"$CAM_FAKE_CALLS\"\n",
+        encoding="utf-8",
+    )
+    cam.chmod(0o700)
+    (cam_cam / "claw.db").write_text("db", encoding="utf-8")
+    (cam_cam / "claw.toml").write_text("[database]\n", encoding="utf-8")
+    (cam_cam / ".env").write_text("CAM_FAKE_CALLS='%s'\n" % calls, encoding="utf-8")
+    return cam_cam, calls
+
+
+def test_create_cam_codx_wrapper_pins_runtime_paths(tmp_path: Path) -> None:
+    cam_home = tmp_path / "CAM_ALL"
+    cam_archive = tmp_path / "CAM_ARCHIVE"
+    paths = ensure_layout(cam_home, cam_archive)
+    cam_cam, _calls = create_fake_cam_runtime(tmp_path)
+
+    wrapper = create_cam_codx_wrapper(
+        cam_home=cam_home,
+        cam_cam=cam_cam,
+        db=cam_cam / "claw.db",
+        config=cam_cam / "claw.toml",
+        env_file=cam_cam / ".env",
+    )
+    text = wrapper.path.read_text(encoding="utf-8")
+
+    assert wrapper.path == paths.scripts / "cam-codx"
+    assert os.access(wrapper.path, os.X_OK)
+    assert str(cam_cam) in text
+    assert str(cam_cam / ".venv" / "bin" / "cam") in text
+    assert str(cam_cam / "claw.db") in text
+    assert str(cam_cam / "claw.toml") in text
+    assert str(cam_cam / ".env") in text
+    assert wrapper.approval_prefix == str(wrapper.path)
+
+
+def test_cam_codx_wrapper_appends_default_config(tmp_path: Path) -> None:
+    cam_home = tmp_path / "CAM_ALL"
+    ensure_layout(cam_home, tmp_path / "CAM_ARCHIVE")
+    cam_cam, calls = create_fake_cam_runtime(tmp_path)
+    wrapper = create_cam_codx_wrapper(
+        cam_home=cam_home,
+        cam_cam=cam_cam,
+        db=cam_cam / "claw.db",
+        config=cam_cam / "claw.toml",
+        env_file=cam_cam / ".env",
+    )
+
+    result = subprocess.run(
+        [str(wrapper.path), "status"],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert calls.read_text(encoding="utf-8").splitlines() == [
+        str(cam_cam),
+        str(cam_cam / "claw.db"),
+        str(cam_cam / "claw.db"),
+        "status",
+        "-c",
+        str(cam_cam / "claw.toml"),
+    ]
+
+
+def test_cam_codx_wrapper_preserves_explicit_short_config(tmp_path: Path) -> None:
+    cam_home = tmp_path / "CAM_ALL"
+    ensure_layout(cam_home, tmp_path / "CAM_ARCHIVE")
+    cam_cam, calls = create_fake_cam_runtime(tmp_path)
+    wrapper = create_cam_codx_wrapper(
+        cam_home=cam_home,
+        cam_cam=cam_cam,
+        db=cam_cam / "claw.db",
+        config=cam_cam / "claw.toml",
+        env_file=cam_cam / ".env",
+    )
+
+    result = subprocess.run(
+        [str(wrapper.path), "status", "-c", "other.toml"],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert calls.read_text(encoding="utf-8").splitlines()[-3:] == [
+        "status",
+        "-c",
+        "other.toml",
+    ]
+
+
+def test_cam_codx_wrapper_preserves_explicit_long_config(tmp_path: Path) -> None:
+    cam_home = tmp_path / "CAM_ALL"
+    ensure_layout(cam_home, tmp_path / "CAM_ARCHIVE")
+    cam_cam, calls = create_fake_cam_runtime(tmp_path)
+    wrapper = create_cam_codx_wrapper(
+        cam_home=cam_home,
+        cam_cam=cam_cam,
+        db=cam_cam / "claw.db",
+        config=cam_cam / "claw.toml",
+        env_file=cam_cam / ".env",
+    )
+
+    result = subprocess.run(
+        [str(wrapper.path), "status", "--config", "other.toml"],
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    assert calls.read_text(encoding="utf-8").splitlines()[-3:] == [
+        "status",
+        "--config",
+        "other.toml",
+    ]
+
+
+def test_write_report_includes_cam_codx_wrapper(tmp_path: Path) -> None:
+    cam_home = tmp_path / "CAM_ALL"
+    cam_archive = tmp_path / "CAM_ARCHIVE"
+    ensure_layout(cam_home, cam_archive)
+    cam_cam, _calls = create_fake_cam_runtime(tmp_path)
+    wrapper = create_cam_codx_wrapper(
+        cam_home=cam_home,
+        cam_cam=cam_cam,
+        db=cam_cam / "claw.db",
+        config=cam_cam / "claw.toml",
+        env_file=cam_cam / ".env",
+    )
+
+    report = write_report(cam_home, cam_archive, [], ImportResult(), None, wrapper)
+    text = report.read_text(encoding="utf-8")
+
+    assert "cam-codx" in text
+    assert "Codex approval prefix" in text
+    assert str(wrapper.path) in text

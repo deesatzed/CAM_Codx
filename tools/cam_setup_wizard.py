@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shlex
 import shutil
 import stat
 import subprocess
@@ -55,6 +56,17 @@ class CommandResult:
     returncode: int
     stdout: str
     stderr: str
+
+
+@dataclass(frozen=True)
+class CamCodxWrapper:
+    path: Path
+    cam_cam: Path
+    cam_cli: Path
+    db: Path
+    config: Path
+    env_file: Path
+    approval_prefix: str
 
 
 def local_state_paths(cam_home: Path) -> LocalStatePaths:
@@ -215,12 +227,106 @@ def validate_local_state(cam_home: Path) -> list[str]:
     return lines
 
 
+def _shell(value: Path | str) -> str:
+    return shlex.quote(str(value))
+
+
+def create_cam_codx_wrapper(
+    cam_home: Path,
+    cam_cam: Path,
+    db: Path,
+    config: Path,
+    env_file: Path,
+) -> CamCodxWrapper:
+    paths = local_state_paths(cam_home)
+    cam_cam = cam_cam.expanduser().resolve()
+    db = db.expanduser().resolve()
+    config = config.expanduser().resolve()
+    env_file = env_file.expanduser().resolve()
+    cam_cli = cam_cam / ".venv" / "bin" / "cam"
+    wrapper = paths.scripts / "cam-codx"
+    wrapper.parent.mkdir(parents=True, exist_ok=True)
+    body = f"""#!/usr/bin/env bash
+set -euo pipefail
+
+CAM_CAM={_shell(cam_cam)}
+CAM_CLI={_shell(cam_cli)}
+CLAW_DB={_shell(db)}
+CLAW_CONFIG={_shell(config)}
+CAM_ENV={_shell(env_file)}
+
+for required in "$CAM_CLI" "$CLAW_DB" "$CLAW_CONFIG" "$CAM_ENV"; do
+  if [ ! -e "$required" ]; then
+    echo "cam-codx missing required path: $required" >&2
+    exit 2
+  fi
+done
+
+cd "$CAM_CAM"
+set -a
+source "$CAM_ENV"
+set +a
+export CLAW_DB_PATH="$CLAW_DB"
+export CAM_CODEX_MCP_DB_PATH="$CLAW_DB"
+
+has_config=0
+for arg in "$@"; do
+  if [ "$arg" = "-c" ] || [ "$arg" = "--config" ] || [[ "$arg" == --config=* ]]; then
+    has_config=1
+  fi
+done
+
+if [ "$has_config" = "1" ]; then
+  exec "$CAM_CLI" "$@"
+fi
+exec "$CAM_CLI" "$@" -c "$CLAW_CONFIG"
+"""
+    wrapper.write_text(body, encoding="utf-8")
+    wrapper.chmod(stat.S_IRUSR | stat.S_IWUSR | stat.S_IXUSR)
+    return CamCodxWrapper(
+        path=wrapper,
+        cam_cam=cam_cam,
+        cam_cli=cam_cli,
+        db=db,
+        config=config,
+        env_file=env_file,
+        approval_prefix=str(wrapper),
+    )
+
+
+def create_default_cam_codx_wrapper(cam_home: Path) -> CamCodxWrapper | None:
+    paths = local_state_paths(cam_home)
+    cam_cam = paths.repos / "CAM_CAM"
+    candidates = [
+        (
+            paths.cam_cam_data / "claw.db",
+            paths.cam_cam_config / "claw.local.toml",
+            paths.cam_cam_env / ".env",
+        ),
+        (
+            cam_cam / "claw.db",
+            cam_cam / "claw.toml",
+            cam_cam / ".env",
+        ),
+        (
+            cam_cam / "data" / "claw.db",
+            cam_cam / "claw.toml",
+            cam_cam / ".env",
+        ),
+    ]
+    for db, config, env_file in candidates:
+        if (cam_cam / ".venv" / "bin" / "cam").exists() and db.exists() and config.exists() and env_file.exists():
+            return create_cam_codx_wrapper(cam_home, cam_cam, db, config, env_file)
+    return None
+
+
 def write_report(
     cam_home: Path,
     cam_archive: Path,
     clone_results: list[CommandResult],
     template_result: ImportResult,
     import_result: ImportResult | None,
+    wrapper: CamCodxWrapper | None = None,
 ) -> Path:
     paths = local_state_paths(cam_home)
     report = paths.reports / "setup_report.md"
@@ -245,6 +351,17 @@ def write_report(
         lines.extend(["", "## Existing Runtime Import", ""])
         lines.extend(f"- copied `{item}`" for item in import_result.copied)
         lines.extend(f"- skipped `{item}`" for item in import_result.skipped)
+    lines.extend(["", "## Codex CAM Wrapper", ""])
+    if wrapper is None:
+        lines.append("- not created")
+        lines.append("- create after CAM_CAM `.venv/bin/cam`, `.env`, `claw.db`, and `claw.toml` exist")
+    else:
+        lines.append(f"- wrapper: `{wrapper.path}`")
+        lines.append(f"- CAM_CAM: `{wrapper.cam_cam}`")
+        lines.append(f"- DB: `{wrapper.db}`")
+        lines.append(f"- config: `{wrapper.config}`")
+        lines.append(f"- env file: `{wrapper.env_file}`")
+        lines.append(f"- Codex approval prefix: `{wrapper.approval_prefix}`")
     lines.extend(["", "## Local State", ""])
     local_state = validate_local_state(cam_home)
     lines.extend(f"- {item}" for item in local_state) if local_state else lines.append("- empty")
@@ -282,6 +399,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--cam-home", type=Path, default=default_home)
     parser.add_argument("--cam-archive", type=Path)
     parser.add_argument("--existing-cam-cam", type=Path)
+    parser.add_argument("--wrapper-cam-cam", type=Path)
+    parser.add_argument("--wrapper-db", type=Path)
+    parser.add_argument("--wrapper-config", type=Path)
+    parser.add_argument("--wrapper-env", type=Path)
+    parser.add_argument("--skip-wrapper", action="store_true")
     parser.add_argument("--non-interactive", action="store_true")
     parser.add_argument("--skip-clone", action="store_true")
     return parser.parse_args(argv)
@@ -322,9 +444,28 @@ def main(argv: list[str] | None = None) -> int:
     if existing is not None:
         import_result = import_existing_runtime_state(existing, cam_home)
 
-    report = write_report(cam_home, cam_archive, clone_results, template_result, import_result)
+    wrapper: CamCodxWrapper | None = None
+    if not args.skip_wrapper:
+        if args.wrapper_cam_cam and args.wrapper_db and args.wrapper_config and args.wrapper_env:
+            wrapper = create_cam_codx_wrapper(
+                cam_home=cam_home,
+                cam_cam=args.wrapper_cam_cam,
+                db=args.wrapper_db,
+                config=args.wrapper_config,
+                env_file=args.wrapper_env,
+            )
+        else:
+            wrapper = create_default_cam_codx_wrapper(cam_home)
+
+    report = write_report(cam_home, cam_archive, clone_results, template_result, import_result, wrapper)
     print(f"Setup report written: {report}")
     print("")
+    if wrapper is not None:
+        print("Codex CAM wrapper:")
+        print(f"  {wrapper.path}")
+        print("Approve this narrow command prefix in Codex when CAM needs DB writes:")
+        print(f"  {wrapper.approval_prefix}")
+        print("")
     print("Next:")
     print(f"  cd {paths.repos / 'CAM_Codx'}")
     print("  codex")
