@@ -167,3 +167,6 @@
   --skip-clone --install-codex-skill --codex-home
   /tmp/cam_codx_fake_codex_home --non-interactive` created the wrapper and
   installed the skill into the temporary Codex home.
+- Added the novice startup explanation to `docs/QUICKSTART_CODEX.md`, covering
+  what Codex, CAM_Codx, CAM_CAM, `claw.db`, and `cam-codx` do; the exact
+  clone/install/setup/start-Codex flow; and common CAM_Codx use cases.

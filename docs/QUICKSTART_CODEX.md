@@ -1,20 +1,156 @@
 # Codex Quickstart
 
+## What You Are Installing
+
+Start here if you already have Codex installed and want Codex to use CAM.
+
+The pieces are:
+
+```text
+Codex     = the AI coding operator you talk to
+CAM_Codx  = the Codex-facing workflow hub: skills, setup docs, goals, templates
+CAM_CAM   = the CAM engine: the `cam` command, repo analysis, mining, memory
+claw.db   = CAM's local knowledge database
+cam-codx  = the safe wrapper command Codex uses to operate CAM_CAM
+```
+
+The normal flow is:
+
+```text
+clone CAM_CAM and CAM_Codx
+install CAM_CAM
+copy or create claw.db, claw.toml, and .env
+run the CAM_Codx setup wizard
+start Codex in your project
+say: Use cam-codx-setup to verify CAM.
+```
+
+## What The Skill Adds
+
+The `cam-codx-setup` skill lets Codex verify and use CAM without broad
+filesystem approval. It teaches Codex to:
+
+- find `CAM_Codx` and `CAM_CAM`;
+- verify `claw.db`, `claw.toml`, and `.env` without printing secrets;
+- use the setup-generated `cam-codx` wrapper;
+- ask the user to approve only the narrow wrapper command;
+- run CAM health checks such as `status` and `stats`;
+- report the exact CAM paths and verification result.
+
+After setup is verified, Codex can use CAM_Codx/CAM_CAM to:
+
+- evaluate a repo before editing it;
+- inspect project structure, tests, docs, and config;
+- search or apply CAM methodology memory;
+- generate build plans and `GOAL.md` contracts;
+- run dry-run enhancement planning before live mutation;
+- validate claims with command evidence;
+- save durable reports such as `CAM_SESSION_REPORT.md`.
+
 ## Clone The Hub And Engine
 
 ```bash
+mkdir -p ~/CAM
+cd ~/CAM
 git clone https://github.com/deesatzed/CAM_Codx.git
 git clone https://github.com/deesatzed/CAM_CAM.git
 ```
 
-Or run the guided setup wizard from a cloned `CAM_Codx` checkout:
+Install the CAM engine:
 
 ```bash
-python tools/cam_setup_wizard.py
+cd ~/CAM/CAM_CAM
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
 ```
 
-Use `CAM_Codx` for Codex goals and workflow docs. Use `CAM_CAM` for runtime
-commands.
+Then add the private runtime files that do not live on GitHub:
+
+```text
+~/CAM/CAM_CAM/claw.db
+~/CAM/CAM_CAM/claw.toml
+~/CAM/CAM_CAM/.env
+```
+
+If `.env` does not exist yet:
+
+```bash
+cd ~/CAM/CAM_CAM
+cp .env.example .env
+```
+
+Edit `.env` and add your API keys. Do not commit or share `.env`.
+
+## Install The Codex Skill And Wrapper
+
+Run this from the CAM_Codx checkout:
+
+```bash
+cd ~/CAM/CAM_Codx
+python tools/cam_setup_wizard.py \
+  --cam-home ~/CAM \
+  --skip-clone \
+  --install-codex-skill \
+  --non-interactive
+```
+
+This creates:
+
+```text
+~/CAM/scripts/cam-codx
+~/.codex/skills/cam-codx-setup/SKILL.md
+```
+
+Test CAM through the wrapper:
+
+```bash
+~/CAM/scripts/cam-codx status
+~/CAM/scripts/cam-codx stats
+```
+
+When Codex asks for permission, approve only this command prefix:
+
+```text
+~/CAM/scripts/cam-codx
+```
+
+That gives Codex a bounded way to let CAM update `claw.db` and SQLite sidecar
+files without granting arbitrary shell or filesystem access.
+
+## Start Codex And Invoke CAM
+
+Start Codex inside the project you want CAM to help with:
+
+```bash
+cd /path/to/your/project
+codex
+```
+
+Inside Codex, say:
+
+```text
+Use cam-codx-setup to verify CAM.
+```
+
+After that, ask for a CAM workflow:
+
+```text
+Use CAM_Codx to evaluate this repo and recommend next steps.
+```
+
+or:
+
+```text
+Use CAM_Codx to create a build plan for this repo.
+```
+
+Codex will use CAM_Codx as the workflow guide and CAM_CAM as the runtime engine,
+usually through commands shaped like:
+
+```bash
+~/CAM/scripts/cam-codx evaluate /path/to/your/project --mode structural
+```
 
 ## Learn From The XTtape Showpiece
 

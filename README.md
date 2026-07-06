@@ -83,7 +83,7 @@ After that, start Codex in a target repo and ask for the installed skill:
 Use cam-codx-setup to verify CAM.
 ```
 
-Then read:
+For the novice step-by-step flow and use cases, read:
 
 - [Codex quickstart](docs/QUICKSTART_CODEX.md)
 - [New computer setup walkthrough](docs/NEW_COMPUTER_SETUP_WALKTHROUGH.md)
