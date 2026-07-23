@@ -5,8 +5,8 @@
 CAM currently stores model choices in duplicated TOMLs, exposes `CAM_MODEL_*`
 environment metadata that does not control runtime selection, and allows a
 profile to resolve a stale corpus path. This design establishes one
-CLI-first model-management workflow for CAM while preserving explicit operator
-control over model selection and external data routing.
+CLI-first model-management workflow for CAM while preserving explicit
+operator control over model selection and external data routing.
 
 ## Design decisions
 
@@ -18,8 +18,8 @@ and safety policy. The profile registry owns the active-profile pointer,
 role-based cloud/local model choices, fallback chains, and embedding settings.
 
 This replaces duplicated full TOMLs. Legacy files remain compatibility shims
-until migration and tests prove they are safe to retire. The live corpus path
-is explicitly pinned so a profile switch cannot select a stale `data/claw.db`.
+until migration and tests prove them safe to retire. The live corpus path is
+explicitly pinned so a profile switch cannot select a stale `data/claw.db`.
 
 ### Roles, not vendor labels
 
@@ -73,6 +73,7 @@ not write a profile, corpus, or index.
 
 Tests cover consistent config resolution, profile/registry synchronization,
 catalog fixtures, explicit model selection, migration idempotence, rejected
-bad selections, optional test receipts, index-generation isolation, evaluation
-metrics, and hosted-data manifests. End-to-end checks prove that normal CAM
-commands honor the active profile and retain the authoritative live corpus.
+bad selections, optional test receipts, index-generation isolation,
+evaluation metrics, and hosted-data manifests. End-to-end checks prove that
+normal CAM commands honor the active profile and retain the authoritative live
+corpus.
