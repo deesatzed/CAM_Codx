@@ -179,4 +179,19 @@
 - CAM session preflight passed with the authoritative corpus `/Volumes/WS4TB/repo622sn/CAM_CAM/claw.db`; `OPENROUTER_API_KEY` was present by name only and `.env` was Git-ignored.
 - Recorded that the globally installed `cam` imports an older `/Volumes/WS4TB/WS4TBr/...` checkout, so implementation and benchmark commands must explicitly load the clean worktree.
 - Focused baseline: 286 tests passed and one pre-existing config assertion failed because the committed config uses `claw.db` while the test expects `data/claw.db`. Assumption: proceed with isolated model-management TDD while preserving this mismatch as baseline evidence.
-- No paid model calls, profile promotions, or corpus writes have occurred.
+- The capped comparison completed 24 exact-model calls across three frozen
+  mining prompts with no fallback and no corpus writes.
+- Provider-reported cost was `$1.9039158408`; the conservative upper bound,
+  including one discarded pre-fix alias probe, was `$1.9054566024` under the
+  approved `$5` cap.
+- Gemini batch routing, rolling-alias validation, failure cost preservation,
+  safe response-envelope normalization, selected-model resume, and report
+  generation were implemented in the CAM_CAM runtime branch.
+- Focused runtime verification passed 206 tests. The full runtime suite passed
+  4,284 tests with 22 skipped and four unrelated/baseline failures recorded in
+  the results report.
+- No model passed the zero-hard-failure gate. Luna is the provisional budget
+  leader and GLM 5.2 the provisional cost/speed leader; no profile was changed.
+- Added the sanitized results/review receipts and a five-step quickstart. Raw
+  prompts, responses, provider receipts, job IDs, and local database state
+  remain untracked.

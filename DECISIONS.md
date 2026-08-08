@@ -75,3 +75,16 @@ specific command prefix to approve while keeping secrets out of logs and Git.
 
 Constraint: the wrapper does not bypass user approval or authorize live CAM
 mutation by itself. It only makes the requested approval bounded and repeatable.
+
+## 2026-08-08: Preserve the red promotion gate after the live model comparison
+
+Decision: publish Luna as the provisional budget leader and GLM 5.2 as the
+provisional cost/speed leader, but do not change an active CAM model profile.
+
+Reason: all requested OpenRouter candidates completed, but every candidate had
+at least one hard failure under the frozen production prompt. Numerical quality
+does not override truncated, malformed, or invalid-provenance output.
+
+Next gate: present and approve a shorter, provenance-strict production prompt
+design before rerunning the leading candidates. This is a runtime behavior
+change and is not inferred from benchmark authorization alone.

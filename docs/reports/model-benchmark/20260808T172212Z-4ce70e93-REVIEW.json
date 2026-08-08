@@ -1,0 +1,98 @@
+{
+  "schema_version": 1,
+  "run_id": "20260808T172212Z-4ce70e93",
+  "created_at": "2026-08-08",
+  "budget_usd": 5.0,
+  "completed_calls": 24,
+  "failed_calls": 0,
+  "provider_reported_cost_usd": 1.9039158408,
+  "unattributed_probe_maximum_usd": 0.0015407616,
+  "conservative_cost_upper_bound_usd": 1.9054566024,
+  "promotion_gate": {
+    "minimum_average_quality": 80,
+    "maximum_hard_failures": 0,
+    "passed_models": []
+  },
+  "candidates": [
+    {
+      "model_id": "openai/gpt-5.6-luna",
+      "average_quality": 94.84,
+      "finding_count": 18,
+      "cost_usd": 0.0239811,
+      "average_sync_latency_seconds": 23.53,
+      "hard_failures": ["invalid_provenance"],
+      "disposition": "provisional_budget_leader"
+    },
+    {
+      "model_id": "z-ai/glm-5.2",
+      "average_quality": 83.42,
+      "finding_count": 3,
+      "cost_usd": 0.0091734048,
+      "average_sync_latency_seconds": 10.639,
+      "hard_failures": ["invalid_provenance"],
+      "disposition": "provisional_cost_speed_leader"
+    },
+    {
+      "model_id": "openai/gpt-5.6-terra",
+      "average_quality": 82.67,
+      "finding_count": 3,
+      "cost_usd": 0.192045,
+      "average_sync_latency_seconds": 7.32,
+      "hard_failures": ["invalid_provenance"],
+      "disposition": "not_selected"
+    },
+    {
+      "model_id": "x-ai/grok-4.5",
+      "average_quality": 89.87,
+      "finding_count": 38,
+      "cost_usd": 0.4080772,
+      "average_sync_latency_seconds": 90.781,
+      "hard_failures": ["truncated_response"],
+      "disposition": "quality_coverage_candidate"
+    },
+    {
+      "model_id": "google/gemini-3.6-flash:batch",
+      "average_quality": 98.0,
+      "finding_count": 4,
+      "cost_usd": 0.1860105,
+      "average_sync_latency_seconds": null,
+      "hard_failures": ["truncated_response"],
+      "disposition": "batch_transport_valid_prompt_not_ready"
+    },
+    {
+      "model_id": "~deepseek/deepseek-v4-flash-latest",
+      "average_quality": 66.13,
+      "finding_count": 15,
+      "cost_usd": 0.023376836,
+      "average_sync_latency_seconds": 107.348,
+      "hard_failures": ["malformed_findings", "truncated_response"],
+      "disposition": "not_selected"
+    },
+    {
+      "model_id": "qwen/qwen3.8-max",
+      "average_quality": 33.33,
+      "finding_count": 3,
+      "cost_usd": 0.408492,
+      "average_sync_latency_seconds": 115.321,
+      "hard_failures": ["malformed_findings", "truncated_response"],
+      "disposition": "reject_current_prompt"
+    },
+    {
+      "model_id": "moonshotai/kimi-k3",
+      "average_quality": 0.0,
+      "finding_count": 0,
+      "cost_usd": 0.6527598,
+      "average_sync_latency_seconds": 169.852,
+      "hard_failures": [
+        "malformed_findings",
+        "truncated_response",
+        "unsupported_json_envelope"
+      ],
+      "disposition": "reject_current_prompt"
+    }
+  ],
+  "selected_model": null,
+  "profile_changed": false,
+  "next_gate": "Approve a shorter, provenance-strict production prompt design and rerun the leading candidates."
+}
+
