@@ -170,3 +170,13 @@
 - Added the novice startup explanation to `docs/QUICKSTART_CODEX.md`, covering
   what Codex, CAM_Codx, CAM_CAM, `claw.db`, and `cam-codx` do; the exact
   clone/install/setup/start-Codex flow; and common CAM_Codx use cases.
+
+## 2026-08-08 CAM Mining-Model Comparison
+
+- Began execution of `docs/plans/2026-08-08-cam-model-benchmark-mining-manager.md` after explicit user authorization to run and fix the comparison.
+- Created the isolated CAM_CAM worktree `/Volumes/WS4TB/repo622sn/.worktrees/CAM_CAM-model-benchmark` on branch `codex/cam-model-benchmark-runtime` from `db5495a`.
+- Preserved the dirty live CAM_CAM checkout, including modified `claw.toml` and untracked SQLite WAL/SHM sidecars.
+- CAM session preflight passed with the authoritative corpus `/Volumes/WS4TB/repo622sn/CAM_CAM/claw.db`; `OPENROUTER_API_KEY` was present by name only and `.env` was Git-ignored.
+- Recorded that the globally installed `cam` imports an older `/Volumes/WS4TB/WS4TBr/...` checkout, so implementation and benchmark commands must explicitly load the clean worktree.
+- Focused baseline: 286 tests passed and one pre-existing config assertion failed because the committed config uses `claw.db` while the test expects `data/claw.db`. Assumption: proceed with isolated model-management TDD while preserving this mismatch as baseline evidence.
+- No paid model calls, profile promotions, or corpus writes have occurred.
