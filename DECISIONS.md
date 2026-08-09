@@ -75,3 +75,32 @@ specific command prefix to approve while keeping secrets out of logs and Git.
 
 Constraint: the wrapper does not bypass user approval or authorize live CAM
 mutation by itself. It only makes the requested approval bounded and repeatable.
+
+## 2026-08-09: Require Reviewed Adoption After Mining
+
+Decision: treat newly mined methodologies as evidence inputs, not permission to
+modify CAM. CAM_Codx must produce a reviewed adoption manifest before provider
+spend, active-file edits, or self-enhancement promotion can follow a mining run.
+
+Reason: the latest run stored 80 useful but embryonic findings. CAM already has
+staged self-enhancement, specialist exchange, PULSE, model tournament, and
+rollback capabilities, so blindly adopting high-potential findings would
+duplicate behavior and bypass outcome evidence.
+
+Constraint: `cam self-enhance status` is a threshold signal only. Readiness must
+eventually include corpus delta, evidence quality, observed outcomes, explicit
+selection, verification, and rollback.
+
+## 2026-08-09: Bind Active CAM Truth To repo622sn
+
+Decision: use `/Volumes/WS4TB/repo622sn/CAM_CAM`, its tracked `claw.toml`, and
+its root `claw.db` as the authoritative runtime/config/corpus tuple for current
+CAM_Codx operations.
+
+Reason: the default editable Python import still resolves an older WS4TBr
+checkout unless `PYTHONPATH` is pinned. Active documentation and preflight must
+make split-brain execution visible and fail closed before mutation or spend.
+
+Constraint: old paths in historical plans and handoffs remain historical
+evidence; current goals, contracts, setup guidance, and runtime checks must use
+the authoritative tuple.

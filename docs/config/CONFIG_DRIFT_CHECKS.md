@@ -11,7 +11,7 @@ python - <<'PY'
 import tomllib
 from pathlib import Path
 for path in [
-    "/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM/claw.toml",
+    "/Volumes/WS4TB/repo622sn/CAM_CAM/claw.toml",
     "templates/config/cam-cam-claw.example.toml",
     "templates/config/adapter-config.example.toml",
 ]:

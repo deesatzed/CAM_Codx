@@ -13,7 +13,7 @@ CAM_CAM -> mined methodology -> CAM_Codx -> planning showpiece -> product build 
 | Path | Meaning |
 |---|---|
 | `/Volumes/WS4TB/repo622sn/CAM_Codx` | Canonical CAM_Codx hub checkout for this goal. |
-| `/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM` | Runtime CAM_CAM checkout named by the goal. |
+| `/Volumes/WS4TB/repo622sn/CAM_CAM` | Canonical runtime CAM_CAM checkout and live corpus owner. |
 | `/Volumes/WS4TB/WS4TBr/MoriahCareFrame` | Generated standalone product repo. |
 | `/Volumes/WS4TB/CAM_ALL` | Local clean operating overlay. |
 | `/Volumes/WS4TB/CAM_ARCHIVE` | Non-destructive archive staging area. |

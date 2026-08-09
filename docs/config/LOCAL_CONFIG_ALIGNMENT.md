@@ -1,17 +1,17 @@
 # Local Config Alignment
 
-Verified on 2026-06-21 using metadata-only commands.
+Re-verified on 2026-08-09 using metadata-only commands and SQLite integrity checks.
 
 ## Runtime-Critical Local Files
 
 | Local file | Observed state | Role | Public handling |
 |---|---|---|---|
-| `/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM/data/claw.db` | 109 MB SQLite DB | CAM runtime corpus and outcome/state database | Never copy into CAM_Codx or GitHub. |
-| `/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM/claw.toml` | tracked public-safe TOML | CAM runtime default config | Safe to keep tracked while secrets and local overrides stay out of Git. |
-| `/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM/claw_cheap.toml` | tracked public-safe TOML | Alternate runtime route | Safe to keep tracked while secrets and local overrides stay out of Git. |
-| `/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM/claw_dspro.toml` | tracked public-safe TOML | DeepSeek-oriented runtime route | Safe to keep tracked while secrets and local overrides stay out of Git. |
-| `/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM/claw_grok.toml` | tracked public-safe TOML | Grok-oriented runtime route | Safe to keep tracked while secrets and local overrides stay out of Git. |
-| `/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM/.env.example` | 3.4 KB | Public environment example in CAM_CAM | Safe to reference; do not copy secrets. |
+| `/Volumes/WS4TB/repo622sn/CAM_CAM/claw.db` | 127 MB SQLite DB | Canonical CAM runtime corpus and outcome/state database | Never copy into CAM_Codx or GitHub. |
+| `/Volumes/WS4TB/repo622sn/CAM_CAM/claw.toml` | tracked public-safe TOML | CAM runtime default config and federation registry | Safe to keep tracked while secrets and local overrides stay out of Git. |
+| `/Volumes/WS4TB/repo622sn/CAM_CAM/claw_cheap.toml` | tracked public-safe TOML | Alternate runtime route | Safe to keep tracked while secrets and local overrides stay out of Git. |
+| `/Volumes/WS4TB/repo622sn/CAM_CAM/claw_dspro.toml` | tracked public-safe TOML | DeepSeek-oriented runtime route | Safe to keep tracked while secrets and local overrides stay out of Git. |
+| `/Volumes/WS4TB/repo622sn/CAM_CAM/claw_grok.toml` | tracked public-safe TOML | Grok-oriented runtime route | Safe to keep tracked while secrets and local overrides stay out of Git. |
+| `/Volumes/WS4TB/repo622sn/CAM_CAM/.env.example` | 3.4 KB | Public environment example in CAM_CAM | Safe to reference; do not copy secrets. |
 | `/Volumes/WS4TB/WS4TBr/CAM_Codx/.codex/config.toml` | present | Local Codex wiring | Do not publish directly; use placeholder template. |
 
 ## Database Role

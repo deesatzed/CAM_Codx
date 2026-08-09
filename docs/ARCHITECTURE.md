@@ -39,7 +39,7 @@ Local runtime state is not GitHub content. The canonical local CAM database in
 this workspace is:
 
 ```text
-/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM/data/claw.db
+/Volumes/WS4TB/repo622sn/CAM_CAM/claw.db
 ```
 
 Public templates use placeholders. Local config stays in local-only files or in

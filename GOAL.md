@@ -55,7 +55,7 @@ CAM_Grok product forks.
 Do not run this goal from:
 
 - `/Volumes/WS4TB/WS4TBr/CAM_Codx`: workspace/container folder.
-- `/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM`: runtime repo, not the hub.
+- `/Volumes/WS4TB/repo622sn/CAM_CAM`: runtime repo, not the hub.
 - Any generated product repo such as `moriahcareframe`.
 
 ## PROOF OF DONE
@@ -155,7 +155,7 @@ git diff --check
    - Inspect CAM_CAM MCP files before claiming tool coverage:
 
 ```bash
-cd /Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM
+cd /Volumes/WS4TB/repo622sn/CAM_CAM
 python -m pytest -q tests/test_tool_schemas.py tests/test_integration_wiring.py
 git diff --check
 ```
@@ -188,7 +188,7 @@ git diff --check
 Canonical repo paths:
 
 - `CAM_Codx`: `/Volumes/WS4TB/repo622sn/CAM_Codx`
-- `CAM_CAM`: `/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM`
+- `CAM_CAM`: `/Volumes/WS4TB/repo622sn/CAM_CAM`
 - Local overlay: `/Volumes/WS4TB/CAM_ALL`
 
 Allowed modifications in `CAM_Codx`:

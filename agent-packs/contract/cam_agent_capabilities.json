@@ -6,7 +6,7 @@
     "hub_repo": "CAM_Codx",
     "hub_path": "/Volumes/WS4TB/repo622sn/CAM_Codx",
     "runtime_repo": "CAM_CAM",
-    "runtime_path": "/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM",
+    "runtime_path": "/Volumes/WS4TB/repo622sn/CAM_CAM",
     "rule": "CAM_Codx owns generated host packs and workflow docs. CAM_CAM owns runtime behavior, MCP tools, CLI commands, and local databases."
   },
   "runtime": {

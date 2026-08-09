@@ -170,3 +170,24 @@
 - Added the novice startup explanation to `docs/QUICKSTART_CODEX.md`, covering
   what Codex, CAM_Codx, CAM_CAM, `claw.db`, and `cam-codx` do; the exact
   clone/install/setup/start-Codex flow; and common CAM_Codx use cases.
+
+## 2026-08-09 Post-Mining Cleanup And Augmentation Audit
+
+- Preserved and tracked the validated `GOAL_CAM_SUBSCIBED.md` contract.
+- Corrected active CAM_Codx runtime references from the older WS4TBr checkout
+  to `/Volumes/WS4TB/repo622sn/CAM_CAM` in the goal, capability contract,
+  architecture, repo map, and config guidance.
+- Classified the successful 80-finding mining batch without additional model
+  calls or provider spend.
+- Recorded the audit in
+  `docs/reports/2026-08-09-post-mining-cam-augmentation-audit.md`.
+- CAM_CAM cleanup created a tracked database registry, retained but ignored
+  SQLite WAL/SHM files, preserved intentional Kimi K3 configuration, and
+  federated Go, misc, TypeScript, and Rust ganglia.
+- Verified root corpus status: 2,668 methodologies, 215 source repositories,
+  four configured siblings, and SQLite integrity `ok` for all five databases.
+- Focused CAM_CAM verification passed: 161 tests, with two known non-fatal
+  `aiosqlite` event-loop shutdown warnings recorded as separate audit debt.
+- Chose runtime identity preflight and reviewed adoption manifests as the next
+  P0 implementation batch. No automatic self-enhancement or CAG rebuild was
+  performed in this audit.
