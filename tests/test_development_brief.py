@@ -1,5 +1,6 @@
 import importlib.util
 from pathlib import Path
+import subprocess
 import sys
 
 import pytest
@@ -104,3 +105,113 @@ def test_renderer_keeps_one_recommended_step_and_visible_limits() -> None:
     assert "Why this applies" in rendered
     assert "Confidence: low" in rendered
     assert "No target repository was supplied." in rendered
+
+
+def _git_repository(path: Path) -> None:
+    subprocess.run(["git", "init", "-q", str(path)], check=True)
+    (path / "GOAL.md").write_text("# Goal\n\nDeliver a durable importer.\n", encoding="utf-8")
+    subprocess.run(["git", "-C", str(path), "add", "GOAL.md"], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(path),
+            "-c",
+            "user.name=Development Brief Test",
+            "-c",
+            "user.email=brief-test@example.invalid",
+            "commit",
+            "-qm",
+            "initial target truth",
+        ],
+        check=True,
+    )
+
+
+def test_target_inspector_reports_truth_dirty_state_gaps_and_unrun_verification(
+    tmp_path: Path,
+) -> None:
+    brief = _load_contract()
+    target = tmp_path / "target"
+    target.mkdir()
+    _git_repository(target)
+    source = target / "src" / "importer.py"
+    source.parent.mkdir()
+    source.write_text("def import_data():\n    # TODO: retain retry state\n    raise NotImplementedError\n", encoding="utf-8")
+    before = {path.relative_to(target): path.read_bytes() for path in target.rglob("*") if path.is_file()}
+
+    inspection = brief.inspect_target_read_only(target)
+
+    assert inspection.is_git_repository is True
+    assert "GOAL.md" in inspection.read_truth_files
+    assert any("src/importer.py" in entry for entry in inspection.dirty_entries)
+    assert any("TODO" in gap for gap in inspection.visible_gaps)
+    assert any("NotImplemented" in gap for gap in inspection.visible_gaps)
+    assert inspection.verification_status == "not_run"
+    after = {path.relative_to(target): path.read_bytes() for path in target.rglob("*") if path.is_file()}
+    assert after == before
+
+
+def test_target_inspector_does_not_discover_sibling_repositories(tmp_path: Path) -> None:
+    brief = _load_contract()
+    target = tmp_path / "target"
+    sibling = tmp_path / "sibling"
+    target.mkdir()
+    sibling.mkdir()
+    _git_repository(sibling)
+    (sibling / "src.py").write_text("# TODO: ignored sibling\n", encoding="utf-8")
+
+    inspection = brief.inspect_target_read_only(target)
+
+    assert inspection.is_git_repository is False
+    assert inspection.read_truth_files == ()
+    assert inspection.visible_gaps == ()
+
+
+def test_continue_rescue_advice_is_explainable_for_all_outcomes(tmp_path: Path) -> None:
+    brief = _load_contract()
+
+    healthy = brief.TargetInspection(
+        target_path=tmp_path,
+        is_git_repository=True,
+        branch="main",
+        read_truth_files=("GOAL.md",),
+        missing_truth_files=(),
+        dirty_entries=(),
+        visible_gaps=(),
+        risks=(),
+        verification_status="not_run",
+    )
+    continue_advice = brief.recommend_continue_rescue(healthy, current_test_receipt="passed")
+    assert continue_advice.action == "continue"
+    assert "does not prove product completeness" in continue_advice.limitation
+
+    dirty = brief.TargetInspection(
+        target_path=tmp_path,
+        is_git_repository=True,
+        branch="main",
+        read_truth_files=("GOAL.md",),
+        missing_truth_files=(),
+        dirty_entries=(" M src/importer.py",),
+        visible_gaps=(),
+        risks=(),
+        verification_status="not_run",
+    )
+    mitigate_advice = brief.recommend_continue_rescue(dirty)
+    assert mitigate_advice.action == "mitigate"
+    assert any("dirty" in reason.lower() for reason in mitigate_advice.reasons)
+
+    structurally_risky = brief.TargetInspection(
+        target_path=tmp_path,
+        is_git_repository=False,
+        branch=None,
+        read_truth_files=(),
+        missing_truth_files=("GOAL.md", "PROGRESS.md"),
+        dirty_entries=(),
+        visible_gaps=(),
+        risks=("target is not a Git repository",),
+        verification_status="not_run",
+    )
+    redevelop_advice = brief.recommend_continue_rescue(structurally_risky)
+    assert redevelop_advice.action == "re-develop"
+    assert "advisory" in redevelop_advice.limitation
