@@ -77,11 +77,22 @@ local DB or SQLite sidecars:
 ~/CAM/scripts/cam-codx
 ```
 
-After that, start Codex in a target repo and ask for the installed skill:
+After that, start Codex in a target repo and ask for the installed setup or
+routine SWE skill:
 
 ```text
 Use cam-codx-setup to verify CAM.
 ```
+
+For normal build/update/debug work, use:
+
+```text
+Use cam-codx-swe to manage this SWE task with CAM recall and evidence gates.
+```
+
+The routine skill does not mine repositories or change CAM automatically. See
+the [CAM_Codx program manager](docs/CAM_CODEX_PROGRAM_MANAGER.md) for the
+packet, approval, tournament, and staged self-enhancement flow.
 
 For the novice step-by-step flow and use cases, read:
 

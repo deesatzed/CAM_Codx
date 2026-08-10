@@ -104,3 +104,17 @@ make split-brain execution visible and fail closed before mutation or spend.
 Constraint: old paths in historical plans and handoffs remain historical
 evidence; current goals, contracts, setup guidance, and runtime checks must use
 the authoritative tuple.
+
+## 2026-08-10: Make CAM_Codx A Routine, Explicit SWE Manager
+
+Decision: add a CAM_Codx packet/approval manager and installable `cam-codx-swe`
+Codex skill for normal build, update, debugging, and review tasks.
+
+Reason: CAM's experiential knowledge and evidence gates are useful during SWE
+work, but the prior mining mistake showed that routine use must not imply
+repository mining, provider spend, model promotion, or self-modification.
+
+Constraint: the manager owns workflow policy and receipts only. CAM_CAM owns
+runtime behavior. Mutating/spend phases require a matching, unexpired,
+single-use approval; self-enhancement swap always needs a separate promotion
+approval and rollback evidence.

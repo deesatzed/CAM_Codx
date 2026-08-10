@@ -342,6 +342,28 @@ def install_codex_skill(source: Path, codex_home: Path) -> Path:
     return dest
 
 
+def install_codex_skills(source_root: Path, codex_home: Path) -> list[CodexSkillInstall]:
+    """Install the setup skill and the routine SWE manager skill together."""
+
+    source_root = source_root.expanduser().resolve()
+    installs: list[CodexSkillInstall] = []
+    for name in ("cam-codx-setup", "cam-codx-swe"):
+        source = source_root / name
+        if not (source / "SKILL.md").is_file():
+            # Older CAM_Codx checkouts may predate the routine skill. Keep setup
+            # usable and let the report name the missing optional asset.
+            continue
+        installs.append(
+            CodexSkillInstall(
+                source=source,
+                dest=install_codex_skill(source, codex_home),
+            )
+        )
+    if not installs:
+        raise FileNotFoundError(f"no CAM Codex skill templates found under {source_root}")
+    return installs
+
+
 def write_report(
     cam_home: Path,
     cam_archive: Path,
@@ -350,6 +372,7 @@ def write_report(
     import_result: ImportResult | None,
     wrapper: CamCodxWrapper | None = None,
     skill_install: CodexSkillInstall | None = None,
+    skill_installs: list[CodexSkillInstall] | None = None,
 ) -> Path:
     paths = local_state_paths(cam_home)
     report = paths.reports / "setup_report.md"
@@ -386,11 +409,13 @@ def write_report(
         lines.append(f"- env file: `{wrapper.env_file}`")
         lines.append(f"- Codex approval prefix: `{wrapper.approval_prefix}`")
     lines.extend(["", "## Codex Skill Install", ""])
-    if skill_install is None:
+    installed_skills = list(skill_installs or ([] if skill_install is None else [skill_install]))
+    if not installed_skills:
         lines.append("- not installed")
     else:
-        lines.append(f"- source: `{skill_install.source}`")
-        lines.append(f"- installed: `{skill_install.dest}`")
+        for installed in installed_skills:
+            lines.append(f"- source: `{installed.source}`")
+            lines.append(f"- installed: `{installed.dest}`")
     lines.extend(["", "## Local State", ""])
     local_state = validate_local_state(cam_home)
     lines.extend(f"- {item}" for item in local_state) if local_state else lines.append("- empty")
@@ -488,11 +513,10 @@ def main(argv: list[str] | None = None) -> int:
         else:
             wrapper = create_default_cam_codx_wrapper(cam_home)
 
-    skill_install: CodexSkillInstall | None = None
+    skill_installs: list[CodexSkillInstall] = []
     if args.install_codex_skill:
-        skill_source = Path(__file__).resolve().parents[1] / "templates" / "skills" / "cam-codx-setup"
-        skill_dest = install_codex_skill(skill_source, args.codex_home)
-        skill_install = CodexSkillInstall(source=skill_source, dest=skill_dest)
+        skill_root = Path(__file__).resolve().parents[1] / "templates" / "skills"
+        skill_installs = install_codex_skills(skill_root, args.codex_home)
 
     report = write_report(
         cam_home,
@@ -501,7 +525,7 @@ def main(argv: list[str] | None = None) -> int:
         template_result,
         import_result,
         wrapper,
-        skill_install,
+        skill_installs=skill_installs,
     )
     print(f"Setup report written: {report}")
     print("")
@@ -511,9 +535,10 @@ def main(argv: list[str] | None = None) -> int:
         print("Approve this narrow command prefix in Codex when CAM needs DB writes:")
         print(f"  {wrapper.approval_prefix}")
         print("")
-    if skill_install is not None:
-        print("Codex skill installed:")
-        print(f"  {skill_install.dest}")
+    if skill_installs:
+        print("Codex skills installed:")
+        for installed in skill_installs:
+            print(f"  {installed.dest}")
         print("")
     print("Next:")
     print(f"  cd {paths.repos / 'CAM_Codx'}")

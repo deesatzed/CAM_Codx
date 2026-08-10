@@ -47,6 +47,17 @@ After setup is verified, Codex can use CAM_Codx/CAM_CAM to:
 - validate claims with command evidence;
 - save durable reports such as `CAM_SESSION_REPORT.md`.
 
+For routine software-engineering work, invoke the manager skill explicitly:
+
+```text
+Use cam-codx-swe to manage this build/update task with CAM recall and evidence gates.
+```
+
+This is not an implicit mining hook. Mining, provider spend, model promotion,
+and CAM self-enhancement require their own bounded packet and phase approval.
+Read [CAM_Codx Program Manager](CAM_CODEX_PROGRAM_MANAGER.md) for the exact
+flow.
+
 ## Clone The Hub And Engine
 
 ```bash
@@ -100,6 +111,7 @@ This creates:
 ```text
 ~/CAM/scripts/cam-codx
 ~/.codex/skills/cam-codx-setup/SKILL.md
+~/.codex/skills/cam-codx-swe/SKILL.md
 ```
 
 Test CAM through the wrapper:

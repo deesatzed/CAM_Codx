@@ -191,3 +191,17 @@
 - Chose runtime identity preflight and reviewed adoption manifests as the next
   P0 implementation batch. No automatic self-enhancement or CAG rebuild was
   performed in this audit.
+
+## 2026-08-10 CAM_Codx Program Manager
+
+- Approved and committed the CAM_Codx program-manager design and implementation
+  plan in `docs/plans/2026-08-10-cam-codx-program-manager-{design,}.md`.
+- Added `tools/cam_manager.py`, a fixed-operation, no-shell packet executor with
+  content-addressed scope, short-lived single-use approvals, and digest-only
+  execution receipts.
+- Added `templates/skills/cam-codx-swe/SKILL.md` and setup-wizard installation
+  of both the setup and routine SWE skills.
+- The routine path explicitly separates ordinary CAM recall from mining,
+  provider spend, model promotion, and self-enhancement swap.
+- CAM_CAM tournament correctness tests and a bounded self-enhancement proof
+  remain the next verification gates; no live self-enhancement swap is implied.

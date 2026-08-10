@@ -9,6 +9,7 @@ from tools.cam_setup_wizard import (
     ensure_layout,
     install_codex_skill,
     import_existing_runtime_state,
+    install_codex_skills,
     local_state_paths,
     write_report,
 )
@@ -259,3 +260,20 @@ def test_install_codex_skill_copies_template_to_codex_home(tmp_path: Path) -> No
 
     assert dest == codex_home / "skills" / "cam-codx-setup"
     assert (dest / "SKILL.md").read_text(encoding="utf-8").startswith("---")
+
+
+def test_install_codex_skills_installs_setup_and_routine_swe_skill(tmp_path: Path) -> None:
+    codex_home = tmp_path / ".codex"
+    source_root = tmp_path / "CAM_Codx" / "templates" / "skills"
+    for name in ("cam-codx-setup", "cam-codx-swe"):
+        source = source_root / name
+        source.mkdir(parents=True)
+        (source / "SKILL.md").write_text(
+            f"---\nname: {name}\ndescription: test\n---\n",
+            encoding="utf-8",
+        )
+
+    installs = install_codex_skills(source_root, codex_home)
+
+    assert {item.dest.name for item in installs} == {"cam-codx-setup", "cam-codx-swe"}
+    assert (codex_home / "skills" / "cam-codx-swe" / "SKILL.md").is_file()
