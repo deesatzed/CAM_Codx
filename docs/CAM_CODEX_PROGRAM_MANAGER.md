@@ -50,9 +50,9 @@ CAM to improve itself:
 ```bash
 python tools/cam_manager.py prepare self-enhance-start \
   --wrapper ~/CAM/scripts/cam-codx \
-  --arg --mode --arg supervised \
-  --arg --max-tasks --arg 1 \
-  --arg --skip-swap \
+  --arg=--mode --arg=supervised \
+  --arg=--max-tasks --arg=1 \
+  --arg=--skip-swap \
   --budget-usd 0 \
   --state-dir ~/CAM/local_state/CAM_Codx/manager
 ```
@@ -98,4 +98,3 @@ requires a separate user request, explicit roots/database/config, a frozen
 budgeted plan, and an evidence report. Self-enhancement is always staged:
 bounded supervised run, validation, protected-file review, then separately
 approved swap with backup and rollback.
-

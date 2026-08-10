@@ -203,5 +203,14 @@
   of both the setup and routine SWE skills.
 - The routine path explicitly separates ordinary CAM recall from mining,
   provider spend, model promotion, and self-enhancement swap.
-- CAM_CAM tournament correctness tests and a bounded self-enhancement proof
-  remain the next verification gates; no live self-enhancement swap is implied.
+- CAM_CAM tournament lineage hardening passed its focused 88-test gate.
+- A manager-approved, supervised self-enhancement run executed one task against
+  a disposable CAM_CAM copy with `--max-tasks 1 --skip-swap`. The generated
+  candidate changed `src/claw/memory/auto_fix.py`, but its focused regression
+  failed 5 tests, so the candidate was rejected and no live source, database,
+  profile, or configuration was swapped. This is the intended fail-closed
+  outcome; the candidate is not a proposed CAM change.
+- The manager execution receipt recorded return code 0 for the CAM CLI, while
+  CAM's own validation result is the acceptance authority. The disposable
+  copy is retained only long enough to inspect the failed candidate and will
+  not be published.
