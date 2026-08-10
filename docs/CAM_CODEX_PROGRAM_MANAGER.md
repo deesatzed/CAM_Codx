@@ -73,6 +73,12 @@ python tools/cam_manager.py execute <packet.json> \
   --state-dir ~/CAM/local_state/CAM_Codx/manager
 ```
 
+After a benchmark `select` report identifies a role candidate, model changes
+remain explicit manager phases. Use `models-promote` for `cam models set`,
+`models-profile-use` to activate an existing profile, and `models-rollback` to
+restore a promotion receipt; each requires a fresh approval for that exact
+packet.
+
 The manager records only content digests, paths, status, timestamps, and exit
 codes. It never stores `.env` values, API keys, prompts, repository contents,
 or raw CAM output. Approval state is mode `0700`; receipt files are `0600`.

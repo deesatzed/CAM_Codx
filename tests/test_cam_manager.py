@@ -148,3 +148,25 @@ def test_secret_bearing_arguments_are_rejected(tmp_path: Path) -> None:
             state_dir=tmp_path / "state",
         )
 
+
+@pytest.mark.parametrize(
+    ("operation", "expected_prefix"),
+    [
+        ("models-promote", ["models", "set"]),
+        ("models-rollback", ["models", "rollback"]),
+        ("models-profile-use", ["models", "profile", "use"]),
+    ],
+)
+def test_model_mutation_operations_use_current_cam_cli_prefixes(
+    tmp_path: Path, operation: str, expected_prefix: list[str]
+) -> None:
+    wrapper, _output = _fake_wrapper(tmp_path)
+    packet_path = prepare_packet(
+        operation=operation,
+        wrapper=wrapper,
+        args=["example"],
+        state_dir=tmp_path / "state",
+    )
+    packet = json.loads(packet_path.read_text(encoding="utf-8"))
+    assert packet["requires_approval"] is True
+    assert packet["argv"][1 : 1 + len(expected_prefix)] == expected_prefix

@@ -40,7 +40,12 @@ OPERATION_PREFIXES: dict[str, tuple[str, ...]] = {
     "self-enhance-validate": ("self-enhance", "validate"),
     "self-enhance-swap": ("self-enhance", "swap"),
     "self-enhance-rollback": ("self-enhance", "rollback"),
-    "models-promote": ("models", "embeddings", "promote"),
+    # CAM_CAM's current LLM role/profile controls are ``models set``,
+    # ``models rollback``, and ``models profile use``. Keep these explicit so
+    # a stale embeddings command cannot be approved by the manager.
+    "models-promote": ("models", "set"),
+    "models-rollback": ("models", "rollback"),
+    "models-profile-use": ("models", "profile", "use"),
 }
 
 OPERATION_PHASE: dict[str, str] = {
@@ -58,6 +63,8 @@ OPERATION_PHASE: dict[str, str] = {
     "self-enhance-swap": "promote",
     "self-enhance-rollback": "promote",
     "models-promote": "promote",
+    "models-rollback": "promote",
+    "models-profile-use": "promote",
 }
 
 READ_ONLY_OPERATIONS = {
@@ -539,4 +546,3 @@ def main(argv: list[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

@@ -214,3 +214,6 @@
   CAM's own validation result is the acceptance authority. The disposable
   copy is retained only long enough to inspect the failed candidate and will
   not be published.
+- Final runtime audit corrected the model-promotion allowlist to CAM_CAM's
+  current `models set`, `models rollback`, and `models profile use` commands;
+  focused tests cover all three approval-required prefixes.
