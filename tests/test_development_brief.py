@@ -1,4 +1,5 @@
 import importlib.util
+import json
 from pathlib import Path
 import subprocess
 import sys
@@ -7,6 +8,7 @@ import pytest
 
 
 MODULE_PATH = Path(__file__).parents[1] / "tools" / "development_brief.py"
+FIXTURE_PATH = Path(__file__).parent / "fixtures" / "development_brief_results.json"
 
 
 def _load_contract():
@@ -215,3 +217,107 @@ def test_continue_rescue_advice_is_explainable_for_all_outcomes(tmp_path: Path) 
     redevelop_advice = brief.recommend_continue_rescue(structurally_risky)
     assert redevelop_advice.action == "re-develop"
     assert "advisory" in redevelop_advice.limitation
+
+
+def _fake_cam_command(tmp_path: Path) -> tuple[Path, Path, Path]:
+    fixture = tmp_path / "results.json"
+    fixture.write_bytes(FIXTURE_PATH.read_bytes())
+    calls = tmp_path / "calls.json"
+    command = tmp_path / "cam"
+    command.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json\n"
+        "import os\n"
+        "from pathlib import Path\n"
+        "import sys\n"
+        "Path(os.environ['BRIEF_CALLS']).write_text(json.dumps(sys.argv[1:]), encoding='utf-8')\n"
+        "print(Path(os.environ['BRIEF_FIXTURE']).read_text(encoding='utf-8'))\n",
+        encoding="utf-8",
+    )
+    command.chmod(0o700)
+    return command, fixture, calls
+
+
+def test_primary_query_adapter_uses_explicit_argv_and_validates_fixture_payload(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    brief = _load_contract()
+    command, fixture, calls = _fake_cam_command(tmp_path)
+    database = tmp_path / "claw.db"
+    database.write_text("fixture only", encoding="utf-8")
+    monkeypatch.setenv("BRIEF_FIXTURE", str(fixture))
+    monkeypatch.setenv("BRIEF_CALLS", str(calls))
+
+    payload = brief.query_primary_corpus_read_only(
+        "durable import retry",
+        cam_command=command,
+        cam_database=database,
+        limit=2,
+    )
+
+    assert payload["scope"] == "primary_only"
+    assert payload["results"][0]["methodology_id"] == "method-python-retry"
+    assert json.loads(calls.read_text(encoding="utf-8")) == [
+        "brief-query",
+        "durable import retry",
+        "--db",
+        str(database),
+        "--limit",
+        "2",
+        "--json",
+    ]
+    with pytest.raises(brief.BriefValidationError, match="absolute"):
+        brief.query_primary_corpus_read_only(
+            "retry", cam_command=Path("cam"), cam_database=database, limit=2
+        )
+
+
+def test_classifier_distinguishes_direct_analogy_and_hypothesis() -> None:
+    brief = _load_contract()
+    payload = json.loads(FIXTURE_PATH.read_text(encoding="utf-8"))
+    request = brief.BriefRequest(mode="new", task_text="Build a Python durable import retry flow")
+
+    items = brief.classify_cam_evidence(
+        request,
+        payload["results"],
+        target_language="python",
+        analogy_rationales={
+            "method-go-transaction": "A durable transition boundary transfers despite the Go source stack."
+        },
+    )
+    hypothesis = brief.new_hypothesis(
+        title="Retry state snapshot before every external call",
+        why_it_applies="The target needs a new recovery boundary beyond the retrieved patterns.",
+        validation_needed="Add a failure-injection test before adoption.",
+    )
+
+    assert items[0].evidence_class is brief.EvidenceClass.DIRECT_PRECEDENT
+    assert items[1].evidence_class is brief.EvidenceClass.TRANSFERABLE_ANALOGY
+    assert "despite the Go" in items[1].why_it_applies
+    assert hypothesis.evidence_class is brief.EvidenceClass.NEW_HYPOTHESIS
+    assert "validation" in hypothesis.limitation
+
+
+def test_low_evidence_requests_named_scope_without_silently_expanding() -> None:
+    brief = _load_contract()
+
+    next_steps = brief.suggest_explicit_expansions(())
+
+    assert len(next_steps) == 1
+    assert next_steps[0].kind == "request_named_source_scope"
+    assert "name local source folders" in next_steps[0].summary.lower()
+    assert "/" not in next_steps[0].summary
+
+
+def test_module_help_states_the_no_write_primary_scope() -> None:
+    result = subprocess.run(
+        [sys.executable, str(MODULE_PATH), "--help"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0
+    rendered_help = " ".join(result.stdout.split())
+    assert "primary CAM knowledge" in rendered_help
+    assert "no mutation" in rendered_help

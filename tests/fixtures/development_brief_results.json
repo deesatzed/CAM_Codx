@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "scope": "primary_only",
+  "query": "durable import retry",
+  "results": [
+    {
+      "methodology_id": "method-python-retry",
+      "problem_description": "Retry Python imports after transient failures",
+      "methodology_notes": "Keep retry state durable and bound the attempt count.",
+      "tags": ["retry", "import", "python", "source:fixture-python"],
+      "language": "python",
+      "lifecycle_state": "viable",
+      "text_score": -0.9
+    },
+    {
+      "methodology_id": "method-go-transaction",
+      "problem_description": "Recover a transaction after an interrupted durable write",
+      "methodology_notes": "Persist the transition boundary before retrying work.",
+      "tags": ["transaction", "recovery", "source:fixture-go"],
+      "language": "go",
+      "lifecycle_state": "viable",
+      "text_score": -0.3
+    }
+  ]
+}

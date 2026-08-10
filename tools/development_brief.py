@@ -7,10 +7,13 @@ rendering.  Target inspection and CAM retrieval are added in later plan tasks.
 
 from __future__ import annotations
 
+import argparse
 from dataclasses import dataclass
 from enum import Enum
+import json
 import os
 from pathlib import Path
+import re
 import subprocess
 
 
@@ -50,6 +53,8 @@ _SKIPPED_DIRECTORIES = {".git", ".venv", "node_modules", "vendor", "build", "dis
 _SENSITIVE_NAME_MARKERS = (".env", "secret", "credential", "private", "token", "key")
 _MAX_INSPECTED_FILES = 200
 _MAX_FILE_BYTES = 256 * 1024
+_TERM_PATTERN = re.compile(r"[a-z0-9][a-z0-9_-]*")
+_NON_SIGNAL_TERMS = {"a", "an", "and", "build", "for", "in", "of", "the", "to", "with"}
 
 
 def _required_text(value: str, field_name: str) -> str:
@@ -333,6 +338,190 @@ def recommend_continue_rescue(
     )
 
 
+def _terms(value: str) -> set[str]:
+    return {term for term in _TERM_PATTERN.findall(value.lower()) if term not in _NON_SIGNAL_TERMS}
+
+
+def _validate_primary_payload(payload: object, query: str) -> dict[str, object]:
+    if not isinstance(payload, dict):
+        raise BriefValidationError("CAM brief-query output must be a JSON object")
+    if payload.get("schema_version") != 1:
+        raise BriefValidationError("CAM brief-query schema_version is unsupported")
+    if payload.get("scope") != "primary_only":
+        raise BriefValidationError("CAM brief-query response exceeds the primary-only scope")
+    if payload.get("query") != query.strip():
+        raise BriefValidationError("CAM brief-query response query does not match the request")
+    results = payload.get("results")
+    if not isinstance(results, list):
+        raise BriefValidationError("CAM brief-query response results must be a list")
+    required_keys = {
+        "methodology_id",
+        "problem_description",
+        "methodology_notes",
+        "tags",
+        "language",
+        "lifecycle_state",
+        "text_score",
+    }
+    for result in results:
+        if not isinstance(result, dict) or not required_keys.issubset(result):
+            raise BriefValidationError("CAM brief-query result is missing provenance fields")
+        if not isinstance(result["methodology_id"], str) or not result["methodology_id"].strip():
+            raise BriefValidationError("CAM brief-query result methodology_id is invalid")
+        if not isinstance(result["tags"], list) or not all(isinstance(tag, str) for tag in result["tags"]):
+            raise BriefValidationError("CAM brief-query result tags are invalid")
+    return payload
+
+
+def query_primary_corpus_read_only(
+    query: str,
+    *,
+    cam_command: Path,
+    cam_database: Path,
+    limit: int = 5,
+) -> dict[str, object]:
+    """Call CAM's explicit no-write primary query with an argv list only."""
+
+    clean_query = _required_text(query, "query")
+    command = Path(cam_command).expanduser()
+    database = Path(cam_database).expanduser()
+    if not command.is_absolute() or not database.is_absolute():
+        raise BriefValidationError("cam_command and cam_database must be absolute paths")
+    if not command.is_file() or not os.access(command, os.X_OK):
+        raise BriefValidationError(f"cam_command is not executable: {command}")
+    if not database.is_file():
+        raise BriefValidationError(f"cam_database is not a file: {database}")
+    if not isinstance(limit, int) or not 1 <= limit <= 20:
+        raise BriefValidationError("limit must be an integer between 1 and 20")
+
+    try:
+        completed = subprocess.run(
+            [
+                str(command),
+                "brief-query",
+                clean_query,
+                "--db",
+                str(database),
+                "--limit",
+                str(limit),
+                "--json",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise BriefValidationError(f"CAM brief-query could not run: {exc}") from exc
+    if completed.returncode != 0:
+        raise BriefValidationError("CAM brief-query returned a nonzero exit status")
+    try:
+        payload = json.loads(completed.stdout)
+    except json.JSONDecodeError as exc:
+        raise BriefValidationError("CAM brief-query did not return valid JSON") from exc
+    return _validate_primary_payload(payload, clean_query)
+
+
+def classify_cam_evidence(
+    request: BriefRequest,
+    results: list[object],
+    *,
+    target_language: str | None = None,
+    analogy_rationales: dict[str, str] | None = None,
+) -> tuple[EvidenceItem, ...]:
+    """Label each included CAM result as direct or an explained analogy."""
+
+    if not isinstance(request, BriefRequest):
+        raise BriefValidationError("request must be a BriefRequest")
+    target_terms = _terms(request.task_text)
+    language = target_language.strip().lower() if target_language and target_language.strip() else None
+    rationales = analogy_rationales or {}
+    items: list[EvidenceItem] = []
+
+    for result in results:
+        if not isinstance(result, dict):
+            raise BriefValidationError("CAM evidence result must be an object")
+        methodology_id = result.get("methodology_id")
+        description = result.get("problem_description")
+        notes = result.get("methodology_notes")
+        tags = result.get("tags")
+        result_language = result.get("language")
+        if not isinstance(methodology_id, str) or not isinstance(description, str):
+            raise BriefValidationError("CAM evidence result is missing method provenance")
+        if not isinstance(notes, str) or not isinstance(tags, list) or not all(isinstance(tag, str) for tag in tags):
+            raise BriefValidationError("CAM evidence result is malformed")
+        result_terms = _terms(" ".join([description, notes, *tags]))
+        overlapping_terms = sorted(target_terms & result_terms)
+        same_language = language is not None and isinstance(result_language, str) and result_language.lower() == language
+
+        if same_language and overlapping_terms:
+            items.append(
+                EvidenceItem(
+                    evidence_class=EvidenceClass.DIRECT_PRECEDENT,
+                    title=description,
+                    source_id=methodology_id,
+                    source_kind="cam_methodology",
+                    why_it_applies=(
+                        f"It shares the {language} target stack and task terms: "
+                        f"{', '.join(overlapping_terms[:4])}."
+                    ),
+                    confidence=Confidence.MEDIUM,
+                    limitation="Inspect the cited source before reusing it in this target.",
+                )
+            )
+            continue
+
+        rationale = rationales.get(methodology_id)
+        if rationale:
+            items.append(
+                EvidenceItem(
+                    evidence_class=EvidenceClass.TRANSFERABLE_ANALOGY,
+                    title=description,
+                    source_id=methodology_id,
+                    source_kind="cam_methodology",
+                    why_it_applies=_required_text(rationale, "transfer rationale"),
+                    confidence=Confidence.LOW,
+                    limitation="This is a transferable analogy, not a drop-in implementation.",
+                )
+            )
+
+    return tuple(items)
+
+
+def new_hypothesis(
+    *,
+    title: str,
+    why_it_applies: str,
+    validation_needed: str,
+) -> EvidenceItem:
+    """Represent a novel direction without misrepresenting it as recalled work."""
+
+    clean_title = _required_text(title, "hypothesis title")
+    source_id = "hypothesis:" + "-".join(_TERM_PATTERN.findall(clean_title.lower()))
+    return EvidenceItem(
+        evidence_class=EvidenceClass.NEW_HYPOTHESIS,
+        title=clean_title,
+        source_id=source_id,
+        source_kind="development_brief_hypothesis",
+        why_it_applies=_required_text(why_it_applies, "hypothesis rationale"),
+        confidence=Confidence.LOW,
+        limitation=f"Needs validation: {_required_text(validation_needed, 'hypothesis validation')}",
+    )
+
+
+def suggest_explicit_expansions(evidence_items: tuple[EvidenceItem, ...]) -> tuple[NextStep, ...]:
+    """Offer a named-scope expansion only when default-scope evidence is thin."""
+
+    if evidence_items:
+        return ()
+    return (
+        NextStep(
+            kind="request_named_source_scope",
+            summary="Name local source folders to consider for a later scan-only expansion.",
+        ),
+    )
+
+
 def render_markdown(brief: DevelopmentBrief) -> str:
     """Render a concise Development Brief without performing any I/O."""
 
@@ -390,3 +579,23 @@ def render_markdown(brief: DevelopmentBrief) -> str:
         lines.extend(f"- **{item.kind}:** {item.summary}" for item in brief.optional_next_steps)
 
     return "\n".join(lines).rstrip() + "\n"
+
+
+def _parser() -> argparse.ArgumentParser:
+    return argparse.ArgumentParser(
+        description=(
+            "Create a Development Brief from a named target and existing primary CAM knowledge; "
+            "no mutation, mining, provider call, or test execution occurs by default."
+        )
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Expose the no-write scope now; Task 5 wires the full CLI workflow."""
+
+    _parser().parse_args(argv)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
