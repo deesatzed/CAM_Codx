@@ -231,7 +231,9 @@ def _fake_cam_command(tmp_path: Path) -> tuple[Path, Path, Path]:
         "from pathlib import Path\n"
         "import sys\n"
         "Path(os.environ['BRIEF_CALLS']).write_text(json.dumps(sys.argv[1:]), encoding='utf-8')\n"
-        "print(Path(os.environ['BRIEF_FIXTURE']).read_text(encoding='utf-8'))\n",
+        "payload = json.loads(Path(os.environ['BRIEF_FIXTURE']).read_text(encoding='utf-8'))\n"
+        "payload['query'] = sys.argv[2]\n"
+        "print(json.dumps(payload))\n",
         encoding="utf-8",
     )
     command.chmod(0o700)
@@ -321,3 +323,79 @@ def test_module_help_states_the_no_write_primary_scope() -> None:
     rendered_help = " ".join(result.stdout.split())
     assert "primary CAM knowledge" in rendered_help
     assert "no mutation" in rendered_help
+
+
+def test_cli_new_mode_renders_to_stdout_without_target_or_database_writes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    brief = _load_contract()
+    command, fixture, calls = _fake_cam_command(tmp_path)
+    database = tmp_path / "claw.db"
+    database.write_text("fixture only", encoding="utf-8")
+    target = tmp_path / "new-target"
+    target.mkdir()
+    before_target = tuple(sorted(item.relative_to(target) for item in target.rglob("*")))
+    before_database = database.read_bytes()
+    monkeypatch.setenv("BRIEF_FIXTURE", str(fixture))
+    monkeypatch.setenv("BRIEF_CALLS", str(calls))
+
+    exit_code = brief.main(
+        [
+            "new",
+            "--task",
+            "Build a Python durable import retry flow",
+            "--target-repo",
+            str(target),
+            "--cam-command",
+            str(command),
+            "--cam-db",
+            str(database),
+        ]
+    )
+
+    output = capsys.readouterr().out
+    assert exit_code == 0
+    assert output.startswith("# Development Brief")
+    assert "Direct precedent" in output
+    assert tuple(sorted(item.relative_to(target) for item in target.rglob("*"))) == before_target
+    assert database.read_bytes() == before_database
+    assert not (target / "CAM_DEVELOPMENT_BRIEF.md").exists()
+
+
+def test_cli_continue_rescue_writes_only_an_explicit_named_output(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    brief = _load_contract()
+    command, fixture, calls = _fake_cam_command(tmp_path)
+    database = tmp_path / "claw.db"
+    database.write_text("fixture only", encoding="utf-8")
+    target = tmp_path / "existing-target"
+    target.mkdir()
+    _git_repository(target)
+    output_path = tmp_path / "operator-brief.md"
+    monkeypatch.setenv("BRIEF_FIXTURE", str(fixture))
+    monkeypatch.setenv("BRIEF_CALLS", str(calls))
+
+    exit_code = brief.main(
+        [
+            "continue-rescue",
+            "--task",
+            "Decide the smallest safe next repair",
+            "--target-repo",
+            str(target),
+            "--cam-command",
+            str(command),
+            "--cam-db",
+            str(database),
+            "--output",
+            str(output_path),
+        ]
+    )
+
+    assert exit_code == 0
+    assert output_path.is_file()
+    assert "## Recommendation" in output_path.read_text(encoding="utf-8")
+    assert "re-develop" in output_path.read_text(encoding="utf-8")
+    assert "Wrote Development Brief" in capsys.readouterr().out
+    assert not list(target.glob("*.md")) == []
+    assert not (target / "operator-brief.md").exists()

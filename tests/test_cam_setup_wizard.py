@@ -265,7 +265,7 @@ def test_install_codex_skill_copies_template_to_codex_home(tmp_path: Path) -> No
 def test_install_codex_skills_installs_setup_and_routine_swe_skill(tmp_path: Path) -> None:
     codex_home = tmp_path / ".codex"
     source_root = tmp_path / "CAM_Codx" / "templates" / "skills"
-    for name in ("cam-codx-setup", "cam-codx-swe"):
+    for name in ("cam-codx-setup", "cam-codx-swe", "cam-codx-development-brief"):
         source = source_root / name
         source.mkdir(parents=True)
         (source / "SKILL.md").write_text(
@@ -275,5 +275,10 @@ def test_install_codex_skills_installs_setup_and_routine_swe_skill(tmp_path: Pat
 
     installs = install_codex_skills(source_root, codex_home)
 
-    assert {item.dest.name for item in installs} == {"cam-codx-setup", "cam-codx-swe"}
+    assert {item.dest.name for item in installs} == {
+        "cam-codx-setup",
+        "cam-codx-swe",
+        "cam-codx-development-brief",
+    }
     assert (codex_home / "skills" / "cam-codx-swe" / "SKILL.md").is_file()
+    assert (codex_home / "skills" / "cam-codx-development-brief" / "SKILL.md").is_file()

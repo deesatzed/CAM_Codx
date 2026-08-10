@@ -25,6 +25,10 @@ not a hidden hook: ordinary Codex work remains possible when CAM is absent.
 2. Run read-only CAM identity/model status through the setup-generated wrapper
    when paths are known. Never print `.env` values or database contents.
 3. Recall relevant CAM methods and use them as evidence-backed suggestions.
+   When the developer explicitly asks what earlier, dissimilar, or in-progress
+   work should inform a new build, continuation, rescue, mitigation, or
+   re-development decision, invoke `cam-codx-development-brief` first. Do not
+   invoke it automatically for every SWE task.
 4. Create or update the target repository's goal and implementation plan.
 5. Implement the smallest coherent change, then run the target tests and
    verification commands.
@@ -68,4 +72,3 @@ When the user explicitly requests CAM to improve itself, use this staged path:
 
 If a phase fails, stop at that phase and report the exact artifact. Never turn
 an analysis-only result or a failed validation into a success claim.
-

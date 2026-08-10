@@ -79,6 +79,7 @@ that any uncheckpointed WAL data or unavailable federated database is valid.
 
 | Desired outcome | Start here | Do not start with |
 | --- | --- | --- |
+| Start a new project or decide how to rescue one | `cam-codx-development-brief` | Mining, a provider call, or autonomous repair |
 | Understand a repo safely | `evaluate --mode structural` or `preflight` | `enhance` |
 | Reuse past CAM knowledge | `kb search`, `federate`, or MCP `query_memory` | Mining the target again |
 | Assess a GitHub repo before cloning | `premine` | Clone/execute it |

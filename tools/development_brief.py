@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import sys
 
 
 class BriefValidationError(ValueError):
@@ -522,6 +523,136 @@ def suggest_explicit_expansions(evidence_items: tuple[EvidenceItem, ...]) -> tup
     )
 
 
+def _target_evidence_from_inspection(inspection: TargetInspection | None) -> tuple[TargetEvidence, ...]:
+    if inspection is None:
+        return ()
+    evidence: list[TargetEvidence] = []
+    if inspection.read_truth_files:
+        evidence.append(
+            TargetEvidence(
+                category="repository truth",
+                summary=f"Read: {', '.join(inspection.read_truth_files)}.",
+                source_path=str(inspection.target_path),
+            )
+        )
+    if inspection.is_git_repository:
+        branch = inspection.branch or "unknown branch"
+        summary = f"Git repository on {branch}; {len(inspection.dirty_entries)} dirty entry(s)."
+        evidence.append(TargetEvidence(category="git state", summary=summary, source_path=str(inspection.target_path)))
+    for gap in inspection.visible_gaps[:5]:
+        evidence.append(TargetEvidence(category="visible gap", summary=gap, source_path=str(inspection.target_path)))
+    for risk in inspection.risks:
+        evidence.append(TargetEvidence(category="inspection risk", summary=risk, source_path=str(inspection.target_path)))
+    return tuple(evidence)
+
+
+def _infer_target_language(task_text: str, explicit_language: str | None) -> str | None:
+    if explicit_language and explicit_language.strip():
+        return explicit_language.strip().lower()
+    task_terms = _terms(task_text)
+    for language in ("python", "typescript", "javascript", "rust", "go", "swift", "java", "kotlin"):
+        if language in task_terms:
+            return language
+    return None
+
+
+def build_development_brief(
+    request: BriefRequest,
+    *,
+    cam_command: Path,
+    cam_database: Path,
+    target_path: Path | None = None,
+    limit: int = 5,
+    target_language: str | None = None,
+    analogy_rationales: dict[str, str] | None = None,
+) -> DevelopmentBrief:
+    """Assemble a read-only brief from one target and the primary CAM corpus."""
+
+    inspection = inspect_target_read_only(target_path) if target_path is not None else None
+    payload = query_primary_corpus_read_only(
+        request.task_text,
+        cam_command=cam_command,
+        cam_database=cam_database,
+        limit=limit,
+    )
+    evidence_items = classify_cam_evidence(
+        request,
+        payload["results"],
+        target_language=_infer_target_language(request.task_text, target_language),
+        analogy_rationales=analogy_rationales,
+    )
+    limitations = [
+        "CAM recall used the explicitly supplied primary corpus only; it did not query federated siblings.",
+        "Repository verification was not run by this brief.",
+    ]
+    optional_next_steps = suggest_explicit_expansions(evidence_items)
+
+    if request.mode == "continue-rescue":
+        if inspection is None:
+            raise BriefValidationError("continue-rescue mode requires --target-repo")
+        advice = recommend_continue_rescue(inspection)
+        limitations.append(advice.limitation)
+        return DevelopmentBrief(
+            request=request,
+            target_evidence=_target_evidence_from_inspection(inspection),
+            evidence_items=evidence_items,
+            recommendation=f"Recommended action: {advice.action}. " + " ".join(advice.reasons),
+            recommended_next_step=advice.recommended_next_step,
+            optional_next_steps=optional_next_steps,
+            limitations=tuple(limitations),
+        )
+
+    if evidence_items:
+        first = evidence_items[0]
+        recommendation = "Start by inspecting the strongest labelled precedent before adapting any implementation."
+        next_step = NextStep(
+            kind="inspect_source",
+            summary=f"Inspect CAM methodology {first.source_id} and create a bounded target plan.",
+        )
+    else:
+        recommendation = "Default-scope recall is thin; define the smallest target plan before expanding search scope."
+        next_step = NextStep(
+            kind="create_plan",
+            summary="Create a small goal and implementation plan with a first verification check.",
+        )
+    return DevelopmentBrief(
+        request=request,
+        target_evidence=_target_evidence_from_inspection(inspection),
+        evidence_items=evidence_items,
+        recommendation=recommendation,
+        recommended_next_step=next_step,
+        optional_next_steps=optional_next_steps,
+        limitations=tuple(limitations),
+    )
+
+
+def _parse_analogy_rationales(values: list[str]) -> dict[str, str]:
+    rationales: dict[str, str] = {}
+    for value in values:
+        methodology_id, separator, rationale = value.partition("=")
+        if not separator:
+            raise BriefValidationError("--analogy-rationale must use METHODOLOGY_ID=RATIONALE")
+        rationales[_required_text(methodology_id, "analogy methodology id")] = _required_text(
+            rationale, "analogy rationale"
+        )
+    return rationales
+
+
+def _write_explicit_output(markdown: str, output_path: Path, target_path: Path | None) -> Path:
+    destination = output_path.expanduser().resolve()
+    if target_path is not None:
+        target = target_path.expanduser().resolve()
+        try:
+            destination.relative_to(target)
+        except ValueError:
+            pass
+        else:
+            raise BriefValidationError("--output must be outside --target-repo to preserve the read-only target default")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(markdown, encoding="utf-8")
+    return destination
+
+
 def render_markdown(brief: DevelopmentBrief) -> str:
     """Render a concise Development Brief without performing any I/O."""
 
@@ -582,19 +713,54 @@ def render_markdown(brief: DevelopmentBrief) -> str:
 
 
 def _parser() -> argparse.ArgumentParser:
-    return argparse.ArgumentParser(
+    parser = argparse.ArgumentParser(
         description=(
             "Create a Development Brief from a named target and existing primary CAM knowledge; "
             "no mutation, mining, provider call, or test execution occurs by default."
         )
     )
+    parser.add_argument("mode", choices=("new", "continue-rescue"), help="Brief mode")
+    parser.add_argument("--task", required=True, help="Plain-language development request")
+    parser.add_argument("--target-repo", type=Path, help="Explicit target repository; required for continue-rescue")
+    parser.add_argument("--cam-command", type=Path, required=True, help="Absolute path to CAM's executable")
+    parser.add_argument("--cam-db", type=Path, required=True, help="Absolute path to CAM's primary claw.db")
+    parser.add_argument("--limit", type=int, default=5, help="Maximum primary-corpus methods to inspect")
+    parser.add_argument("--target-language", help="Optional target language hint")
+    parser.add_argument(
+        "--analogy-rationale",
+        action="append",
+        default=[],
+        metavar="METHODOLOGY_ID=RATIONALE",
+        help="Explicit reason a dissimilar method transfers to this target",
+    )
+    parser.add_argument("--output", type=Path, help="Explicit Markdown output path outside the target repository")
+    return parser
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Expose the no-write scope now; Task 5 wires the full CLI workflow."""
+    """Render a Development Brief to stdout or one explicit output file."""
 
-    _parser().parse_args(argv)
-    return 0
+    args = _parser().parse_args(argv)
+    try:
+        brief = build_development_brief(
+            BriefRequest(mode=args.mode, task_text=args.task),
+            cam_command=args.cam_command,
+            cam_database=args.cam_db,
+            target_path=args.target_repo,
+            limit=args.limit,
+            target_language=args.target_language,
+            analogy_rationales=_parse_analogy_rationales(args.analogy_rationale),
+        )
+        markdown = render_markdown(brief)
+        if args.output is None:
+            print(markdown, end="")
+        else:
+            output = _write_explicit_output(markdown, args.output, args.target_repo)
+            print(f"Wrote Development Brief: {output}")
+        return 0
+    except BriefValidationError as exc:
+        print(f"Development Brief error: {exc}", file=sys.stderr)
+        return 2
 
 
 if __name__ == "__main__":

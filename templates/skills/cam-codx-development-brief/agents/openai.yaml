@@ -1,0 +1,4 @@
+interface:
+  display_name: "CAM Development Brief"
+  short_description: "Start or rescue software projects from cited prior work."
+  default_prompt: "Use cam-codx-development-brief to assess this project from prior CAM evidence."

@@ -90,9 +90,18 @@ For normal build/update/debug work, use:
 Use cam-codx-swe to manage this SWE task with CAM recall and evidence gates.
 ```
 
+For a focused new-project or continue/rescue decision, use:
+
+```text
+Use cam-codx-development-brief to start this project from relevant prior work.
+```
+
 The routine skill does not mine repositories or change CAM automatically. See
 the [CAM_Codx program manager](docs/CAM_CODEX_PROGRAM_MANAGER.md) for the
 packet, approval, tournament, and staged self-enhancement flow.
+
+Read [CAM Development Brief](docs/CAM_DEVELOPMENT_BRIEF.md) for the read-only
+recall and next-step workflow.
 
 For the novice step-by-step flow and use cases, read:
 
