@@ -343,11 +343,16 @@ def install_codex_skill(source: Path, codex_home: Path) -> Path:
 
 
 def install_codex_skills(source_root: Path, codex_home: Path) -> list[CodexSkillInstall]:
-    """Install the setup, routine SWE, and Development Brief skills together."""
+    """Install the setup, routine SWE, brief, and pull/mine skills together."""
 
     source_root = source_root.expanduser().resolve()
     installs: list[CodexSkillInstall] = []
-    for name in ("cam-codx-setup", "cam-codx-swe", "cam-codx-development-brief"):
+    for name in (
+        "cam-codx-setup",
+        "cam-codx-swe",
+        "cam-codx-development-brief",
+        "cam-codx-pull-mine-dir",
+    ):
         source = source_root / name
         if not (source / "SKILL.md").is_file():
             # Older CAM_Codx checkouts may predate the routine skill. Keep setup

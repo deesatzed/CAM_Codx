@@ -257,12 +257,15 @@ python tools/cam_setup_wizard.py \
 ~/CAM/scripts/cam-codx status
 ```
 
-It installs these three skills under `~/.codex/skills/`:
+It installs these four skills under `~/.codex/skills/`:
 
 - `cam-codx-setup` — verify the local CAM installation and narrow wrapper.
 - `cam-codx-swe` — build, update, review, and debug a defined SWE task.
 - `cam-codx-development-brief` — make an early new-project or rescue decision
   from read-only evidence.
+- `cam-codx-pull-mine-dir` — explicitly update eligible repositories, mine one
+  pinned `claw.db`, and report whether evidence warrants one `--skip-swap`
+  candidate.
 
 ### B. Routine SWE skill
 
@@ -300,7 +303,30 @@ retrieval usage, or broaden into sibling corpora. See
 [CAM Development Brief](CAM_DEVELOPMENT_BRIEF.md) for the explicit CLI and
 later scan-only expansion gate.
 
-### D. Fixed-operation program manager
+### D. Pull, mine, and assess one directory
+
+Use this only when you explicitly want to update and mine a local directory;
+routine SWE and the Development Brief do not imply it.
+
+```text
+Use cam-codx-pull-mine-dir to update and mine this repository directory. Use --source-root for another user's folder, begin with --dry-run when I ask for preview, pin claw.db and claw.toml, and report the evidence gate.
+```
+
+The default source root is
+`/Volumes/WS4TB/waswiki/repos2mine/repo622sn`; use
+`--source-root /absolute/path/to/repos` elsewhere. A live invocation may update
+only clean/upstream repositories via fast-forward Git, write the pinned corpus
+and normal ledger, and run at most one supervised `--skip-swap` candidate after
+the five-findings/two-repository/repeated-gap gate passes. Dirty, conflicted,
+detached, no-upstream, failed-fetch, and non-fast-forward repositories are
+reported without stopping later repositories.
+
+`--dry-run` writes a private report but does not fetch, pull, mine, alter
+`claw.db`, update the ledger, or issue a candidate packet. `self-enhance swap`,
+model/profile changes, rollback, and live configuration changes always need a
+separate explicit approval. See [CAM Pull Mine Directory](CAM_PULL_MINE_DIR.md).
+
+### E. Fixed-operation program manager
 
 `tools/cam_manager.py` creates a content-addressed argv packet, a short-lived
 single-use approval, and a digest-only receipt. It never executes through a

@@ -13,12 +13,18 @@ remain below as provenance, not as the current feature inventory.
 - The packet/approval manager supports fixed operation packets, single-use
   approvals, digest-only receipts, and separately gated model/self-enhancement
   promotion or rollback.
-- Three Codex skills are installable: setup, routine SWE, and Development Brief.
+- Four Codex skills are installable: setup, routine SWE, Development Brief, and
+  `cam-codx-pull-mine-dir`.
 - The Development Brief gives early new-project and continue/rescue guidance
   with direct-precedent, transferable-analogy, and new-hypothesis labels.
 - Development Brief recall uses a supplied primary corpus only and is read-only:
   no mining, provider calls, target edits, retrieval telemetry, or sibling
   corpus search occurs by default.
+- The Pull Mine Directory skill is an explicit bounded phase: `--source-root`
+  selects another user's repository directory, `--dry-run` performs no Git/CAM
+  writes, and a live pass can only reach one supervised `--skip-swap` candidate
+  after its evidence gate. It cannot swap, promote, roll back, or edit live
+  configuration.
 - A shared capability contract exists at
   `agent-packs/contract/cam_agent_capabilities.json`.
 - `docs/AGENT_PACKS.md` explains the generated-pack architecture.

@@ -132,6 +132,7 @@ This creates:
 ~/.codex/skills/cam-codx-setup/SKILL.md
 ~/.codex/skills/cam-codx-swe/SKILL.md
 ~/.codex/skills/cam-codx-development-brief/SKILL.md
+~/.codex/skills/cam-codx-pull-mine-dir/SKILL.md
 ```
 
 Test CAM through the wrapper:

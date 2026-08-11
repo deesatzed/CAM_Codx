@@ -1,0 +1,4 @@
+interface:
+  display_name: "CAM Pull Mine Directory"
+  short_description: "Safely mine one CAM corpus from eligible repositories."
+  default_prompt: "Use CAM_Codx_Pull_Mine_Dir to update and mine this repository directory."

@@ -135,3 +135,38 @@ Constraint: each additional source root must be explicitly named, exist below
 an approved parent, and pass the relocation gate. A failed gate renders its
 unavailable paths and prevents a wider search; it does not repair configuration
 or invoke any scan/mining command.
+
+## 2026-08-11: Bound Pull/Mine Invocation To One Controlled Evidence Cycle
+
+Decision: invoking `cam-codx-pull-mine-dir` authorizes only its bounded cycle:
+safe fast-forward updates for eligible repositories, scan and live
+changed-only/no-task mining against one explicit corpus, normal corpus
+ledger/receipt updates, evidence assessment, and at most one manager-backed
+supervised candidate with `--max-tasks 1 --skip-swap` when the meaningfulness
+threshold is met.
+
+Reason: the workflow should make prior work useful during early development and
+rescue work without turning ordinary invocation into open-ended provider spend
+or mutation of the CAM runtime.
+
+Constraint: the invocation never authorizes `self-enhance swap`, model or
+profile promotion/rollback, live source edits, or live configuration changes.
+Those remain separate explicit operations with their own manager approval and
+rollback evidence. Repositories that are dirty, conflicted, detached, lack an
+upstream, or cannot fast-forward are reported and skipped or failed without
+blocking unrelated eligible repositories.
+
+## 2026-08-11: Require an Explicit Semantic-Gap Attestation
+
+Decision: derive the numeric evidence gate from the pinned corpus and mining
+ledger, but require the operator to pass `--repeated-pattern-or-gap` before a
+meaningful mining result may dispatch the supervised `--skip-swap` candidate.
+
+Reason: the current corpus and ledger can truthfully establish methodology
+deltas and source-repository provenance, but cannot by themselves prove the
+semantic conclusion that a repeated pattern or concrete capability gap exists.
+Defaulting that conclusion to false avoids an invented candidate trigger.
+
+Constraint: the attestation authorizes only the one already-bounded candidate.
+It does not grant a self-enhance swap, model/profile change, rollback, source
+edit, or live configuration change.

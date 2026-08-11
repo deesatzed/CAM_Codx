@@ -96,6 +96,17 @@ For a focused new-project or continue/rescue decision, use:
 Use cam-codx-development-brief to start this project from relevant prior work.
 ```
 
+For an explicitly authorized bounded directory update and mining cycle, use:
+
+```text
+Use cam-codx-pull-mine-dir to update and mine this repository directory. Start with --dry-run if I asked for a preview; otherwise use the pinned claw.db, a local hard-cap defaults file, and report the evidence gate and --skip-swap candidate verdict.
+```
+
+Use `--source-root /absolute/path/to/repos` when the default mining directory
+does not apply. The skill never turns this invocation into `self-enhance swap`,
+a model/profile change, or a configuration edit; those remain separately
+approved operations. See [CAM Pull Mine Directory](docs/CAM_PULL_MINE_DIR.md).
+
 The routine skill does not mine repositories or change CAM automatically. See
 the [CAM_Codx program manager](docs/CAM_CODEX_PROGRAM_MANAGER.md) for the
 packet, approval, tournament, and staged self-enhancement flow.
@@ -109,12 +120,14 @@ Choose the smallest workflow that fits the need:
 | --- | --- | --- |
 | Shape a new project or decide how to resume an existing one | `cam-codx-development-brief` | Named target plus one explicit primary corpus; no mining, provider calls, edits, or telemetry writes. |
 | Build, update, review, or debug a defined task | `cam-codx-swe` | Read-only CAM recall first; repository-native tests decide whether the change is accepted. |
-| Mine, compare models, or self-enhance CAM | `cam_manager.py` and the program-manager workflow | A separate phase, bounded packet, explicit approval, and evidence receipt. |
+| Update and mine one local repository directory | `cam-codx-pull-mine-dir` | Explicit source root (or default), pinned `claw.db`/config, hard cap, receipts, and at most one supervised `--skip-swap` candidate. |
+| Compare models or promote/self-enhance CAM | `cam_manager.py` and the program-manager workflow | A separate phase, bounded packet, explicit approval, and evidence receipt. |
 
 For the novice step-by-step flow and use cases, read:
 
 - [Codex quickstart](docs/QUICKSTART_CODEX.md)
 - [CAM Development Brief](docs/CAM_DEVELOPMENT_BRIEF.md)
+- [CAM Pull Mine Directory](docs/CAM_PULL_MINE_DIR.md)
 - [New computer setup walkthrough](docs/NEW_COMPUTER_SETUP_WALKTHROUGH.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [XTtape CAM showpiece case study](docs/examples/XTTAPE_CAM_SHOWPIECE_CASE_STUDY.md)
