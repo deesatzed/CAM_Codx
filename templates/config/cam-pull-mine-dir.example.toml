@@ -1,0 +1,6 @@
+# Copy to a user-local path and provide a provider-approved model and hard cap.
+# This file contains no credentials; the CAM runtime resolves credentials itself.
+exact_model = "replace-with-your-approved-model"
+max_repos = 20
+max_minutes = 120
+max_cost_usd = 5.0
