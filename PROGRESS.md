@@ -232,3 +232,10 @@
   a relocation gate rather than triggering a broader search.
 - Focused Development Brief and setup-wizard tests are recorded by the final
   cross-repository verification task; no live corpus was queried for this work.
+- Final CAM_Codx verification in the isolated Development Brief worktree:
+  `python -m pytest -q -p no:cacheprovider tests` passed with `44 passed`;
+  `python tools/generate_agent_packs.py --check` and `git diff --check` passed.
+- The companion CAM_CAM worktree verification passed `78` focused tests across
+  `test_read_only_brief_query.py`, `test_tool_schemas.py`, and
+  `test_integration_wiring.py`; `python -m claw.cli brief-query --help` passed.
+  The read-only proof uses a synthetic fixture database only, not a live corpus.
