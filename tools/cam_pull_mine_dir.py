@@ -6,15 +6,21 @@ execution, database writes, and candidate dispatch are added in later tasks.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+import argparse
+from dataclasses import asdict, dataclass, replace
+from datetime import datetime, timezone
 from hashlib import sha256
 import json
 from pathlib import Path
 import os
 import sqlite3
 import subprocess
+import sys
 import tomllib
 from typing import Any, Callable, Literal
+
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from tools.cam_manager import execute_packet, issue_approval, prepare_packet
 
@@ -95,7 +101,7 @@ class Eligibility:
 class RepositoryUpdate:
     path: Path
     branch: str | None
-    status: Literal["updated", "already_current", "skipped", "failed"]
+    status: Literal["updated", "already_current", "planned", "skipped", "failed"]
     reason: str
 
     def to_dict(self) -> dict[str, str | None]:
@@ -155,6 +161,10 @@ class PullMineReceipt:
     live: CommandSummary | None
     candidate_verdict: str
     redaction_values: tuple[str, ...] = ()
+    candidate_packet_path: Path | None = None
+    candidate_approval_path: Path | None = None
+    candidate_receipt_path: Path | None = None
+    candidate_returncode: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -169,6 +179,16 @@ class PullMineReceipt:
             "scan": self.scan.to_dict(),
             "live": self.live.to_dict() if self.live is not None else None,
             "candidate_verdict": self.candidate_verdict,
+            "candidate_packet_path": str(self.candidate_packet_path)
+            if self.candidate_packet_path is not None
+            else None,
+            "candidate_approval_path": str(self.candidate_approval_path)
+            if self.candidate_approval_path is not None
+            else None,
+            "candidate_receipt_path": str(self.candidate_receipt_path)
+            if self.candidate_receipt_path is not None
+            else None,
+            "candidate_returncode": self.candidate_returncode,
         }
         return _redact_value(payload, self.redaction_values)
 
@@ -188,6 +208,13 @@ class CandidateOutcome:
     approval_path: Path | None = None
     receipt_path: Path | None = None
     returncode: int | None = None
+
+
+@dataclass(frozen=True)
+class PullMineRun:
+    receipt: PullMineReceipt
+    json_path: Path
+    markdown_path: Path
 
 
 def load_local_defaults(path: Path | None) -> dict[str, str | int | float]:
@@ -615,9 +642,17 @@ def render_markdown_report(receipt: PullMineReceipt) -> str:
             "## Candidate",
             "",
             f"- Candidate verdict: {receipt.candidate_verdict}",
-            "",
         ]
     )
+    if receipt.candidate_packet_path is not None:
+        lines.append(f"- Packet: `{receipt.candidate_packet_path}`")
+    if receipt.candidate_approval_path is not None:
+        lines.append(f"- Approval: `{receipt.candidate_approval_path}`")
+    if receipt.candidate_receipt_path is not None:
+        lines.append(f"- Manager receipt: `{receipt.candidate_receipt_path}`")
+    if receipt.candidate_returncode is not None:
+        lines.append(f"- Candidate return code: {receipt.candidate_returncode}")
+    lines.append("")
     return _redact_text("\n".join(lines), receipt.redaction_values)
 
 
@@ -695,3 +730,220 @@ def launch_candidate_if_warranted(
         receipt_path=manager_receipt_path,
         returncode=returncode,
     )
+
+
+def _subprocess_git_runner(argv: list[str]) -> CommandResult:
+    completed = subprocess.run(
+        argv,
+        text=True,
+        capture_output=True,
+        check=False,
+        shell=False,
+    )
+    return CommandResult(completed.returncode, completed.stdout, completed.stderr)
+
+
+def _dry_run_update(repo: Path, runner: CommandRunner) -> RepositoryUpdate:
+    eligibility = inspect_update_eligibility(repo, runner)
+    if eligibility.status == "eligible":
+        return RepositoryUpdate(
+            path=repo,
+            branch=eligibility.branch,
+            status="planned",
+            reason="eligible; dry-run did not fetch or pull",
+        )
+    return RepositoryUpdate(
+        path=repo,
+        branch=eligibility.branch,
+        status=eligibility.status,
+        reason=eligibility.reason,
+    )
+
+
+def _initial_dry_run_receipt(
+    config: PullMineConfig,
+    updates: tuple[RepositoryUpdate, ...],
+) -> PullMineReceipt:
+    assessment = assess_meaningful_mining(
+        validated_provenance_findings=0,
+        source_repositories=0,
+        repeated_pattern_or_gap=False,
+    )
+    planned = CommandSummary(
+        returncode=0,
+        stdout_digest="not-run",
+        stderr_digest="not-run",
+        stdout_summary="dry-run planned a scan-only CAM command",
+        stderr_summary="",
+    )
+    snapshot = CorpusSnapshot(0, None, "not_checked")
+    return PullMineReceipt(
+        source_root=config.source_root,
+        database_fingerprint=fingerprint_file(config.cam_db),
+        config_fingerprint=fingerprint_file(config.cam_config),
+        before=snapshot,
+        after=snapshot,
+        delta=MiningDelta(0, None, 0, frozenset()),
+        updates=updates,
+        assessment=assessment,
+        scan=planned,
+        live=None,
+        candidate_verdict="not_run_dry_run",
+    )
+
+
+def _budget_receipt_path(config: PullMineConfig) -> Path:
+    budgets_dir = config.state_dir / "budgets"
+    budgets_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    budgets_dir.chmod(0o700)
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return budgets_dir / f"mine-workspace-{timestamp}.json"
+
+
+def run_pull_mine_directory(
+    config: PullMineConfig,
+    *,
+    dry_run: bool,
+    repeated_pattern_or_gap: bool = False,
+    git_runner: CommandRunner = _subprocess_git_runner,
+    mining_runner: MiningCommandRunner = _subprocess_mining_runner,
+) -> PullMineRun:
+    """Coordinate the bounded workflow and always return redacted report paths."""
+    validate_config(config)
+    repositories = discover_git_repositories(config.source_root)
+    updates = tuple(
+        _dry_run_update(repository, git_runner)
+        if dry_run
+        else update_repository(repository, git_runner)
+        for repository in repositories
+    )
+    reports_dir = config.state_dir / "reports"
+    if dry_run:
+        receipt = _initial_dry_run_receipt(config, updates)
+        json_path, markdown_path = write_report(receipt, reports_dir)
+        return PullMineRun(receipt, json_path, markdown_path)
+
+    ledger_path = config.cam_db.parent / "mining_registry.json"
+    before = snapshot_corpus(config.cam_db, ledger_path)
+    if before.integrity != "ok":
+        raise ValueError(f"corpus integrity check failed before mining: {before.integrity}")
+    execution = run_scan_then_live(
+        config,
+        _budget_receipt_path(config),
+        runner=mining_runner,
+    )
+    after = snapshot_corpus(config.cam_db, ledger_path)
+    delta = derive_mining_delta(before, after)
+    assessment = assess_meaningful_mining(
+        validated_provenance_findings=delta.findings,
+        source_repositories=len(delta.source_repositories),
+        repeated_pattern_or_gap=repeated_pattern_or_gap,
+    )
+    receipt = PullMineReceipt(
+        source_root=config.source_root,
+        database_fingerprint=fingerprint_file(config.cam_db),
+        config_fingerprint=fingerprint_file(config.cam_config),
+        before=before,
+        after=after,
+        delta=delta,
+        updates=updates,
+        assessment=assessment,
+        scan=summarize_command_result(execution.scan),
+        live=summarize_command_result(execution.live) if execution.live is not None else None,
+        candidate_verdict="not_run_pending_assessment",
+    )
+    mining_succeeded = (
+        execution.live is not None
+        and execution.live.returncode == 0
+        and after.integrity == "ok"
+    )
+    candidate = launch_candidate_if_warranted(
+        receipt, config, mining_succeeded=mining_succeeded
+    )
+    receipt = replace(
+        receipt,
+        candidate_verdict=candidate.verdict,
+        candidate_packet_path=candidate.packet_path,
+        candidate_approval_path=candidate.approval_path,
+        candidate_receipt_path=candidate.receipt_path,
+        candidate_returncode=candidate.returncode,
+    )
+    json_path, markdown_path = write_report(receipt, reports_dir)
+    return PullMineRun(receipt, json_path, markdown_path)
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description="Update eligible repositories, mine one pinned CAM corpus, and assess evidence."
+    )
+    parser.add_argument(
+        "--source-root",
+        type=Path,
+        default=DEFAULT_SOURCE_ROOT,
+        help=f"directory containing repositories (default: {DEFAULT_SOURCE_ROOT})",
+    )
+    parser.add_argument("--cam-command", type=Path, required=True)
+    parser.add_argument("--cam-db", type=Path, required=True)
+    parser.add_argument("--cam-config", type=Path, required=True)
+    parser.add_argument("--profiles", type=Path)
+    parser.add_argument("--wrapper", type=Path)
+    parser.add_argument("--state-dir", type=Path, required=True)
+    parser.add_argument("--local-defaults", type=Path)
+    parser.add_argument("--exact-model")
+    parser.add_argument("--max-repos", type=int)
+    parser.add_argument("--max-minutes", type=int)
+    parser.add_argument("--max-cost-usd", type=float)
+    parser.add_argument(
+        "--repeated-pattern-or-gap",
+        action="store_true",
+        help="attest that the reviewed mining evidence identifies a concrete repeated pattern or capability gap",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="inspect eligibility and write a plan report without fetch, pull, mining, or candidate dispatch",
+    )
+    return parser
+
+
+def build_config_from_args(args: argparse.Namespace) -> PullMineConfig:
+    defaults = load_local_defaults(args.local_defaults)
+
+    def value(name: str, fallback: Any) -> Any:
+        explicit = getattr(args, name)
+        return explicit if explicit is not None else defaults.get(name, fallback)
+
+    return PullMineConfig(
+        source_root=args.source_root,
+        cam_command=args.cam_command,
+        cam_db=args.cam_db,
+        cam_config=args.cam_config,
+        profiles=args.profiles,
+        wrapper=args.wrapper,
+        state_dir=args.state_dir,
+        exact_model=value("exact_model", None),
+        max_repos=value("max_repos", 20),
+        max_minutes=value("max_minutes", 120),
+        max_cost_usd=value("max_cost_usd", None),
+    )
+
+
+def main(argv: list[str] | None = None) -> int:
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    try:
+        config = build_config_from_args(args)
+        run = run_pull_mine_directory(
+            config,
+            dry_run=args.dry_run,
+            repeated_pattern_or_gap=args.repeated_pattern_or_gap,
+        )
+    except ValueError as exc:
+        parser.error(str(exc))
+    print(f"JSON report: {run.json_path}")
+    print(f"Markdown report: {run.markdown_path}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

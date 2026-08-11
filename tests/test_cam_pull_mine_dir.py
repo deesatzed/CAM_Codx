@@ -1,5 +1,7 @@
 import json
 import sqlite3
+import subprocess
+import sys
 from hashlib import sha256
 from dataclasses import replace
 from pathlib import Path
@@ -17,6 +19,8 @@ from tools.cam_pull_mine_dir import (
     PullMineConfig,
     RepositoryUpdate,
     assess_meaningful_mining,
+    build_config_from_args,
+    build_parser,
     build_live_argv,
     build_scan_argv,
     discover_git_repositories,
@@ -26,6 +30,7 @@ from tools.cam_pull_mine_dir import (
     launch_candidate_if_warranted,
     pinned_cam_environment,
     render_markdown_report,
+    run_pull_mine_directory,
     run_scan_then_live,
     summarize_command_result,
     snapshot_corpus,
@@ -619,3 +624,70 @@ def test_candidate_arguments_cannot_include_swap_model_or_secret_controls(tmp_pa
     forbidden = {"swap", "rollback", "models", "profile", "--force", "SENTINEL_SECRET"}
     assert forbidden.isdisjoint(outcome.args)
     assert outcome.args == ("--mode", "supervised", "--max-tasks", "1", "--skip-swap")
+
+
+def test_cli_help_exposes_the_default_source_root() -> None:
+    parser = build_parser()
+
+    assert str(DEFAULT_SOURCE_ROOT) in parser.format_help()
+
+
+def test_cli_script_help_runs_from_its_documented_absolute_path() -> None:
+    script = Path(__file__).parents[1] / "tools" / "cam_pull_mine_dir.py"
+
+    completed = subprocess.run(
+        [sys.executable, str(script), "--help"],
+        cwd=Path(__file__).parents[1],
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0
+    assert "--source-root" in completed.stdout
+
+
+def test_cli_argument_builder_preserves_explicit_source_root(tmp_path: Path) -> None:
+    config = _valid_config(tmp_path, source_root=tmp_path / "other-user-root")
+    parser = build_parser()
+    args = parser.parse_args(
+        [
+            "--source-root",
+            str(config.source_root),
+            "--cam-command",
+            str(config.cam_command),
+            "--cam-db",
+            str(config.cam_db),
+            "--cam-config",
+            str(config.cam_config),
+            "--state-dir",
+            str(config.state_dir),
+            "--exact-model",
+            str(config.exact_model),
+            "--max-cost-usd",
+            str(config.max_cost_usd),
+        ]
+    )
+
+    assert build_config_from_args(args).source_root == config.source_root
+
+
+def test_dry_run_writes_report_without_fetch_pull_mining_or_candidate(tmp_path: Path) -> None:
+    config = _valid_config(tmp_path)
+    (config.source_root / "sample" / ".git").mkdir(parents=True)
+    runner = FakeGitRunner()
+
+    def unexpected_mining_runner(**_kwargs: object) -> CommandResult:
+        raise AssertionError("dry-run must not invoke CAM mining")
+
+    result = run_pull_mine_directory(
+        config,
+        dry_run=True,
+        git_runner=runner,
+        mining_runner=unexpected_mining_runner,
+    )
+
+    assert result.json_path.is_file()
+    assert result.markdown_path.is_file()
+    assert all("fetch" not in call and "pull" not in call for call in runner.calls)
+    assert "not_run_dry_run" in result.json_path.read_text(encoding="utf-8")

@@ -262,10 +262,15 @@ def test_install_codex_skill_copies_template_to_codex_home(tmp_path: Path) -> No
     assert (dest / "SKILL.md").read_text(encoding="utf-8").startswith("---")
 
 
-def test_install_codex_skills_installs_setup_and_routine_swe_skill(tmp_path: Path) -> None:
+def test_install_codex_skills_installs_all_routine_cam_skills(tmp_path: Path) -> None:
     codex_home = tmp_path / ".codex"
     source_root = tmp_path / "CAM_Codx" / "templates" / "skills"
-    for name in ("cam-codx-setup", "cam-codx-swe", "cam-codx-development-brief"):
+    for name in (
+        "cam-codx-setup",
+        "cam-codx-swe",
+        "cam-codx-development-brief",
+        "cam-codx-pull-mine-dir",
+    ):
         source = source_root / name
         source.mkdir(parents=True)
         (source / "SKILL.md").write_text(
@@ -279,6 +284,8 @@ def test_install_codex_skills_installs_setup_and_routine_swe_skill(tmp_path: Pat
         "cam-codx-setup",
         "cam-codx-swe",
         "cam-codx-development-brief",
+        "cam-codx-pull-mine-dir",
     }
     assert (codex_home / "skills" / "cam-codx-swe" / "SKILL.md").is_file()
     assert (codex_home / "skills" / "cam-codx-development-brief" / "SKILL.md").is_file()
+    assert (codex_home / "skills" / "cam-codx-pull-mine-dir" / "SKILL.md").is_file()
