@@ -691,3 +691,20 @@ def test_dry_run_writes_report_without_fetch_pull_mining_or_candidate(tmp_path: 
     assert result.markdown_path.is_file()
     assert all("fetch" not in call and "pull" not in call for call in runner.calls)
     assert "not_run_dry_run" in result.json_path.read_text(encoding="utf-8")
+
+
+def test_operator_docs_explain_the_pull_mine_skill_and_separate_approvals() -> None:
+    root = Path(__file__).parents[1]
+    operator_doc = (root / "docs" / "CAM_PULL_MINE_DIR.md").read_text(encoding="utf-8")
+    readme = (root / "README.md").read_text(encoding="utf-8")
+    cheatsheet = (root / "docs" / "CAM_CHEATSHEET.md").read_text(encoding="utf-8")
+    manager_doc = (root / "docs" / "CAM_CODEX_PROGRAM_MANAGER.md").read_text(encoding="utf-8")
+
+    for document in (operator_doc, readme, cheatsheet, manager_doc):
+        assert "cam-codx-pull-mine-dir" in document
+        assert "--source-root" in document
+        assert "--dry-run" in document
+        assert "--skip-swap" in document
+        assert "claw.db" in document
+    assert "separate explicit approval" in operator_doc.lower()
+    assert "self-enhance swap" in operator_doc

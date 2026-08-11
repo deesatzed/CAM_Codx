@@ -16,12 +16,13 @@ python tools/cam_setup_wizard.py \
   --non-interactive
 ```
 
-This installs all three Codex skills:
+This installs all four Codex skills:
 
 ```text
 ~/.codex/skills/cam-codx-setup/SKILL.md
 ~/.codex/skills/cam-codx-swe/SKILL.md
 ~/.codex/skills/cam-codx-development-brief/SKILL.md
+~/.codex/skills/cam-codx-pull-mine-dir/SKILL.md
 ```
 
 Ask Codex to use `cam-codx-swe` for a build, update, review, or debugging
@@ -34,6 +35,22 @@ in-progress repository needs a continue/mitigate/re-develop recommendation.
 That skill is read-only by default and is deliberately separate from the
 manager's approval-governed mutation and spend phases. See
 [CAM Development Brief](CAM_DEVELOPMENT_BRIEF.md).
+
+Use `cam-codx-pull-mine-dir` only for an explicit directory-wide update and
+mining request. It defaults to
+`/Volumes/WS4TB/waswiki/repos2mine/repo622sn` when present; use
+`--source-root /absolute/path/to/repos` for another user or machine. Start with
+`--dry-run` to inspect eligibility and write a report without Git updates,
+mining, `claw.db`/ledger writes, provider use, or a candidate packet.
+
+For a live bounded cycle, the coordinator pins `claw.db` and `claw.toml`,
+requires a user-local exact-model/hard-cap file, updates only clean upstream
+repositories with fast-forward Git, and emits redacted receipts. The only
+automatic CAM-inner action is one manager packet for supervised
+`--skip-swap` self-enhancement after the five-findings/two-repository/repeated
+pattern-or-gap evidence gate. `self-enhance swap`, model/profile changes,
+rollback, and live configuration changes remain separate explicit approvals.
+See [CAM Pull Mine Directory](CAM_PULL_MINE_DIR.md).
 
 ## Packet and approval flow
 

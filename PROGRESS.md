@@ -253,3 +253,32 @@
   `python tools/generate_agent_packs.py --check`; `git diff --check` passed.
 - This documentation pass changed no CAM runtime, database, model profile,
   configuration, or target repository.
+
+## 2026-08-11 Pull Mine Directory Skill
+
+- Added `tools/cam_pull_mine_dir.py` and the installable
+  `cam-codx-pull-mine-dir` skill for one explicit directory-level CAM cycle.
+- The coordinator defaults to
+  `/Volumes/WS4TB/waswiki/repos2mine/repo622sn` but accepts `--source-root`
+  for another operator's repository directory.
+- Eligible Git repositories receive only `git fetch origin` then `git pull
+  --ff-only`; dirty, conflicted, detached, no-upstream, fetch-failed, and
+  non-fast-forward repositories are reported without blocking later ones.
+- The mining command is list-form, pins both CAM database environment variables
+  to one `claw.db`, runs scan before live mining, requires a paired exact model
+  and hard cost cap, uses `--changed-only --no-tasks`, and records only bounded
+  redacted command evidence.
+- The workflow reports read-only corpus integrity/deltas and ledger provenance.
+  It can dispatch at most one manager-backed supervised `--skip-swap`
+  candidate only after the five-findings/two-repository/repeated-gap gate. A
+  swap, model/profile change, rollback, source edit, or live config change is
+  outside this skill.
+- The repeated-gap conclusion is an explicit `--repeated-pattern-or-gap`
+  attestation because the current corpus/ledger do not prove that semantic
+  conclusion on their own.
+- Verification was fixture-only: `python -m pytest -q -p no:cacheprovider
+  tests` passed with `86 passed in 1.09s`; `python
+  tools/generate_agent_packs.py --check`, the new skill validator, and `git
+  diff --check` exited successfully. No live repository pull, corpus mining,
+  provider call, database/ledger update, or candidate was executed while
+  implementing this feature.

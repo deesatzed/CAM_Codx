@@ -155,3 +155,18 @@ Those remain separate explicit operations with their own manager approval and
 rollback evidence. Repositories that are dirty, conflicted, detached, lack an
 upstream, or cannot fast-forward are reported and skipped or failed without
 blocking unrelated eligible repositories.
+
+## 2026-08-11: Require an Explicit Semantic-Gap Attestation
+
+Decision: derive the numeric evidence gate from the pinned corpus and mining
+ledger, but require the operator to pass `--repeated-pattern-or-gap` before a
+meaningful mining result may dispatch the supervised `--skip-swap` candidate.
+
+Reason: the current corpus and ledger can truthfully establish methodology
+deltas and source-repository provenance, but cannot by themselves prove the
+semantic conclusion that a repeated pattern or concrete capability gap exists.
+Defaulting that conclusion to false avoids an invented candidate trigger.
+
+Constraint: the attestation authorizes only the one already-bounded candidate.
+It does not grant a self-enhance swap, model/profile change, rollback, source
+edit, or live configuration change.
