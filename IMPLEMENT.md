@@ -18,3 +18,19 @@
 - APPLY `e4194e64-8230-4b16-8715-a7c164ac2a15`: isolate any meaningful-result candidate through the existing manager-backed, single-use, supervised `--skip-swap` workflow; a candidate verdict can never promote, swap, or alter live configuration.
 
 Both recalled records are stale and lack a resolved source path. They inform only the explicit safety boundaries above; tests and current CAM_CAM CLI behavior remain the acceptance authority.
+
+## Retrieved Methodologies (step: task-3-mining-command-boundary)
+
+| pattern_id | name | fitness | source | status |
+|---|---|---|---|---|
+| `3753eed0-eab4-4886-8319-60975154d203` | CLI Subprocess Testing with Fallback Pattern | 0.6667 (1 green / 0 red) | CLI-Anything/provenance unavailable | stale |
+
+### One-line provenance citations
+
+- `3753eed0-eab4-4886-8319-60975154d203` - CLI Subprocess Testing with Fallback Pattern - fitness 0.6667 (1 green / 0 red) - source: CLI-Anything/provenance unavailable
+
+### Application plan
+
+- APPLY `3753eed0-eab4-4886-8319-60975154d203`: inject a fixture command runner and assert exact list-form argv, a pinned child environment, and failure short-circuiting before allowing the production subprocess runner.
+
+This record is stale and has no resolved source path. It informs only the command-boundary tests; current CAM_CAM CLI behavior and the explicit user-approved cap remain the acceptance authority.

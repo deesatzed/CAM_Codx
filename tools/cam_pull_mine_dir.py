@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from pathlib import Path
 import os
+import subprocess
 import tomllib
 from typing import Any, Callable, Literal
 
@@ -25,6 +26,7 @@ class CommandResult:
 
 
 CommandRunner = Callable[[list[str]], CommandResult]
+MiningCommandRunner = Callable[..., CommandResult]
 
 
 @dataclass(frozen=True)
@@ -92,6 +94,12 @@ class RepositoryUpdate:
             "status": self.status,
             "reason": self.reason,
         }
+
+
+@dataclass(frozen=True)
+class MiningExecution:
+    scan: CommandResult
+    live: CommandResult | None
 
 
 def load_local_defaults(path: Path | None) -> dict[str, str | int | float]:
@@ -249,3 +257,89 @@ def update_repository(repo: Path, runner: CommandRunner) -> RepositoryUpdate:
     if "Already up to date" in pull_result.stdout:
         return RepositoryUpdate(repo, eligibility.branch, "already_current", "already current")
     return RepositoryUpdate(repo, eligibility.branch, "updated", "fast-forward update completed")
+
+
+def _base_mining_argv(config: PullMineConfig) -> list[str]:
+    return [
+        str(config.cam_command),
+        "mine-workspace",
+        str(config.source_root),
+        "--target",
+        str(config.source_root),
+        "--changed-only",
+        "--no-tasks",
+        "--max-repos",
+        str(config.max_repos),
+        "--max-minutes",
+        str(config.max_minutes),
+        "--config",
+        str(config.cam_config),
+    ]
+
+
+def build_scan_argv(config: PullMineConfig) -> list[str]:
+    """Build the no-provider scan command, with no task generation."""
+    command = _base_mining_argv(config)
+    command.insert(6, "--scan-only")
+    return command
+
+
+def build_live_argv(config: PullMineConfig, receipt_path: Path) -> list[str]:
+    """Build the capped live command only after configuration validation."""
+    validate_config(config)
+    if config.exact_model is None or config.max_cost_usd is None:
+        raise ValueError("live mining requires exact_model and max_cost_usd")
+    command = _base_mining_argv(config)
+    if config.profiles is not None:
+        command.extend(["--profiles", str(config.profiles)])
+    command.extend(
+        [
+            "--max-cost-usd",
+            str(config.max_cost_usd),
+            "--exact-model",
+            config.exact_model,
+            "--budget-receipt",
+            str(receipt_path),
+        ]
+    )
+    return command
+
+
+def pinned_cam_environment(config: PullMineConfig) -> dict[str, str]:
+    """Preserve the parent environment while pinning both CAM database paths."""
+    environment = dict(os.environ)
+    environment["CLAW_DB_PATH"] = str(config.cam_db)
+    environment["CAM_CODEX_MCP_DB_PATH"] = str(config.cam_db)
+    return environment
+
+
+def _subprocess_mining_runner(
+    argv: list[str], *, cwd: Path, env: dict[str, str]
+) -> CommandResult:
+    completed = subprocess.run(
+        argv,
+        cwd=cwd,
+        env=env,
+        shell=False,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return CommandResult(completed.returncode, completed.stdout, completed.stderr)
+
+
+def run_scan_then_live(
+    config: PullMineConfig,
+    receipt_path: Path,
+    *,
+    runner: MiningCommandRunner = _subprocess_mining_runner,
+) -> MiningExecution:
+    """Run a scan first and only start live mining after a successful scan."""
+    validate_config(config)
+    environment = pinned_cam_environment(config)
+    cwd = config.cam_command.parent.parent
+    scan = runner(build_scan_argv(config), cwd=cwd, env=environment)
+    if scan.returncode != 0:
+        return MiningExecution(scan=scan, live=None)
+    live = runner(build_live_argv(config, receipt_path), cwd=cwd, env=environment)
+    return MiningExecution(scan=scan, live=live)

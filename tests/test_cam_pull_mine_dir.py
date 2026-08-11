@@ -8,8 +8,12 @@ from tools.cam_pull_mine_dir import (
     DEFAULT_SOURCE_ROOT,
     PullMineConfig,
     assess_meaningful_mining,
+    build_live_argv,
+    build_scan_argv,
     discover_git_repositories,
     load_local_defaults,
+    pinned_cam_environment,
+    run_scan_then_live,
     update_repository,
     validate_config,
 )
@@ -265,3 +269,95 @@ def test_git_update_never_constructs_a_destructive_command(tmp_path: Path) -> No
 
     forbidden = {"reset", "merge", "rebase", "stash", "checkout", "switch", "--force"}
     assert all(forbidden.isdisjoint(call) for call in runner.calls)
+
+
+def test_mining_command_builders_use_the_exact_bounded_cam_argv(tmp_path: Path) -> None:
+    profiles = tmp_path / "model_profiles.toml"
+    profiles.write_text("[profiles]\n", encoding="utf-8")
+    config = replace(_valid_config(tmp_path), profiles=profiles)
+    receipt_path = tmp_path / "budget-receipt.json"
+
+    assert build_scan_argv(config) == [
+        str(config.cam_command),
+        "mine-workspace",
+        str(config.source_root),
+        "--target",
+        str(config.source_root),
+        "--changed-only",
+        "--scan-only",
+        "--no-tasks",
+        "--max-repos",
+        "20",
+        "--max-minutes",
+        "120",
+        "--config",
+        str(config.cam_config),
+    ]
+    assert build_live_argv(config, receipt_path) == [
+        str(config.cam_command),
+        "mine-workspace",
+        str(config.source_root),
+        "--target",
+        str(config.source_root),
+        "--changed-only",
+        "--no-tasks",
+        "--max-repos",
+        "20",
+        "--max-minutes",
+        "120",
+        "--config",
+        str(config.cam_config),
+        "--profiles",
+        str(profiles),
+        "--max-cost-usd",
+        "5.0",
+        "--exact-model",
+        "provider/approved-model",
+        "--budget-receipt",
+        str(receipt_path),
+    ]
+
+
+def test_pinned_mining_environment_preserves_parent_and_overrides_both_db_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = _valid_config(tmp_path)
+    monkeypatch.setenv("CAM_PULL_MINE_DIR_TEST_PARENT", "preserved")
+
+    environment = pinned_cam_environment(config)
+
+    assert environment["CAM_PULL_MINE_DIR_TEST_PARENT"] == "preserved"
+    assert environment["CLAW_DB_PATH"] == str(config.cam_db)
+    assert environment["CAM_CODEX_MCP_DB_PATH"] == str(config.cam_db)
+
+
+def test_mining_command_execution_stops_before_live_mining_when_scan_fails(tmp_path: Path) -> None:
+    config = _valid_config(tmp_path)
+    calls: list[tuple[list[str], Path, dict[str, str]]] = []
+
+    def failed_scan_runner(
+        argv: list[str], *, cwd: Path, env: dict[str, str]
+    ) -> CommandResult:
+        calls.append((argv, cwd, env))
+        return CommandResult(1, "scan failed", "fixture")
+
+    execution = run_scan_then_live(
+        config,
+        tmp_path / "budget-receipt.json",
+        runner=failed_scan_runner,
+    )
+
+    assert execution.scan.returncode == 1
+    assert execution.live is None
+    assert len(calls) == 1
+    assert "--scan-only" in calls[0][0]
+    assert calls[0][1] == config.cam_command.parent.parent
+    assert calls[0][2]["CLAW_DB_PATH"] == str(config.cam_db)
+
+
+def test_live_mining_command_never_adds_task_generation_or_unsupported_flags(tmp_path: Path) -> None:
+    config = _valid_config(tmp_path)
+    command = build_live_argv(config, tmp_path / "budget-receipt.json")
+
+    assert "--no-tasks" in command
+    assert {"--tasks", "--fast", "--self-assess"}.isdisjoint(command)
