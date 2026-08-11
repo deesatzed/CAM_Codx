@@ -10,11 +10,21 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 import os
 import tomllib
-from typing import Any
+from typing import Any, Callable, Literal
 
 
 DEFAULT_SOURCE_ROOT = Path("/Volumes/WS4TB/waswiki/repos2mine/repo622sn")
 _LOCAL_DEFAULT_KEYS = {"exact_model", "max_repos", "max_minutes", "max_cost_usd"}
+
+
+@dataclass(frozen=True)
+class CommandResult:
+    returncode: int
+    stdout: str
+    stderr: str
+
+
+CommandRunner = Callable[[list[str]], CommandResult]
 
 
 @dataclass(frozen=True)
@@ -59,6 +69,29 @@ class MeaningfulAssessment:
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
+
+
+@dataclass(frozen=True)
+class Eligibility:
+    status: Literal["eligible", "skipped", "failed"]
+    branch: str | None
+    reason: str
+
+
+@dataclass(frozen=True)
+class RepositoryUpdate:
+    path: Path
+    branch: str | None
+    status: Literal["updated", "already_current", "skipped", "failed"]
+    reason: str
+
+    def to_dict(self) -> dict[str, str | None]:
+        return {
+            "path": str(self.path),
+            "branch": self.branch,
+            "status": self.status,
+            "reason": self.reason,
+        }
 
 
 def load_local_defaults(path: Path | None) -> dict[str, str | int | float]:
@@ -147,3 +180,72 @@ def assess_meaningful_mining(
         repeated_pattern_or_gap=repeated_pattern_or_gap,
         reasons=tuple(reasons),
     )
+
+
+def discover_git_repositories(root: Path) -> tuple[Path, ...]:
+    """Find nested Git worktrees without executing project code."""
+    repositories: list[Path] = []
+    for current, directories, files in os.walk(root):
+        if ".git" in directories or ".git" in files:
+            repositories.append(Path(current))
+        directories[:] = [directory for directory in directories if directory != ".git"]
+    return tuple(sorted(repositories, key=lambda path: path.relative_to(root).as_posix()))
+
+
+def _git_argv(repo: Path, *args: str) -> list[str]:
+    return ["git", "-C", str(repo), *args]
+
+
+def inspect_update_eligibility(repo: Path, runner: CommandRunner) -> Eligibility:
+    """Fail closed unless a repository is clean, attached, and tracks upstream."""
+    status_result = runner(_git_argv(repo, "status", "--porcelain=v1", "--branch"))
+    if status_result.returncode != 0:
+        return Eligibility("failed", None, "git status inspection failed")
+    status_lines = status_result.stdout.splitlines()
+    changes = status_lines[1:] if status_lines[:1] and status_lines[0].startswith("##") else status_lines
+    if any(line.startswith(("UU", "AA", "DD", "AU", "UD", "UA", "DU")) for line in changes):
+        return Eligibility("skipped", None, "repository has unresolved conflicts")
+    if changes:
+        return Eligibility("skipped", None, "repository is dirty")
+
+    branch_result = runner(_git_argv(repo, "rev-parse", "--abbrev-ref", "HEAD"))
+    if branch_result.returncode != 0:
+        return Eligibility("failed", None, "git branch inspection failed")
+    branch = branch_result.stdout.strip()
+    if not branch or branch == "HEAD":
+        return Eligibility("skipped", None, "repository is detached")
+
+    upstream_result = runner(
+        _git_argv(repo, "rev-parse", "--abbrev-ref", "@{upstream}")
+    )
+    if upstream_result.returncode != 0 or not upstream_result.stdout.strip():
+        return Eligibility("skipped", branch, "repository has no upstream")
+    return Eligibility("eligible", branch, "clean attached repository with upstream")
+
+
+def update_repository(repo: Path, runner: CommandRunner) -> RepositoryUpdate:
+    """Perform the only permitted update: fetch followed by pull --ff-only."""
+    eligibility = inspect_update_eligibility(repo, runner)
+    if eligibility.status != "eligible":
+        return RepositoryUpdate(
+            path=repo,
+            branch=eligibility.branch,
+            status=eligibility.status,
+            reason=eligibility.reason,
+        )
+
+    fetch_result = runner(_git_argv(repo, "fetch", "origin"))
+    if fetch_result.returncode != 0:
+        return RepositoryUpdate(repo, eligibility.branch, "failed", "git fetch failed")
+
+    pull_result = runner(_git_argv(repo, "pull", "--ff-only"))
+    if pull_result.returncode != 0:
+        return RepositoryUpdate(
+            repo,
+            eligibility.branch,
+            "failed",
+            "git pull --ff-only fast-forward failed",
+        )
+    if "Already up to date" in pull_result.stdout:
+        return RepositoryUpdate(repo, eligibility.branch, "already_current", "already current")
+    return RepositoryUpdate(repo, eligibility.branch, "updated", "fast-forward update completed")

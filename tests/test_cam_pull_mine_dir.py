@@ -4,10 +4,13 @@ from pathlib import Path
 import pytest
 
 from tools.cam_pull_mine_dir import (
+    CommandResult,
     DEFAULT_SOURCE_ROOT,
     PullMineConfig,
     assess_meaningful_mining,
+    discover_git_repositories,
     load_local_defaults,
+    update_repository,
     validate_config,
 )
 
@@ -131,3 +134,134 @@ def test_meaningful_mining_requires_all_evidence_gates(
     assert assessment.source_repositories == repositories
     assert assessment.repeated_pattern_or_gap is repeated_pattern_or_gap
     assert assessment.reasons
+
+
+class FakeGitRunner:
+    def __init__(self, responses: dict[tuple[str, ...], CommandResult] | None = None) -> None:
+        self.calls: list[tuple[str, ...]] = []
+        self.responses = responses or {}
+
+    def __call__(self, argv: list[str]) -> CommandResult:
+        call = tuple(argv)
+        self.calls.append(call)
+        if call in self.responses:
+            return self.responses[call]
+        if call[-3:] == ("rev-parse", "--abbrev-ref", "HEAD"):
+            return CommandResult(0, "main\n", "")
+        if call[-3:] == ("rev-parse", "--abbrev-ref", "@{upstream}"):
+            return CommandResult(0, "origin/main\n", "")
+        if call[-3:] == ("status", "--porcelain=v1", "--branch"):
+            return CommandResult(0, "## main...origin/main\n", "")
+        return CommandResult(0, "", "")
+
+
+def _git_call(repo: Path, *args: str) -> tuple[str, ...]:
+    return ("git", "-C", str(repo), *args)
+
+
+def test_discover_git_repositories_finds_nested_dot_git_entries(tmp_path: Path) -> None:
+    (tmp_path / "alpha" / ".git").mkdir(parents=True)
+    (tmp_path / "nested" / "beta" / ".git").mkdir(parents=True)
+    (tmp_path / "not-a-repo").mkdir()
+
+    assert discover_git_repositories(tmp_path) == (
+        tmp_path / "alpha",
+        tmp_path / "nested" / "beta",
+    )
+
+
+def test_git_update_uses_only_clean_attached_upstream_fast_forward_commands(tmp_path: Path) -> None:
+    repo = tmp_path / "clean"
+    repo.mkdir()
+    runner = FakeGitRunner()
+
+    update = update_repository(repo, runner)
+
+    assert update.status == "updated"
+    assert update.branch == "main"
+    assert runner.calls == [
+        _git_call(repo, "status", "--porcelain=v1", "--branch"),
+        _git_call(repo, "rev-parse", "--abbrev-ref", "HEAD"),
+        _git_call(repo, "rev-parse", "--abbrev-ref", "@{upstream}"),
+        _git_call(repo, "fetch", "origin"),
+        _git_call(repo, "pull", "--ff-only"),
+    ]
+
+
+@pytest.mark.parametrize(
+    ("responses", "expected_reason"),
+    [
+        (
+            {("status", "--porcelain=v1", "--branch"): CommandResult(0, "## main...origin/main\n M file.py\n", "")},
+            "dirty",
+        ),
+        (
+            {("status", "--porcelain=v1", "--branch"): CommandResult(0, "## main...origin/main\nUU file.py\n", "")},
+            "conflicts",
+        ),
+        ({("rev-parse", "--abbrev-ref", "HEAD"): CommandResult(0, "HEAD\n", "")}, "detached"),
+        ({("rev-parse", "--abbrev-ref", "@{upstream}"): CommandResult(1, "", "no upstream")}, "upstream"),
+    ],
+)
+def test_git_update_skips_repositories_outside_the_safe_boundary(
+    tmp_path: Path,
+    responses: dict[tuple[str, ...], CommandResult],
+    expected_reason: str,
+) -> None:
+    repo = tmp_path / "ineligible"
+    repo.mkdir()
+    expanded = {_git_call(repo, *args): result for args, result in responses.items()}
+    runner = FakeGitRunner(expanded)
+
+    update = update_repository(repo, runner)
+
+    assert update.status == "skipped"
+    assert expected_reason in update.reason
+    assert _git_call(repo, "fetch", "origin") not in runner.calls
+    assert _git_call(repo, "pull", "--ff-only") not in runner.calls
+
+
+@pytest.mark.parametrize(
+    ("failed_command", "expected_reason"),
+    [(("fetch", "origin"), "fetch failed"), (("pull", "--ff-only"), "fast-forward failed")],
+)
+def test_git_update_records_fetch_and_fast_forward_failures(
+    tmp_path: Path, failed_command: tuple[str, ...], expected_reason: str
+) -> None:
+    repo = tmp_path / "failure"
+    repo.mkdir()
+    runner = FakeGitRunner(
+        {_git_call(repo, *failed_command): CommandResult(1, "", "fixture failure")}
+    )
+
+    update = update_repository(repo, runner)
+
+    assert update.status == "failed"
+    assert expected_reason in update.reason
+
+
+def test_git_update_does_not_prevent_a_later_eligible_repository_from_updating(tmp_path: Path) -> None:
+    bad_repo = tmp_path / "bad"
+    good_repo = tmp_path / "good"
+    bad_repo.mkdir()
+    good_repo.mkdir()
+    runner = FakeGitRunner(
+        {_git_call(bad_repo, "fetch", "origin"): CommandResult(1, "", "fixture failure")}
+    )
+
+    bad_update = update_repository(bad_repo, runner)
+    good_update = update_repository(good_repo, runner)
+
+    assert bad_update.status == "failed"
+    assert good_update.status == "updated"
+
+
+def test_git_update_never_constructs_a_destructive_command(tmp_path: Path) -> None:
+    repo = tmp_path / "clean"
+    repo.mkdir()
+    runner = FakeGitRunner()
+
+    update_repository(repo, runner)
+
+    forbidden = {"reset", "merge", "rebase", "stash", "checkout", "switch", "--force"}
+    assert all(forbidden.isdisjoint(call) for call in runner.calls)
