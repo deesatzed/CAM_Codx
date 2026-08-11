@@ -257,7 +257,12 @@ python tools/cam_setup_wizard.py \
 ~/CAM/scripts/cam-codx status
 ```
 
-It installs `cam-codx-setup` and `cam-codx-swe` under `~/.codex/skills/`.
+It installs these three skills under `~/.codex/skills/`:
+
+- `cam-codx-setup` — verify the local CAM installation and narrow wrapper.
+- `cam-codx-swe` — build, update, review, and debug a defined SWE task.
+- `cam-codx-development-brief` — make an early new-project or rescue decision
+  from read-only evidence.
 
 ### B. Routine SWE skill
 
@@ -274,7 +279,28 @@ The skill reads the target's truth files, retrieves methods as suggestions,
 requires the target's native tests, and records limitations. It does not turn a
 methodology into permission to edit code.
 
-### C. Fixed-operation program manager
+### C. Development Brief: start or rescue a project
+
+Use this before a project plan exists, or when you need an honest decision
+about an in-progress repository:
+
+```text
+Use cam-codx-development-brief to help me start this new project from relevant prior work.
+```
+
+```text
+Use cam-codx-development-brief to decide whether this in-progress repository should continue, be mitigated, or be re-developed.
+```
+
+The result distinguishes **direct precedent**, **transferable analogy**, and
+**new hypothesis**, then states the smallest safe next step. By default it reads
+only the named target and explicitly supplied primary corpus. It does not mine,
+contact a provider, run target tests, edit code, write `claw.db`, record
+retrieval usage, or broaden into sibling corpora. See
+[CAM Development Brief](CAM_DEVELOPMENT_BRIEF.md) for the explicit CLI and
+later scan-only expansion gate.
+
+### D. Fixed-operation program manager
 
 `tools/cam_manager.py` creates a content-addressed argv packet, a short-lived
 single-use approval, and a digest-only receipt. It never executes through a
@@ -304,7 +330,7 @@ SWE packet authorizes corpus mining. Mining remains a separately approved
 CAM_CAM operation with explicit root, target, database, config, budget, and
 receipt.
 
-### D. Safe self-enhancement recipe
+### E. Safe self-enhancement recipe
 
 1. Run `self-enhance-status`.
 2. Prepare `self-enhance-start` with `--mode supervised`, `--max-tasks 1`, and
@@ -314,13 +340,13 @@ receipt.
 5. Only then prepare a distinct `self-enhance-swap` packet with a fresh
    approval. Preserve the backup and rollback receipt.
 
-### E. Agent packs and integrations
+### F. Agent packs and integrations
 
 CAM_Codx generates host-specific packs from one capability contract:
 
 | Host | Use it for | Verify |
 | --- | --- | --- |
-| Codex | `cam-codx-swe`, setup wrapper, `/goal` contracts | Skill installed; wrapper status works |
+| Codex | setup, `cam-codx-swe`, Development Brief, `/goal` contracts | Skill installed; wrapper status works |
 | Claude Code | stdio MCP, project `.mcp.json`, CAM skill | `claude mcp list` and pack `smoke.sh` |
 | Gemini | stdio MCP plus Gemini skill/config templates | `gemini mcp list` and pack `smoke.sh` |
 | Grok Build | stdio MCP, AGENTS/skill/hook templates | `grok inspect` and pack `smoke.sh` |
@@ -334,7 +360,7 @@ python -m pytest -q tests/test_agent_packs.py
 git diff --check
 ```
 
-### F. Evidence-governed build workflows
+### G. Evidence-governed build workflows
 
 - **Codex `/goal`**: turn a complex build into a durable completion contract
   with boundaries, acceptance tests, and stop rules.
@@ -354,6 +380,18 @@ git diff --check
 Use cam-codx-swe to manage this SWE task. Inspect repository truth files first,
 run CAM read-only recall, propose the smallest coherent change, run repository
 tests, and record outcomes. Do not mine, spend, change profiles, or self-enhance.
+```
+
+### Start a new project from prior work
+
+```text
+Use cam-codx-development-brief to help me start this new project from relevant prior work. Show direct precedents, transferable analogies, mistakes to avoid, and the smallest safe first step. Do not mine, spend, edit code, or scan other repositories.
+```
+
+### Continue, mitigate, or re-develop an ongoing repository
+
+```text
+Use cam-codx-development-brief to inspect this in-progress repository and recommend continue, mitigate, or re-develop. Read only its truth files, Git state, visible gap markers, and the explicit primary CAM corpus. Do not run tests, mine, write telemetry, or modify the repository.
 ```
 
 ### Mine a bounded set of local repositories

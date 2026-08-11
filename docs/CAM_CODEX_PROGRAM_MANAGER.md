@@ -16,16 +16,24 @@ python tools/cam_setup_wizard.py \
   --non-interactive
 ```
 
-This installs both:
+This installs all three Codex skills:
 
 ```text
 ~/.codex/skills/cam-codx-setup/SKILL.md
 ~/.codex/skills/cam-codx-swe/SKILL.md
+~/.codex/skills/cam-codx-development-brief/SKILL.md
 ```
 
 Ask Codex to use `cam-codx-swe` for a build, update, review, or debugging
 task. It starts with repository truth and CAM read-only recall; it does not
 mine, spend, promote a model, or swap CAM automatically.
+
+Use `cam-codx-development-brief` instead when the work is still in the early
+decision stage: a new project needs useful precedents and pitfalls, or an
+in-progress repository needs a continue/mitigate/re-develop recommendation.
+That skill is read-only by default and is deliberately separate from the
+manager's approval-governed mutation and spend phases. See
+[CAM Development Brief](CAM_DEVELOPMENT_BRIEF.md).
 
 ## Packet and approval flow
 

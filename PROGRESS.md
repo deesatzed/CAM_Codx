@@ -239,3 +239,17 @@
   `test_read_only_brief_query.py`, `test_tool_schemas.py`, and
   `test_integration_wiring.py`; `python -m claw.cli brief-query --help` passed.
   The read-only proof uses a synthetic fixture database only, not a live corpus.
+
+## 2026-08-11 Development Brief Documentation Alignment
+
+- Updated the landing README, Codex quickstart, CAM cheat sheet, program-manager
+  guide, and status page so users can choose between the Development Brief,
+  routine SWE skill, and approval-gated manager workflow without confusing
+  their boundaries.
+- The setup documentation now lists all three installed skills. The early
+  new-project and continue/rescue prompts are copy-pasteable from the quickstart
+  and cheat sheet.
+- Re-verified `python -m pytest -q -p no:cacheprovider tests` (`44 passed`) and
+  `python tools/generate_agent_packs.py --check`; `git diff --check` passed.
+- This documentation pass changed no CAM runtime, database, model profile,
+  configuration, or target repository.

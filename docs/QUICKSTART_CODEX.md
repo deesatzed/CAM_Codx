@@ -58,6 +58,25 @@ and CAM self-enhancement require their own bounded packet and phase approval.
 Read [CAM_Codx Program Manager](CAM_CODEX_PROGRAM_MANAGER.md) for the exact
 flow.
 
+For the earlier question—what prior work, mistakes, or even cross-domain ideas
+should shape a new build, or should an existing project continue, be mitigated,
+or be re-developed—use the separate Development Brief skill:
+
+```text
+Use cam-codx-development-brief to help me start this new project from relevant prior work.
+```
+
+```text
+Use cam-codx-development-brief to decide whether this in-progress repository should continue, be mitigated, or be re-developed.
+```
+
+It labels each recommendation as a direct precedent, transferable analogy, or
+new hypothesis. Its default reads only the named target and explicitly supplied
+primary CAM corpus; it does not mine, contact a provider, write retrieval
+telemetry, run target tests, or edit code. Read
+[CAM Development Brief](CAM_DEVELOPMENT_BRIEF.md) for the command form and
+scope-expansion gate.
+
 ## Clone The Hub And Engine
 
 ```bash
@@ -112,6 +131,7 @@ This creates:
 ~/CAM/scripts/cam-codx
 ~/.codex/skills/cam-codx-setup/SKILL.md
 ~/.codex/skills/cam-codx-swe/SKILL.md
+~/.codex/skills/cam-codx-development-brief/SKILL.md
 ```
 
 Test CAM through the wrapper:
@@ -155,6 +175,13 @@ or:
 
 ```text
 Use CAM_Codx to create a build plan for this repo.
+```
+
+When you are still deciding what to build or whether to rescue a work-in-
+progress repository, start with the Development Brief instead of a build plan:
+
+```text
+Use cam-codx-development-brief to assess this repository and recommend continue, mitigate, or re-develop.
 ```
 
 Codex will use CAM_Codx as the workflow guide and CAM_CAM as the runtime engine,

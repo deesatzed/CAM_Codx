@@ -1,6 +1,7 @@
 # Status
 
-Verified on 2026-06-26 after publishing the XTtape CAM showpiece results.
+Current feature checkpoint: 2026-08-10. Historical XTtape publication details
+remain below as provenance, not as the current feature inventory.
 
 ## Implemented
 
@@ -9,6 +10,15 @@ Verified on 2026-06-26 after publishing the XTtape CAM showpiece results.
 - Repo Necromancer packet workflow is documented.
 - Codex goal templates exist.
 - Generated CAM Agent Packs exist for Claude Code, Gemini, and Grok Build.
+- The packet/approval manager supports fixed operation packets, single-use
+  approvals, digest-only receipts, and separately gated model/self-enhancement
+  promotion or rollback.
+- Three Codex skills are installable: setup, routine SWE, and Development Brief.
+- The Development Brief gives early new-project and continue/rescue guidance
+  with direct-precedent, transferable-analogy, and new-hypothesis labels.
+- Development Brief recall uses a supplied primary corpus only and is read-only:
+  no mining, provider calls, target edits, retrieval telemetry, or sibling
+  corpus search occurs by default.
 - A shared capability contract exists at
   `agent-packs/contract/cam_agent_capabilities.json`.
 - `docs/AGENT_PACKS.md` explains the generated-pack architecture.
@@ -56,6 +66,22 @@ Verified at `origin/main` on 2026-06-26 after the XTtape showpiece commit.
   `python -m pytest -q tests/test_agent_packs.py`, and `git diff --check`.
 - XTtape showpiece verification included `git diff --check`, secret-pattern
   scan over the committed showpiece docs, and remote head verification.
+
+## 2026-08-10 Development Brief Verification
+
+- CAM_Codx local `main` fast-forwarded to `f8f6ef3`; this was intentionally a
+  local merge and was not pushed at this checkpoint.
+- CAM_CAM local `main` fast-forwarded to `6b64ca4` under the same local-only
+  integration decision.
+- CAM_Codx verification passed: `python -m pytest -q -p no:cacheprovider tests`
+  (`44 passed`), `python tools/generate_agent_packs.py --check`, and
+  `git diff --check`.
+- CAM_CAM focused verification passed:
+  `PYTHONPATH=src python -m pytest -q tests/test_read_only_brief_query.py tests/test_tool_schemas.py tests/test_integration_wiring.py`
+  (`78 passed`), `PYTHONPATH=src python -m claw.cli brief-query --help`, and
+  `git diff --check`.
+- The no-mutation proof is fixture-backed against a synthetic SQLite database;
+  it is not a live-corpus read test.
 
 ## Intentionally Out Of Scope
 

@@ -103,9 +103,18 @@ packet, approval, tournament, and staged self-enhancement flow.
 Read [CAM Development Brief](docs/CAM_DEVELOPMENT_BRIEF.md) for the read-only
 recall and next-step workflow.
 
+Choose the smallest workflow that fits the need:
+
+| Need | Start with | Default boundary |
+| --- | --- | --- |
+| Shape a new project or decide how to resume an existing one | `cam-codx-development-brief` | Named target plus one explicit primary corpus; no mining, provider calls, edits, or telemetry writes. |
+| Build, update, review, or debug a defined task | `cam-codx-swe` | Read-only CAM recall first; repository-native tests decide whether the change is accepted. |
+| Mine, compare models, or self-enhance CAM | `cam_manager.py` and the program-manager workflow | A separate phase, bounded packet, explicit approval, and evidence receipt. |
+
 For the novice step-by-step flow and use cases, read:
 
 - [Codex quickstart](docs/QUICKSTART_CODEX.md)
+- [CAM Development Brief](docs/CAM_DEVELOPMENT_BRIEF.md)
 - [New computer setup walkthrough](docs/NEW_COMPUTER_SETUP_WALKTHROUGH.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [XTtape CAM showpiece case study](docs/examples/XTTAPE_CAM_SHOWPIECE_CASE_STUDY.md)
