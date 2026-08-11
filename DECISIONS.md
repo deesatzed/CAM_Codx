@@ -118,3 +118,20 @@ Constraint: the manager owns workflow policy and receipts only. CAM_CAM owns
 runtime behavior. Mutating/spend phases require a matching, unexpired,
 single-use approval; self-enhancement swap always needs a separate promotion
 approval and rollback evidence.
+
+## 2026-08-10: Keep Development Brief Recall Primary-Only By Default
+
+Decision: make the Development Brief query only an explicitly supplied primary
+CAM database through CAM_CAM's side-effect-free `brief-query` command. A named
+local source expansion is planning-only until an operator reviews and approves
+it.
+
+Reason: normal recall paths can record retrieval usage, and stale sibling paths
+after workspace relocation make a broader corpus search unreliable. A concise
+SWE decision aid must not hide a database write, federation failure, or
+repository scan behind a recall request.
+
+Constraint: each additional source root must be explicitly named, exist below
+an approved parent, and pass the relocation gate. A failed gate renders its
+unavailable paths and prevents a wider search; it does not repair configuration
+or invoke any scan/mining command.

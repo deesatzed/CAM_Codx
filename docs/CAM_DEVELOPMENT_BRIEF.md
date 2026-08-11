@@ -54,6 +54,12 @@ the read-only default.
 ## Expanding evidence later
 
 When default-scope evidence is thin, the brief may suggest a scan-only search
-of specifically named local folders. It never chooses or scans those folders
-for you. Mining, provider use, model changes, and self-enhancement remain
-separate approval-gated CAM phases.
+of specifically named local folders. Those folders must exist beneath an
+explicit approved parent. The brief only renders that later-phase scope; it
+does not scan it.
+
+If an active CAM TOML contains sibling database paths that no longer exist, the
+brief renders **relocation gate not satisfied** and names the unavailable paths.
+It does not broaden retrieval, repair the TOML, or query a sibling corpus.
+Mining, provider use, model changes, and self-enhancement remain separate
+approval-gated CAM phases.

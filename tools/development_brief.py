@@ -16,6 +16,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import tomllib
 
 
 class BriefValidationError(ValueError):
@@ -157,6 +158,14 @@ class ContinueRescueAdvice:
         if not self.reasons:
             raise BriefValidationError("continue/rescue advice requires reasons")
         object.__setattr__(self, "limitation", _required_text(self.limitation, "advice limitation"))
+
+
+@dataclass(frozen=True)
+class RelocationGate:
+    """Whether configured sibling corpus paths are safe to offer as a later phase."""
+
+    satisfied: bool
+    unavailable_paths: tuple[Path, ...]
 
 
 @dataclass(frozen=True)
@@ -523,6 +532,91 @@ def suggest_explicit_expansions(evidence_items: tuple[EvidenceItem, ...]) -> tup
     )
 
 
+def validate_named_source_roots(
+    source_roots: tuple[Path, ...], approved_source_parent: Path
+) -> tuple[Path, ...]:
+    """Validate a later scan-only scope without discovering any new roots."""
+
+    parent = Path(approved_source_parent).expanduser()
+    if not parent.is_absolute() or not parent.is_dir():
+        raise BriefValidationError("approved source parent must be an existing absolute directory")
+    parent = parent.resolve()
+    validated: list[Path] = []
+    for raw_root in source_roots:
+        root = Path(raw_root).expanduser()
+        if not root.is_absolute() or not root.is_dir():
+            raise BriefValidationError(f"source root is not a directory: {root}")
+        root = root.resolve()
+        try:
+            root.relative_to(parent)
+        except ValueError as exc:
+            raise BriefValidationError(f"source root must be below the approved source parent: {root}") from exc
+        validated.append(root)
+    if not validated:
+        raise BriefValidationError("at least one explicitly named source root is required")
+    return tuple(validated)
+
+
+def inspect_relocation_gate(cam_config: Path) -> RelocationGate:
+    """Check configured sibling paths without opening a database or changing config."""
+
+    config_path = Path(cam_config).expanduser()
+    if not config_path.is_absolute() or not config_path.is_file():
+        raise BriefValidationError("cam_config must be an existing absolute TOML file")
+    try:
+        payload = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError) as exc:
+        raise BriefValidationError(f"cannot read CAM config for relocation gate: {exc}") from exc
+    instances = payload.get("instances", {})
+    siblings = instances.get("siblings", []) if isinstance(instances, dict) else []
+    unavailable: list[Path] = []
+    if isinstance(siblings, list):
+        for sibling in siblings:
+            if not isinstance(sibling, dict):
+                continue
+            raw_path = sibling.get("db_path")
+            if not isinstance(raw_path, str) or not raw_path.strip():
+                continue
+            path = Path(raw_path).expanduser()
+            if not path.is_file():
+                unavailable.append(path)
+    return RelocationGate(satisfied=not unavailable, unavailable_paths=tuple(unavailable))
+
+
+def prepare_scan_only_expansion(
+    source_roots: tuple[Path, ...],
+    *,
+    approved_source_parent: Path,
+    cam_config: Path | None,
+) -> NextStep:
+    """Describe an explicit later scan without running it."""
+
+    roots = validate_named_source_roots(source_roots, approved_source_parent)
+    if cam_config is None:
+        return NextStep(
+            kind="verify_relocation_before_expansion",
+            summary="Provide the active CAM config to verify relocation before any named-source scan-only expansion.",
+        )
+    gate = inspect_relocation_gate(cam_config)
+    if not gate.satisfied:
+        paths = ", ".join(str(path) for path in gate.unavailable_paths)
+        return NextStep(
+            kind="relocation_gate_not_satisfied",
+            summary=(
+                "Relocation gate not satisfied: configured sibling corpus path(s) are unavailable: "
+                f"{paths}. No expanded search was run."
+            ),
+        )
+    return NextStep(
+        kind="prepare_scan_only_expansion",
+        summary=(
+            "Review this explicit later scan-only scope before approval: "
+            + ", ".join(str(root) for root in roots)
+            + "."
+        ),
+    )
+
+
 def _target_evidence_from_inspection(inspection: TargetInspection | None) -> tuple[TargetEvidence, ...]:
     if inspection is None:
         return ()
@@ -565,6 +659,9 @@ def build_development_brief(
     limit: int = 5,
     target_language: str | None = None,
     analogy_rationales: dict[str, str] | None = None,
+    source_roots: tuple[Path, ...] = (),
+    approved_source_parent: Path | None = None,
+    cam_config: Path | None = None,
 ) -> DevelopmentBrief:
     """Assemble a read-only brief from one target and the primary CAM corpus."""
 
@@ -586,6 +683,14 @@ def build_development_brief(
         "Repository verification was not run by this brief.",
     ]
     optional_next_steps = suggest_explicit_expansions(evidence_items)
+    if source_roots:
+        if approved_source_parent is None:
+            raise BriefValidationError("--approved-source-parent is required with --source-root")
+        optional_next_steps = (*optional_next_steps, prepare_scan_only_expansion(
+            source_roots,
+            approved_source_parent=approved_source_parent,
+            cam_config=cam_config,
+        ))
 
     if request.mode == "continue-rescue":
         if inspection is None:
@@ -734,6 +839,23 @@ def _parser() -> argparse.ArgumentParser:
         help="Explicit reason a dissimilar method transfers to this target",
     )
     parser.add_argument("--output", type=Path, help="Explicit Markdown output path outside the target repository")
+    parser.add_argument(
+        "--source-root",
+        type=Path,
+        action="append",
+        default=[],
+        help="Explicit local folder for a later scan-only expansion; never scanned by this command",
+    )
+    parser.add_argument(
+        "--approved-source-parent",
+        type=Path,
+        help="Absolute parent that contains every named --source-root",
+    )
+    parser.add_argument(
+        "--cam-config",
+        type=Path,
+        help="Optional active CAM TOML used only for the relocation gate",
+    )
     return parser
 
 
@@ -750,6 +872,9 @@ def main(argv: list[str] | None = None) -> int:
             limit=args.limit,
             target_language=args.target_language,
             analogy_rationales=_parse_analogy_rationales(args.analogy_rationale),
+            source_roots=tuple(args.source_root),
+            approved_source_parent=args.approved_source_parent,
+            cam_config=args.cam_config,
         )
         markdown = render_markdown(brief)
         if args.output is None:

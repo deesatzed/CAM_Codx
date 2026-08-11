@@ -399,3 +399,55 @@ def test_cli_continue_rescue_writes_only_an_explicit_named_output(
     assert "Wrote Development Brief" in capsys.readouterr().out
     assert not list(target.glob("*.md")) == []
     assert not (target / "operator-brief.md").exists()
+
+
+def test_named_source_roots_must_be_explicit_existing_and_contained(tmp_path: Path) -> None:
+    brief = _load_contract()
+    approved_parent = tmp_path / "approved"
+    allowed = approved_parent / "repo-a"
+    outside = tmp_path / "outside"
+    allowed.mkdir(parents=True)
+    outside.mkdir()
+
+    assert brief.validate_named_source_roots((allowed,), approved_parent) == (allowed.resolve(),)
+    with pytest.raises(brief.BriefValidationError, match="approved source parent"):
+        brief.validate_named_source_roots((allowed,), tmp_path / "missing-parent")
+    with pytest.raises(brief.BriefValidationError, match="below the approved"):
+        brief.validate_named_source_roots((outside,), approved_parent)
+    with pytest.raises(brief.BriefValidationError, match="not a directory"):
+        brief.validate_named_source_roots((approved_parent / "missing",), approved_parent)
+
+
+def test_stale_ganglion_paths_block_expansion_with_a_relocation_gate(tmp_path: Path) -> None:
+    brief = _load_contract()
+    approved_parent = tmp_path / "approved"
+    source_root = approved_parent / "repo-a"
+    source_root.mkdir(parents=True)
+    config = tmp_path / "claw.toml"
+    config.write_text(
+        "[instances]\n"
+        "enabled = true\n"
+        "[[instances.siblings]]\n"
+        "name = 'go'\n"
+        "db_path = '/old/workspace/instances/go/claw.db'\n",
+        encoding="utf-8",
+    )
+
+    expansion = brief.prepare_scan_only_expansion(
+        (source_root,),
+        approved_source_parent=approved_parent,
+        cam_config=config,
+    )
+
+    assert expansion.kind == "relocation_gate_not_satisfied"
+    assert "relocation gate not satisfied" in expansion.summary.lower()
+    assert "old/workspace" in expansion.summary
+
+
+def test_development_brief_source_never_constructs_broader_cam_commands() -> None:
+    source = MODULE_PATH.read_text(encoding="utf-8")
+
+    assert '"federate"' not in source
+    assert '"mine"' not in source
+    assert '"preflight"' not in source
+    assert '"self-enhance"' not in source

@@ -217,3 +217,18 @@
 - Final runtime audit corrected the model-promotion allowlist to CAM_CAM's
   current `models set`, `models rollback`, and `models profile use` commands;
   focused tests cover all three approval-required prefixes.
+
+## 2026-08-10 SWE Development Brief
+
+- Added the approved Development Brief contract, target inspector, primary-only
+  CAM recall adapter, direct/analogy/hypothesis labels, and explicit CLI.
+- Default operation reads the named target and supplied primary corpus only;
+  it does not write a target file, record retrieval usage, execute target
+  tests, mine, invoke a provider, or query sibling corpora.
+- Added the `cam-codx-development-brief` skill and setup-wizard installation
+  alongside the setup and routine SWE skills.
+- Named local source roots are validated under an approved parent and render
+  only a later scan-only proposal. Missing configured sibling databases render
+  a relocation gate rather than triggering a broader search.
+- Focused Development Brief and setup-wizard tests are recorded by the final
+  cross-repository verification task; no live corpus was queried for this work.
