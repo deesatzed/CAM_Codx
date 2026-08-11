@@ -1,3 +1,6 @@
+import json
+import sqlite3
+from hashlib import sha256
 from dataclasses import replace
 from pathlib import Path
 
@@ -5,17 +8,28 @@ import pytest
 
 from tools.cam_pull_mine_dir import (
     CommandResult,
+    CommandSummary,
+    CorpusSnapshot,
     DEFAULT_SOURCE_ROOT,
+    MiningDelta,
+    PullMineReceipt,
     PullMineConfig,
+    RepositoryUpdate,
     assess_meaningful_mining,
     build_live_argv,
     build_scan_argv,
     discover_git_repositories,
+    derive_mining_delta,
+    fingerprint_file,
     load_local_defaults,
     pinned_cam_environment,
+    render_markdown_report,
     run_scan_then_live,
+    summarize_command_result,
+    snapshot_corpus,
     update_repository,
     validate_config,
+    write_report,
 )
 
 
@@ -361,3 +375,152 @@ def test_live_mining_command_never_adds_task_generation_or_unsupported_flags(tmp
 
     assert "--no-tasks" in command
     assert {"--tasks", "--fast", "--self-assess"}.isdisjoint(command)
+
+
+def _write_methodologies(db_path: Path, methodology_ids: tuple[str, ...]) -> None:
+    with sqlite3.connect(db_path) as connection:
+        connection.execute("CREATE TABLE methodologies (id TEXT PRIMARY KEY)")
+        connection.executemany(
+            "INSERT INTO methodologies (id) VALUES (?)",
+            [(methodology_id,) for methodology_id in methodology_ids],
+        )
+
+
+def _write_mining_ledger(path: Path, records: dict[str, tuple[str, ...]]) -> None:
+    path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "records": {
+                    repository: {
+                        "repo_name": repository,
+                        "methodology_ids": list(methodology_ids),
+                    }
+                    for repository, methodology_ids in records.items()
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_snapshot_corpus_uses_read_only_integrity_and_ledger_provenance(tmp_path: Path) -> None:
+    db_path = tmp_path / "claw.db"
+    ledger_path = tmp_path / "mining_registry.json"
+    _write_methodologies(db_path, ("method-1",))
+    _write_mining_ledger(ledger_path, {"repo-a": ("method-1",)})
+
+    before = snapshot_corpus(db_path, ledger_path)
+    with sqlite3.connect(db_path) as connection:
+        connection.executemany(
+            "INSERT INTO methodologies (id) VALUES (?)",
+            [("method-2",), ("method-3",)],
+        )
+    _write_mining_ledger(
+        ledger_path,
+        {"repo-a": ("method-1", "method-2"), "repo-b": ("method-3",)},
+    )
+    after = snapshot_corpus(db_path, ledger_path)
+
+    delta = derive_mining_delta(before, after)
+
+    assert before.integrity == "ok"
+    assert after.integrity == "ok"
+    assert after.methodology_count == 3
+    assert after.ledger_entries == 2
+    assert delta.methodologies_added == 2
+    assert delta.ledger_entries_added == 1
+    assert delta.findings == 2
+    assert delta.source_repositories == frozenset({"repo-a", "repo-b"})
+
+
+def test_snapshot_corpus_rejects_a_database_without_expected_methodology_id(tmp_path: Path) -> None:
+    db_path = tmp_path / "claw.db"
+    with sqlite3.connect(db_path) as connection:
+        connection.execute("CREATE TABLE methodologies (name TEXT)")
+
+    with pytest.raises(ValueError, match="methodologies.id"):
+        snapshot_corpus(db_path, None)
+
+
+def test_file_and_command_summaries_are_digest_only_and_redact_secrets(tmp_path: Path) -> None:
+    content = "database fixture\n"
+    output = "completed SENTINEL_SECRET " * 50
+    path = tmp_path / "claw.db"
+    path.write_text(content, encoding="utf-8")
+
+    summary = summarize_command_result(
+        CommandResult(0, output, ""),
+        redaction_values=("SENTINEL_SECRET",),
+    )
+
+    assert fingerprint_file(path) == f"sha256:{sha256(content.encode()).hexdigest()}"
+    assert summary.stdout_digest == f"sha256:{sha256(output.encode()).hexdigest()}"
+    assert "SENTINEL_SECRET" not in summary.stdout_summary
+    assert len(summary.stdout_summary) <= 320
+
+
+def _receipt_with_secret(tmp_path: Path) -> PullMineReceipt:
+    config = _valid_config(tmp_path)
+    assessment = assess_meaningful_mining(
+        validated_provenance_findings=5,
+        source_repositories=2,
+        repeated_pattern_or_gap=True,
+    )
+    summary = CommandSummary(
+        returncode=0,
+        stdout_digest="sha256:scan",
+        stderr_digest="sha256:stderr",
+        stdout_summary="scan completed",
+        stderr_summary="",
+    )
+    return PullMineReceipt(
+        source_root=config.source_root,
+        database_fingerprint="sha256:database",
+        config_fingerprint="sha256:config",
+        before=CorpusSnapshot(2, 1, "ok"),
+        after=CorpusSnapshot(7, 3, "ok"),
+        delta=MiningDelta(
+            methodologies_added=5,
+            ledger_entries_added=2,
+            findings=5,
+            source_repositories=frozenset({"repo-a", "repo-b"}),
+        ),
+        updates=(
+            RepositoryUpdate(
+                path=tmp_path / "skipped",
+                branch="main",
+                status="skipped",
+                reason="dirty SENTINEL_SECRET",
+            ),
+        ),
+        assessment=assessment,
+        scan=summary,
+        live=summary,
+        candidate_verdict="not_run",
+        redaction_values=("SENTINEL_SECRET",),
+    )
+
+
+def test_reports_list_truthful_evidence_and_redact_secret_values(tmp_path: Path) -> None:
+    receipt = _receipt_with_secret(tmp_path)
+
+    markdown = render_markdown_report(receipt)
+    json_path, markdown_path = write_report(receipt, tmp_path / "reports")
+    json_report = json_path.read_text(encoding="utf-8")
+    markdown_report = markdown_path.read_text(encoding="utf-8")
+
+    for report in (markdown, json_report, markdown_report):
+        assert str(receipt.source_root) in report
+        assert "sha256:database" in report
+        assert "sha256:config" in report
+        assert "skipped" in report
+        assert "SENTINEL_SECRET" not in report
+        assert "[REDACTED]" in report
+    assert "candidate verdict: not_run" in markdown.lower()
+    assert "candidate verdict: not_run" in markdown_report.lower()
+    assert '"candidate_verdict": "not_run"' in json_report
+    assert json.loads(json_report)["assessment"]["is_meaningful"] is True
+    assert json_path.stat().st_mode & 0o777 == 0o600
+    assert markdown_path.stat().st_mode & 0o777 == 0o600
+    assert json_path.parent.stat().st_mode & 0o777 == 0o700

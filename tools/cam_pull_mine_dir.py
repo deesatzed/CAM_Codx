@@ -7,8 +7,11 @@ execution, database writes, and candidate dispatch are added in later tasks.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass
+from hashlib import sha256
+import json
 from pathlib import Path
 import os
+import sqlite3
 import subprocess
 import tomllib
 from typing import Any, Callable, Literal
@@ -54,11 +57,17 @@ class PullMineConfig:
 @dataclass(frozen=True)
 class CorpusSnapshot:
     methodology_count: int
-    ledger_entries: int
+    ledger_entries: int | None
     integrity: str
+    methodology_ids: frozenset[str] = frozenset()
+    methodology_sources: tuple[tuple[str, str], ...] = ()
 
-    def to_dict(self) -> dict[str, int | str]:
-        return asdict(self)
+    def to_dict(self) -> dict[str, int | str | None]:
+        return {
+            "methodology_count": self.methodology_count,
+            "ledger_entries": self.ledger_entries,
+            "integrity": self.integrity,
+        }
 
 
 @dataclass(frozen=True)
@@ -100,6 +109,66 @@ class RepositoryUpdate:
 class MiningExecution:
     scan: CommandResult
     live: CommandResult | None
+
+
+@dataclass(frozen=True)
+class CommandSummary:
+    returncode: int
+    stdout_digest: str
+    stderr_digest: str
+    stdout_summary: str
+    stderr_summary: str
+
+    def to_dict(self) -> dict[str, int | str]:
+        return asdict(self)
+
+
+@dataclass(frozen=True)
+class MiningDelta:
+    methodologies_added: int
+    ledger_entries_added: int | None
+    findings: int
+    source_repositories: frozenset[str]
+
+    def to_dict(self) -> dict[str, int | None | list[str]]:
+        return {
+            "methodologies_added": self.methodologies_added,
+            "ledger_entries_added": self.ledger_entries_added,
+            "findings": self.findings,
+            "source_repositories": sorted(self.source_repositories),
+        }
+
+
+@dataclass(frozen=True)
+class PullMineReceipt:
+    source_root: Path
+    database_fingerprint: str
+    config_fingerprint: str
+    before: CorpusSnapshot
+    after: CorpusSnapshot
+    delta: MiningDelta
+    updates: tuple[RepositoryUpdate, ...]
+    assessment: MeaningfulAssessment
+    scan: CommandSummary
+    live: CommandSummary | None
+    candidate_verdict: str
+    redaction_values: tuple[str, ...] = ()
+
+    def to_dict(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "source_root": str(self.source_root),
+            "database_fingerprint": self.database_fingerprint,
+            "config_fingerprint": self.config_fingerprint,
+            "before": self.before.to_dict(),
+            "after": self.after.to_dict(),
+            "delta": self.delta.to_dict(),
+            "updates": [update.to_dict() for update in self.updates],
+            "assessment": self.assessment.to_dict(),
+            "scan": self.scan.to_dict(),
+            "live": self.live.to_dict() if self.live is not None else None,
+            "candidate_verdict": self.candidate_verdict,
+        }
+        return _redact_value(payload, self.redaction_values)
 
 
 def load_local_defaults(path: Path | None) -> dict[str, str | int | float]:
@@ -343,3 +412,206 @@ def run_scan_then_live(
         return MiningExecution(scan=scan, live=None)
     live = runner(build_live_argv(config, receipt_path), cwd=cwd, env=environment)
     return MiningExecution(scan=scan, live=live)
+
+
+def fingerprint_file(path: Path) -> str:
+    """Return a content digest without placing file contents in a receipt."""
+    digest = sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(64 * 1024), b""):
+            digest.update(chunk)
+    return f"sha256:{digest.hexdigest()}"
+
+
+def _load_ledger_snapshot(
+    ledger_path: Path | None,
+) -> tuple[int | None, tuple[tuple[str, str], ...]]:
+    if ledger_path is None or not ledger_path.is_file():
+        return None, ()
+    try:
+        payload = json.loads(ledger_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None, ()
+    records = payload.get("records") if isinstance(payload, dict) else None
+    if not isinstance(records, dict):
+        return None, ()
+
+    sources: set[tuple[str, str]] = set()
+    for record_key, record in records.items():
+        if not isinstance(record, dict):
+            continue
+        repository = record.get("repo_name")
+        if not isinstance(repository, str) or not repository.strip():
+            repository = str(record_key)
+        methodology_ids = record.get("methodology_ids", [])
+        if not isinstance(methodology_ids, list):
+            continue
+        for methodology_id in methodology_ids:
+            if isinstance(methodology_id, str) and methodology_id.strip():
+                sources.add((methodology_id, repository))
+    return len(records), tuple(sorted(sources))
+
+
+def snapshot_corpus(db: Path, ledger_path: Path | None) -> CorpusSnapshot:
+    """Read a corpus snapshot without allowing SQLite writes or migrations."""
+    if not db.is_file():
+        raise ValueError(f"corpus database does not exist: {db}")
+    uri = f"{db.resolve().as_uri()}?mode=ro"
+    with sqlite3.connect(uri, uri=True) as connection:
+        connection.execute("PRAGMA query_only=ON")
+        integrity_row = connection.execute("PRAGMA integrity_check").fetchone()
+        integrity = str(integrity_row[0]) if integrity_row else "unavailable"
+        columns = {
+            str(row[1])
+            for row in connection.execute("PRAGMA table_info(methodologies)").fetchall()
+        }
+        if "id" not in columns:
+            raise ValueError("corpus database is missing methodologies.id")
+        methodology_ids = frozenset(
+            str(row[0])
+            for row in connection.execute("SELECT id FROM methodologies").fetchall()
+            if row[0] is not None
+        )
+    ledger_entries, methodology_sources = _load_ledger_snapshot(ledger_path)
+    return CorpusSnapshot(
+        methodology_count=len(methodology_ids),
+        ledger_entries=ledger_entries,
+        integrity=integrity,
+        methodology_ids=methodology_ids,
+        methodology_sources=methodology_sources,
+    )
+
+
+def derive_mining_delta(before: CorpusSnapshot, after: CorpusSnapshot) -> MiningDelta:
+    """Derive only provenance-backed findings newly present after mining."""
+    new_methodology_ids = after.methodology_ids.difference(before.methodology_ids)
+    source_repositories = frozenset(
+        repository
+        for methodology_id, repository in after.methodology_sources
+        if methodology_id in new_methodology_ids
+    )
+    provenance_backed_ids = {
+        methodology_id
+        for methodology_id, _repository in after.methodology_sources
+        if methodology_id in new_methodology_ids
+    }
+    ledger_entries_added = (
+        None
+        if before.ledger_entries is None or after.ledger_entries is None
+        else after.ledger_entries - before.ledger_entries
+    )
+    return MiningDelta(
+        methodologies_added=after.methodology_count - before.methodology_count,
+        ledger_entries_added=ledger_entries_added,
+        findings=len(provenance_backed_ids),
+        source_repositories=source_repositories,
+    )
+
+
+def _redact_text(value: str, redaction_values: tuple[str, ...]) -> str:
+    redacted = value
+    for secret in redaction_values:
+        if secret:
+            redacted = redacted.replace(secret, "[REDACTED]")
+    return redacted
+
+
+def _redact_value(value: Any, redaction_values: tuple[str, ...]) -> Any:
+    if isinstance(value, str):
+        return _redact_text(value, redaction_values)
+    if isinstance(value, list):
+        return [_redact_value(item, redaction_values) for item in value]
+    if isinstance(value, tuple):
+        return [_redact_value(item, redaction_values) for item in value]
+    if isinstance(value, dict):
+        return {
+            str(key): _redact_value(item, redaction_values)
+            for key, item in value.items()
+        }
+    return value
+
+
+def summarize_command_result(
+    result: CommandResult,
+    *,
+    redaction_values: tuple[str, ...] = (),
+    summary_limit: int = 320,
+) -> CommandSummary:
+    """Keep command evidence digest-only with bounded, redacted summaries."""
+    def summarize(value: str) -> str:
+        normalized = " ".join(_redact_text(value, redaction_values).split())
+        return normalized[:summary_limit]
+
+    return CommandSummary(
+        returncode=result.returncode,
+        stdout_digest=f"sha256:{sha256(result.stdout.encode()).hexdigest()}",
+        stderr_digest=f"sha256:{sha256(result.stderr.encode()).hexdigest()}",
+        stdout_summary=summarize(result.stdout),
+        stderr_summary=summarize(result.stderr),
+    )
+
+
+def render_markdown_report(receipt: PullMineReceipt) -> str:
+    """Render a human-readable, redacted report from a durable receipt."""
+    lines = [
+        "# CAM Pull/Mine Directory Receipt",
+        "",
+        "## Scope",
+        "",
+        f"- Source root: `{receipt.source_root}`",
+        f"- Database fingerprint: `{receipt.database_fingerprint}`",
+        f"- Config fingerprint: `{receipt.config_fingerprint}`",
+        "",
+        "## Repository updates",
+        "",
+        "| Repository | Branch | Status | Reason |",
+        "|---|---|---|---|",
+    ]
+    for update in receipt.updates:
+        lines.append(
+            f"| `{update.path}` | {update.branch or '-'} | {update.status} | {update.reason} |"
+        )
+    if not receipt.updates:
+        lines.append("| - | - | none | no Git repositories were discovered |")
+    lines.extend(
+        [
+            "",
+            "## Corpus evidence",
+            "",
+            f"- Integrity: before `{receipt.before.integrity}`, after `{receipt.after.integrity}`",
+            f"- Methodologies: before {receipt.before.methodology_count}, after {receipt.after.methodology_count}, delta {receipt.delta.methodologies_added}",
+            f"- Ledger entries: before {receipt.before.ledger_entries if receipt.before.ledger_entries is not None else 'unavailable'}, after {receipt.after.ledger_entries if receipt.after.ledger_entries is not None else 'unavailable'}, delta {receipt.delta.ledger_entries_added if receipt.delta.ledger_entries_added is not None else 'unavailable'}",
+            f"- Provenance-backed new findings: {receipt.delta.findings}",
+            f"- Source repositories: {', '.join(sorted(receipt.delta.source_repositories)) or 'none'}",
+            "",
+            "## Meaningfulness gate",
+            "",
+            f"- Verdict: {'meaningful' if receipt.assessment.is_meaningful else 'not meaningful'}",
+        ]
+    )
+    lines.extend(f"- Reason: {reason}" for reason in receipt.assessment.reasons)
+    lines.extend(
+        [
+            "",
+            "## Candidate",
+            "",
+            f"- Candidate verdict: {receipt.candidate_verdict}",
+            "",
+        ]
+    )
+    return _redact_text("\n".join(lines), receipt.redaction_values)
+
+
+def write_report(receipt: PullMineReceipt, output_dir: Path) -> tuple[Path, Path]:
+    """Persist redacted JSON and Markdown reports with private local modes."""
+    output_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+    output_dir.chmod(0o700)
+    payload = json.dumps(receipt.to_dict(), indent=2, sort_keys=True)
+    receipt_id = sha256(payload.encode()).hexdigest()[:12]
+    json_path = output_dir / f"pull-mine-{receipt_id}.json"
+    markdown_path = output_dir / f"pull-mine-{receipt_id}.md"
+    json_path.write_text(payload + "\n", encoding="utf-8")
+    markdown_path.write_text(render_markdown_report(receipt), encoding="utf-8")
+    json_path.chmod(0o600)
+    markdown_path.chmod(0o600)
+    return json_path, markdown_path
