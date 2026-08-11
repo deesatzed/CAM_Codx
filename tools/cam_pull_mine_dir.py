@@ -16,6 +16,8 @@ import subprocess
 import tomllib
 from typing import Any, Callable, Literal
 
+from tools.cam_manager import execute_packet, issue_approval, prepare_packet
+
 
 DEFAULT_SOURCE_ROOT = Path("/Volumes/WS4TB/waswiki/repos2mine/repo622sn")
 _LOCAL_DEFAULT_KEYS = {"exact_model", "max_repos", "max_minutes", "max_cost_usd"}
@@ -169,6 +171,23 @@ class PullMineReceipt:
             "candidate_verdict": self.candidate_verdict,
         }
         return _redact_value(payload, self.redaction_values)
+
+
+@dataclass(frozen=True)
+class CandidateOutcome:
+    verdict: Literal[
+        "not_run_mining_failed",
+        "not_run_not_meaningful",
+        "not_run_wrapper_unavailable",
+        "candidate_dispatch_failed",
+        "candidate_rejected",
+        "candidate_completed_no_swap",
+    ]
+    args: tuple[str, ...]
+    packet_path: Path | None = None
+    approval_path: Path | None = None
+    receipt_path: Path | None = None
+    returncode: int | None = None
 
 
 def load_local_defaults(path: Path | None) -> dict[str, str | int | float]:
@@ -615,3 +634,64 @@ def write_report(receipt: PullMineReceipt, output_dir: Path) -> tuple[Path, Path
     json_path.chmod(0o600)
     markdown_path.chmod(0o600)
     return json_path, markdown_path
+
+
+_CANDIDATE_ARGS = ("--mode", "supervised", "--max-tasks", "1", "--skip-swap")
+
+
+def launch_candidate_if_warranted(
+    receipt: PullMineReceipt,
+    config: PullMineConfig,
+    *,
+    mining_succeeded: bool,
+) -> CandidateOutcome:
+    """Dispatch one supervised no-swap candidate only after all evidence gates."""
+    if not mining_succeeded:
+        return CandidateOutcome("not_run_mining_failed", _CANDIDATE_ARGS)
+    if not receipt.assessment.is_meaningful:
+        return CandidateOutcome("not_run_not_meaningful", _CANDIDATE_ARGS)
+    if config.wrapper is None:
+        return CandidateOutcome("not_run_wrapper_unavailable", _CANDIDATE_ARGS)
+
+    workflow_seed = json.dumps(receipt.to_dict(), sort_keys=True, separators=(",", ":"))
+    workflow_id = f"pull-mine-{sha256(workflow_seed.encode()).hexdigest()[:16]}"
+    try:
+        packet_path = prepare_packet(
+            operation="self-enhance-start",
+            wrapper=config.wrapper,
+            args=list(_CANDIDATE_ARGS),
+            workflow_id=workflow_id,
+            target_repo=None,
+            budget_usd=0.0,
+            state_dir=config.state_dir,
+        )
+        approval_path = issue_approval(
+            packet_path,
+            state_dir=config.state_dir,
+            approved_by="cam-codx-pull-mine-dir invocation",
+        )
+        manager_receipt_path, returncode = execute_packet(
+            packet_path,
+            state_dir=config.state_dir,
+            approval_path=approval_path,
+        )
+    except Exception:
+        return CandidateOutcome("candidate_dispatch_failed", _CANDIDATE_ARGS)
+
+    if returncode != 0:
+        return CandidateOutcome(
+            "candidate_rejected",
+            _CANDIDATE_ARGS,
+            packet_path=packet_path,
+            approval_path=approval_path,
+            receipt_path=manager_receipt_path,
+            returncode=returncode,
+        )
+    return CandidateOutcome(
+        "candidate_completed_no_swap",
+        _CANDIDATE_ARGS,
+        packet_path=packet_path,
+        approval_path=approval_path,
+        receipt_path=manager_receipt_path,
+        returncode=returncode,
+    )

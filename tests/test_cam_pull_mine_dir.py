@@ -5,6 +5,7 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+import tools.cam_pull_mine_dir as pull_mine_dir
 
 from tools.cam_pull_mine_dir import (
     CommandResult,
@@ -22,6 +23,7 @@ from tools.cam_pull_mine_dir import (
     derive_mining_delta,
     fingerprint_file,
     load_local_defaults,
+    launch_candidate_if_warranted,
     pinned_cam_environment,
     render_markdown_report,
     run_scan_then_live,
@@ -524,3 +526,96 @@ def test_reports_list_truthful_evidence_and_redact_secret_values(tmp_path: Path)
     assert json_path.stat().st_mode & 0o777 == 0o600
     assert markdown_path.stat().st_mode & 0o777 == 0o600
     assert json_path.parent.stat().st_mode & 0o777 == 0o700
+
+
+def _candidate_config(tmp_path: Path) -> PullMineConfig:
+    wrapper = tmp_path / "cam-codx"
+    wrapper.write_text("#!/bin/sh\n", encoding="utf-8")
+    wrapper.chmod(0o700)
+    return replace(_valid_config(tmp_path), wrapper=wrapper)
+
+
+def test_candidate_dispatch_uses_one_manager_packet_and_rejects_a_failed_candidate(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    config = _candidate_config(tmp_path)
+    receipt = _receipt_with_secret(tmp_path)
+    packet_path = tmp_path / "packet.json"
+    approval_path = tmp_path / "approval.json"
+    manager_receipt_path = tmp_path / "manager-receipt.json"
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    def fake_prepare_packet(**kwargs: object) -> Path:
+        calls.append(("prepare", kwargs))
+        return packet_path
+
+    def fake_issue_approval(packet: Path, **kwargs: object) -> Path:
+        calls.append(("approve", {"packet": packet, **kwargs}))
+        return approval_path
+
+    def fake_execute_packet(packet: Path, **kwargs: object) -> tuple[Path, int]:
+        calls.append(("execute", {"packet": packet, **kwargs}))
+        return manager_receipt_path, 1
+
+    monkeypatch.setattr(pull_mine_dir, "prepare_packet", fake_prepare_packet)
+    monkeypatch.setattr(pull_mine_dir, "issue_approval", fake_issue_approval)
+    monkeypatch.setattr(pull_mine_dir, "execute_packet", fake_execute_packet)
+
+    outcome = launch_candidate_if_warranted(receipt, config, mining_succeeded=True)
+
+    assert outcome.verdict == "candidate_rejected"
+    assert outcome.packet_path == packet_path
+    assert outcome.approval_path == approval_path
+    assert outcome.receipt_path == manager_receipt_path
+    assert [name for name, _payload in calls] == ["prepare", "approve", "execute"]
+    prepared = calls[0][1]
+    assert prepared["operation"] == "self-enhance-start"
+    assert prepared["args"] == ["--mode", "supervised", "--max-tasks", "1", "--skip-swap"]
+    assert calls[1][1]["approved_by"] == "cam-codx-pull-mine-dir invocation"
+    assert calls[2][1]["approval_path"] == approval_path
+
+
+@pytest.mark.parametrize(
+    ("mining_succeeded", "receipt_factory"),
+    [
+        (False, _receipt_with_secret),
+        (
+            True,
+            lambda tmp_path: replace(
+                _receipt_with_secret(tmp_path),
+                assessment=assess_meaningful_mining(
+                    validated_provenance_findings=4,
+                    source_repositories=2,
+                    repeated_pattern_or_gap=True,
+                ),
+            ),
+        ),
+    ],
+)
+def test_candidate_never_dispatches_without_successful_meaningful_mining(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    mining_succeeded: bool,
+    receipt_factory: object,
+) -> None:
+    config = _candidate_config(tmp_path)
+    receipt = receipt_factory(tmp_path)  # type: ignore[operator]
+
+    def unexpected_manager_call(**_kwargs: object) -> Path:
+        raise AssertionError("manager must not be called")
+
+    monkeypatch.setattr(pull_mine_dir, "prepare_packet", unexpected_manager_call)
+    outcome = launch_candidate_if_warranted(receipt, config, mining_succeeded=mining_succeeded)
+
+    assert outcome.verdict.startswith("not_run")
+
+
+def test_candidate_arguments_cannot_include_swap_model_or_secret_controls(tmp_path: Path) -> None:
+    config = _candidate_config(tmp_path)
+    outcome = launch_candidate_if_warranted(
+        _receipt_with_secret(tmp_path), config, mining_succeeded=False
+    )
+
+    forbidden = {"swap", "rollback", "models", "profile", "--force", "SENTINEL_SECRET"}
+    assert forbidden.isdisjoint(outcome.args)
+    assert outcome.args == ("--mode", "supervised", "--max-tasks", "1", "--skip-swap")
