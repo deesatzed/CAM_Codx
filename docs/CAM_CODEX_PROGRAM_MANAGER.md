@@ -1,5 +1,11 @@
 # CAM_Codx Program Manager
 
+> **Current state:** the setup wizard installs four specialized skills and the
+> manager covers a bounded operation set. **Approved target:** one `cam-codx`
+> skill manages every CAM_CAM capability using the shared capability contract.
+> The target is documented in
+> `plans/2026-08-12-cam-codx-control-plane-design.md` and is not yet implemented.
+
 CAM_Codx can be the routine workflow manager for Codex software-engineering
 tasks without turning every task into a mining job. It owns the plan,
 approval, and evidence packet; CAM_CAM owns the runtime action.

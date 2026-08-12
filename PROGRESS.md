@@ -310,3 +310,16 @@
 - This checkpoint is documentation and design only. The capability registry,
   canonical skill, router, migration, and MatrAIx/SESA proof remain
   unimplemented.
+- Added the exhaustive current command/skill audit at
+  `docs/CAM_CAPABILITY_AUDIT_2026-08-12.md`.
+- Added the TDD implementation plan at
+  `docs/plans/2026-08-12-cam-codx-control-plane.md`.
+- Confirmed that `agent-packs/contract/cam_agent_capabilities.json` is the
+  existing registry foundation to extend; the plan does not create a second
+  competing capability registry.
+- Added current-versus-approved-target notices to the landing README,
+  cheatsheet, program-manager guide, quickstart, and active `IMPLEMENT.md`.
+- Documentation/plan checkpoint verification passed: `86 passed` across agent
+  packs, setup wizard, manager, Development Brief, and pull/mine coordinator;
+  `python tools/generate_agent_packs.py --check` and `git diff --check` also
+  passed.

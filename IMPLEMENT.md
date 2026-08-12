@@ -1,3 +1,16 @@
+# Active Implementation
+
+The active implementation plan is:
+
+`docs/plans/2026-08-12-cam-codx-control-plane.md`
+
+The approved design is:
+
+`docs/plans/2026-08-12-cam-codx-control-plane-design.md`
+
+The earlier pull/mine methodology record below remains historical evidence for
+the already implemented coordinator; it is not the active whole-project plan.
+
 # Pull, Mine, and Review CAM Skill Implementation
 
 ## Retrieved Methodologies (step: task-0-boundary)

@@ -1,13 +1,22 @@
 # CAM_Codx
 
-CAM_Codx is the Codex-native command center for CAM: it lets a developer use
-CAM_CAM's repo intelligence, provenance, and generators from inside the Codex
-workflow they already use.
+CAM_Codx is the Codex-native control plane for CAM: it lets a developer manage
+CAM_CAM's repo intelligence, provenance, mining, models, generators, and
+evidence gates from inside the Codex workflow they already use.
 
 Start here when you want Codex to consume CAM artifacts, continue from a
 generated `CAM_CODEX_GOAL.md`, or harden a standalone product created by CAM.
-Use `CAM_CAM` when you are changing the runtime engine, mining corpus, Repo
-Necromancer generator, dashboards, or tests.
+Direct `CAM_CAM` usage is for runtime troubleshooting, development, recovery,
+and regression isolation. CAM_CAM still owns all runtime implementation and
+local databases.
+
+> **Current versus approved target (2026-08-12):** setup currently installs
+> four specialized CAM_Codx skills. The approved next architecture consolidates
+> them into one `cam-codx` skill that manages every CAM_CAM capability. That
+> consolidation is designed and planned but not yet implemented. See the
+> [capability audit](docs/CAM_CAPABILITY_AUDIT_2026-08-12.md),
+> [approved design](docs/plans/2026-08-12-cam-codx-control-plane-design.md),
+> and [implementation plan](docs/plans/2026-08-12-cam-codx-control-plane.md).
 
 The clearest current showpiece is XTtape: a controlled vanilla-vs-CAM planning
 comparison for a live AI news ticker app. It demonstrates that CAM_Codx is most
@@ -36,7 +45,7 @@ CAM_CAM runtime engine -> CAM_Codx workflow hub -> generated product repos
 | Repo | Role | Start here when |
 |---|---|---|
 | `CAM_Codx` | Codex-native workflow hub | You want Codex goals, handoffs, templates, and onboarding. |
-| `CAM_CAM` | Runtime/base engine | You are mining repos, running Repo Necromancer, or changing CAM internals. |
+| `CAM_CAM` | Runtime/base engine | You are troubleshooting, recovering, testing, or changing CAM internals. |
 | `moriahcareframe` | Generated standalone product | You want to inspect or harden the product repo produced by CAM/Codex. |
 | `MyLoc` | Generated product dogfood proof | You want to see CAM evaluate and harden a Repo Necromancer output repo. |
 

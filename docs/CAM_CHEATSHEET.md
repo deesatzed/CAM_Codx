@@ -1,5 +1,15 @@
 # CAM + CAM_Codx Operator Cheat Sheet
 
+> **UX direction approved 2026-08-12:** CAM_Codx will become the single normal
+> control plane for every CAM_CAM feature. Direct CAM_CAM commands in this
+> document remain useful for troubleshooting and runtime development. The
+> canonical one-skill implementation is planned, not yet complete; current
+> commands and current four-skill setup remain documented truth below.
+
+Normal future phrasing will be `Use CAM_Codx to <desired outcome>`. See
+`CAM_CAPABILITY_AUDIT_2026-08-12.md` for the complete current inventory and
+approved route map.
+
 This is an operator reference for the current CAM family:
 
 | Role | Location | Owns |

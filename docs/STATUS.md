@@ -1,7 +1,25 @@
 # Status
 
-Current feature checkpoint: 2026-08-10. Historical XTtape publication details
+Current feature checkpoint: 2026-08-12. Historical XTtape publication details
 remain below as provenance, not as the current feature inventory.
+
+## Approved Next Architecture
+
+- CAM_Codx is the normal control plane for every CAM_CAM capability.
+- Direct CAM_CAM use remains supported for troubleshooting, recovery, runtime
+  development, regression isolation, and expert scripts.
+- One canonical `cam-codx` skill will replace the normal need to choose among
+  specialized CAM_Codx skills.
+- Six everyday SWE intents are approved: `assess`, `plan`, `build`, `fix`,
+  `verify`, and `record`.
+- One source-to-outcome SWE Run will use existing CAM-SEQ storage rather than a
+  second reuse database.
+- The design and TDD implementation plan exist, but the canonical skill,
+  registry expansion, router, migration, and real MatrAIx/SESA proof are not
+  implemented yet.
+
+See `CAM_CAPABILITY_AUDIT_2026-08-12.md` and the 2026-08-12 control-plane
+design and implementation plan under `docs/plans/`.
 
 ## Implemented
 

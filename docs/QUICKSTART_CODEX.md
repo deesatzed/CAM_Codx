@@ -1,5 +1,10 @@
 # Codex Quickstart
 
+> **Current state:** follow the specialized-skill commands in this guide.
+> **Approved target:** setup will install one `cam-codx` skill, and the user
+> will say `Use CAM_Codx to <desired outcome>` for all normal CAM work. The
+> consolidation is approved and planned but not yet implemented.
+
 ## What You Are Installing
 
 Start here if you already have Codex installed and want Codex to use CAM.
