@@ -170,3 +170,59 @@ Defaulting that conclusion to false avoids an invented candidate trigger.
 Constraint: the attestation authorizes only the one already-bounded candidate.
 It does not grant a self-enhance swap, model/profile change, rollback, source
 edit, or live configuration change.
+
+## 2026-08-12: Make CAM_Codx The Normal Control Plane For CAM_CAM
+
+Decision: CAM_Codx will manage every CAM_CAM feature through one semantic
+user-facing skill. Direct CAM_CAM CLI use remains supported for runtime
+troubleshooting, development, recovery, and regression isolation rather than
+as the normal product workflow.
+
+Reason: CAM_CAM already has broad and useful runtime capabilities, but its
+expert command surface and CAM_Codx's overlapping skills require users to know
+internal architecture. One control plane lets CAM_Codx choose the right route,
+show side effects, enforce approvals, and carry evidence across phases.
+
+Constraint: CAM_CAM retains runtime and database ownership. CAM_Codx may route,
+approve, and explain runtime calls but must not vendor or reimplement them.
+
+## 2026-08-12: Use One Canonical CAM_Codx Skill
+
+Decision: converge the normal Codex UX on one `cam-codx` skill. The current
+setup, SWE, Development Brief, pull/mine, session, model, and self-enhancement
+instructions become internal playbooks and helpers.
+
+Reason: the user should be able to ask CAM_Codx for an outcome without first
+choosing among implementation-specific skills.
+
+Constraint: implementation must preserve a recoverable migration for existing
+installed skills and must not claim the one-skill UX is current until its tests
+and setup migration pass.
+
+## 2026-08-12: Reuse CAM-SEQ For The Mine-To-Build Evidence Chain
+
+Decision: present one SWE Run that links mining receipts, candidate decisions,
+application packets, landing events, verification, and outcomes through
+CAM_CAM's existing CAM-SEQ tables and event stream.
+
+Reason: CAM_CAM already contains the storage primitives needed to prove how
+mined knowledge affected a build. A parallel CAM_Codx database or reuse schema
+would duplicate truth and make attribution harder to audit.
+
+Constraint: mining rows or retrieval similarity alone are not proof of useful
+reuse. Candidate selection is explicit, and only verified outcomes may
+strengthen trust evidence.
+
+## 2026-08-12: Supersede The repo622sn Runtime Binding
+
+Decision: active CAM_Codx operations now resolve CAM_Codx from
+`/Volumes/WS4TB/waswiki/CAM_Codx`, CAM_CAM from
+`/Volumes/WS4TB/waswiki/CAM_CAM`, and the default source pool from
+`/Volumes/WS4TB/waswiki/repos2mine/repo622sn`.
+
+Reason: the repositories were reorganized after the 2026-08-09 binding
+decision. Continuing to advertise the former checkout as active creates a
+split-brain risk.
+
+Constraint: earlier paths remain historical evidence. Active docs, setup, and
+preflight must use resolved current paths and fail closed on ambiguity.

@@ -282,3 +282,31 @@
   diff --check` exited successfully. No live repository pull, corpus mining,
   provider call, database/ledger update, or candidate was executed while
   implementing this feature.
+
+## 2026-08-12 CAM_Codx Unified Control Plane Design
+
+- Audited the current CAM_CAM Typer command tree, hidden aliases, nested
+  command groups, CAM_Codx tools, installed skill templates, setup behavior,
+  and CAM-SEQ persistence surfaces.
+- Confirmed that `cam chat` currently executes the mining route but explicitly
+  reports create/build and enhance/fix routing as not wired.
+- Confirmed that setup currently installs four overlapping skills while a
+  separate semantic session-router artifact also exists.
+- Approved CAM_Codx as the normal user-facing manager for every CAM_CAM
+  capability. Direct CAM_CAM usage is retained for troubleshooting, runtime
+  development, recovery, and regression isolation.
+- Approved six everyday SWE intents: `assess`, `plan`, `build`, `fix`,
+  `verify`, and `record`.
+- Approved one canonical future `cam-codx` skill, one machine-readable
+  capability registry, hidden compatibility aliases, and explicit approval
+  classes for corpus writes, provider spend, code mutation, promotion, and CAM
+  live swaps.
+- Approved a source-to-outcome SWE Run backed by the existing CAM-SEQ
+  `task_plans`, component/application packets, pair/landing/outcome events, and
+  run connectomes rather than a parallel database.
+- Recorded the approved design in
+  `docs/plans/2026-08-12-cam-codx-control-plane-design.md` and made it the
+  active `GOAL.md` contract.
+- This checkpoint is documentation and design only. The capability registry,
+  canonical skill, router, migration, and MatrAIx/SESA proof remain
+  unimplemented.
