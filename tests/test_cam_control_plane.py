@@ -29,19 +29,43 @@ ALL_INTENTS = {
     "doctor",
     "setup",
 }
+EXPECTED_DEFAULTS = {
+    "assess": "brief-query",
+    "plan": "camify",
+    "build": "create",
+    "fix": "enhance",
+    "verify": "validate",
+    "record": "learn proof",
+    "mine": "mine",
+    "knowledge": "kb search",
+    "models": "models current",
+    "self-enhance": "self-enhance status",
+    "evolution": "evolution status",
+    "doctor": "doctor capabilities",
+    "setup": "setup",
+}
 
 
 def _runtime_fixture(tmp_path: Path) -> dict[str, Path]:
     target = tmp_path / "target"
     target.mkdir(parents=True)
     (target / "source.py").write_text("value = 1\n", encoding="utf-8")
+    (target / "empty-directory").mkdir()
+    (target / ".git").mkdir()
+    (target / ".git" / "HEAD").write_text("ref: refs/heads/test\n", encoding="utf-8")
+    (target / "source-link.py").symlink_to("source.py")
     runtime = tmp_path / "runtime"
     runtime.mkdir(parents=True)
     command = runtime / "cam"
-    command.write_text("#!/bin/sh\nexit 99\n", encoding="utf-8")
+    marker = runtime / "CAM_WAS_INVOKED"
+    command.write_text(
+        f"#!/bin/sh\nprintf invoked > {marker}\nexit 99\n", encoding="utf-8"
+    )
     command.chmod(0o755)
     database = runtime / "claw.db"
     database.write_bytes(b"fixture database")
+    Path(f"{database}-wal").write_bytes(b"fixture wal")
+    Path(f"{database}-shm").write_bytes(b"fixture shm")
     config = runtime / "claw.toml"
     config.write_text('[database]\ndb_path = "claw.db"\n', encoding="utf-8")
     profiles = runtime / "model_profiles.toml"
@@ -55,6 +79,7 @@ def _runtime_fixture(tmp_path: Path) -> dict[str, Path]:
         "config": config,
         "profiles": profiles,
         "receipt": receipt,
+        "marker": marker,
     }
 
 
@@ -77,17 +102,29 @@ def _request(tmp_path: Path, *, intent: str = "assess"):
     )
 
 
-def _digest(path: Path) -> str:
-    digest = hashlib.sha256()
-    if path.is_file():
-        digest.update(path.read_bytes())
-        return digest.hexdigest()
-    for item in sorted(path.rglob("*")):
-        if ".git" in item.parts or not item.is_file():
-            continue
-        digest.update(str(item.relative_to(path)).encode("utf-8"))
-        digest.update(item.read_bytes())
-    return digest.hexdigest()
+def _snapshot(path: Path) -> tuple[tuple[str, str, int, int, int, str], ...]:
+    root = path.parent if path.is_file() or path.is_symlink() else path
+    items = [path] if path.is_file() or path.is_symlink() else [path, *path.rglob("*")]
+    rows = []
+    for item in sorted(items, key=lambda value: str(value)):
+        relative = "." if item == path else str(item.relative_to(root if item == path else path))
+        stat = item.lstat()
+        kind = "symlink" if item.is_symlink() else "directory" if item.is_dir() else "file"
+        content = ""
+        if item.is_symlink():
+            content = os.readlink(item)
+        elif item.is_file():
+            content = hashlib.sha256(item.read_bytes()).hexdigest()
+        rows.append((relative, kind, stat.st_mode, stat.st_size, stat.st_mtime_ns, content))
+    return tuple(rows)
+
+
+def _database_snapshot(path: Path) -> tuple:
+    return tuple(
+        (suffix, candidate.exists(), _snapshot(candidate) if candidate.exists() else ())
+        for suffix in ("", "-wal", "-shm", "-journal")
+        for candidate in (Path(str(path) + suffix),)
+    )
 
 
 @pytest.mark.parametrize("intent", sorted(ALL_INTENTS))
@@ -96,43 +133,60 @@ def test_plan_supports_every_workflow_intent_without_execution(tmp_path: Path, i
 
     request = _request(tmp_path, intent=intent)
     before = {
-        "target": _digest(request.target),
-        "database": _digest(request.runtime.database),
-        "config": _digest(request.runtime.config),
-        "model_profiles": _digest(request.runtime.model_profiles),
+        "target": _snapshot(request.target),
+        "database": _database_snapshot(request.runtime.database),
+        "config": _snapshot(request.runtime.config),
+        "model_profiles": _snapshot(request.runtime.model_profiles),
     }
 
     result = plan_request(request, registry_path=CONTRACT)
 
     after = {
-        "target": _digest(request.target),
-        "database": _digest(request.runtime.database),
-        "config": _digest(request.runtime.config),
-        "model_profiles": _digest(request.runtime.model_profiles),
+        "target": _snapshot(request.target),
+        "database": _database_snapshot(request.runtime.database),
+        "config": _snapshot(request.runtime.config),
+        "model_profiles": _snapshot(request.runtime.model_profiles),
     }
     assert result.intent == intent
     assert result.goal == request.request
     assert result.target == request.target.resolve()
     assert result.run_id == "swe-run-001"
     assert result.mining_receipt == request.mining_receipt.resolve()
-    assert result.route.command_path
+    assert result.route.command_path == EXPECTED_DEFAULTS[intent]
     assert result.route.cam_codx_route == intent
     assert result.planning_writes == "none"
     assert result.operation_executed is False
     assert result.next_action
-    assert before == after == result.identity_hashes
+    assert before == after
+    assert set(result.identity_hashes) == set(before)
+    assert not request.runtime.command.parent.joinpath("CAM_WAS_INVOKED").exists()
 
 
 def test_plan_selects_a_registry_backed_safe_default() -> None:
     from tools.cam_control_plane import select_route
 
     contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
-    route = select_route(contract, intent="assess")
+    route = select_route(contract, intent="assess", request="Continue this build")
 
     assert route.command_path == "brief-query"
     assert route.memory_mode == "read_only"
     assert route.provider_spend is False
     assert route.approval_classes == ("none",)
+
+
+def test_identity_hashes_cover_structure_metadata_and_sqlite_sidecars(tmp_path: Path) -> None:
+    from tools.cam_control_plane import _identity_hashes
+
+    request = _request(tmp_path)
+    baseline = _identity_hashes(request)
+
+    empty = request.target / "empty-directory"
+    empty.chmod(0o700)
+    assert _identity_hashes(request)["target"] != baseline["target"]
+
+    wal = Path(f"{request.runtime.database}-wal")
+    wal.write_bytes(b"changed wal")
+    assert _identity_hashes(request)["database"] != baseline["database"]
 
 
 def test_explicit_operation_must_exist_and_match_the_intent(tmp_path: Path) -> None:
@@ -152,6 +206,19 @@ def test_unknown_intent_is_rejected(tmp_path: Path) -> None:
         plan_request(_request(tmp_path, intent="invent-magic"), registry_path=CONTRACT)
 
 
+def test_request_semantics_select_a_specific_admin_operation() -> None:
+    from tools.cam_control_plane import select_route
+
+    contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
+
+    assert select_route(
+        contract, intent="self-enhance", request="Rollback the failed self enhancement"
+    ).command_path == "self-enhance rollback"
+    assert select_route(
+        contract, intent="models", request="Show the model catalog"
+    ).command_path == "models catalog"
+
+
 @pytest.mark.parametrize("field", ["database", "config"])
 def test_ambiguous_runtime_identity_is_rejected(tmp_path: Path, field: str) -> None:
     from tools.cam_control_plane import ControlPlaneError, plan_request
@@ -162,6 +229,20 @@ def test_ambiguous_runtime_identity_is_rejected(tmp_path: Path, field: str) -> N
     bad_runtime = replace(runtime, **{field: bad_path})
     with pytest.raises(ControlPlaneError, match=f"CAM {field} identity"):
         plan_request(replace(request, runtime=bad_runtime), registry_path=CONTRACT)
+
+
+def test_config_and_explicit_database_must_name_the_same_file(tmp_path: Path) -> None:
+    from tools.cam_control_plane import ControlPlaneError, plan_request
+
+    request = _request(tmp_path)
+    different = request.runtime.database.parent / "different.db"
+    different.write_bytes(b"different")
+    request.runtime.config.write_text(
+        f'[database]\ndb_path = "{different}"\n', encoding="utf-8"
+    )
+
+    with pytest.raises(ControlPlaneError, match="config/database identity mismatch"):
+        plan_request(request, registry_path=CONTRACT)
 
 
 def test_relative_and_colliding_runtime_paths_are_rejected(tmp_path: Path) -> None:
@@ -180,13 +261,25 @@ def test_relative_and_colliding_runtime_paths_are_rejected(tmp_path: Path) -> No
         )
 
 
-def test_unresolved_or_non_executable_cam_command_is_rejected(tmp_path: Path) -> None:
+def test_non_executable_cam_command_is_rejected(tmp_path: Path) -> None:
     from tools.cam_control_plane import ControlPlaneError, plan_request
 
     request = _request(tmp_path)
     request.runtime.command.chmod(0o644)
     with pytest.raises(ControlPlaneError, match="executable"):
         plan_request(request, registry_path=CONTRACT)
+
+
+def test_unresolved_cam_command_is_rejected(tmp_path: Path) -> None:
+    from tools.cam_control_plane import ControlPlaneError, plan_request
+
+    request = _request(tmp_path)
+    missing = request.runtime.command.parent / "missing-cam"
+    with pytest.raises(ControlPlaneError, match="identity is unresolved"):
+        plan_request(
+            replace(request, runtime=replace(request.runtime, command=missing)),
+            registry_path=CONTRACT,
+        )
 
 
 def test_registry_missing_commands_fail_closed(tmp_path: Path) -> None:

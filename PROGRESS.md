@@ -379,6 +379,15 @@
   target, memory mode, operation write boundary, provider-spend possibility,
   mining status, approvals, and next action. Planning does not import or invoke
   CAM_CAM and explicitly records `operation_executed=false`.
-- TDD RED produced `24` expected failures while the module was absent. GREEN
-  passes `24` focused tests, including before/after hashes for the target,
-  database, config, and model profiles, plus CLI JSON/card/help checks.
+- TDD RED produced `24` expected failures while the module was absent. The
+  first specification review found unsafe lexical route selection, no proof
+  that `claw.toml` and the explicit database named the same identity, and
+  incomplete no-write snapshots. The hardened router now uses explicit
+  operation words with intent-specific safe fallbacks, validates the TOML
+  database binding, and hashes structural metadata, symlinks, empty
+  directories, `.git`, and SQLite sidecars. An executable tripwire proves the
+  CAM command is never invoked during planning.
+- GREEN now passes `28` focused tests and `63` combined control-plane,
+  capability-registry, and agent-pack tests, plus CLI help and `git diff
+  --check`. No CAM operation, provider call, database mutation, target write,
+  model-profile change, or runtime-config change occurred.

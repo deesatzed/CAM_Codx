@@ -14,12 +14,29 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import sys
+import tomllib
 from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_REGISTRY = ROOT / "agent-packs" / "contract" / "cam_agent_capabilities.json"
+SAFE_INTENT_DEFAULTS = {
+    "assess": "brief-query",
+    "plan": "camify",
+    "build": "create",
+    "fix": "enhance",
+    "verify": "validate",
+    "record": "learn proof",
+    "mine": "mine",
+    "knowledge": "kb search",
+    "models": "models current",
+    "self-enhance": "self-enhance status",
+    "evolution": "evolution status",
+    "doctor": "doctor capabilities",
+    "setup": "setup",
+}
 
 
 class ControlPlaneError(ValueError):
@@ -95,16 +112,6 @@ def _load_registry(path: Path) -> dict[str, Any]:
     return payload
 
 
-def _route_rank(route: dict[str, Any]) -> tuple[int, int, int, str]:
-    approvals = route.get("approval_classes", [])
-    return (
-        0 if approvals == ["none"] else 1,
-        0 if route.get("risk_class") == "read_only" else 1,
-        1 if route.get("provider_spend") else 0,
-        str(route.get("command_path", "")),
-    )
-
-
 def _to_route_plan(route: dict[str, Any]) -> RoutePlan:
     return RoutePlan(
         command_path=route["command_path"],
@@ -120,9 +127,9 @@ def _to_route_plan(route: dict[str, Any]) -> RoutePlan:
 
 
 def select_route(
-    registry: dict[str, Any], *, intent: str, operation: str | None = None
+    registry: dict[str, Any], *, intent: str, request: str = "", operation: str | None = None
 ) -> RoutePlan:
-    """Select one visible managed command, or validate an explicit operation."""
+    """Select one explicit/semantic route, with a safe intent-specific fallback."""
     intents = registry["workflow_intents"]
     if intent not in intents:
         raise ControlPlaneError(
@@ -159,7 +166,31 @@ def select_route(
     ]
     if not candidates:
         raise ControlPlaneError(f"Intent {intent!r} has no managed command in the registry")
-    return _to_route_plan(min(candidates, key=_route_rank))
+    by_path = {route["command_path"]: route for route in candidates}
+    request_words = set(re.findall(r"[a-z0-9]+", request.lower()))
+    intent_words = set(re.findall(r"[a-z0-9]+", intent.lower()))
+    semantic_matches = []
+    for route in candidates:
+        command_words = re.findall(r"[a-z0-9]+", route["command_path"].lower())
+        specific_words = [word for word in command_words if word not in intent_words]
+        # Do not guess from generic family words.  A semantic route is selected
+        # only when every operation-specific word is explicit in the request.
+        if specific_words and set(specific_words) <= request_words:
+            semantic_matches.append((len(specific_words), len(command_words), route))
+    if semantic_matches:
+        _, _, matched = max(
+            semantic_matches,
+            key=lambda item: (item[0], item[1], item[2]["command_path"]),
+        )
+        return _to_route_plan(matched)
+
+    default_path = SAFE_INTENT_DEFAULTS.get(intent)
+    default = by_path.get(default_path)
+    if default is None:
+        raise ControlPlaneError(
+            f"Intent {intent!r} has no registered safe default {default_path!r}"
+        )
+    return _to_route_plan(default)
 
 
 def _require_absolute_file(path: Path, label: str, *, executable: bool = False) -> Path:
@@ -195,6 +226,22 @@ def _resolve_request(request: ControlPlaneRequest) -> ControlPlaneRequest:
         identities.append(model_profiles)
     if len(identities) != len(set(identities)):
         raise ControlPlaneError("CAM runtime identities must resolve to distinct files")
+    try:
+        config_payload = tomllib.loads(config.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
+        raise ControlPlaneError(f"CAM config identity is unreadable or invalid: {exc}") from exc
+    configured_database = config_payload.get("database", {}).get("db_path")
+    if not isinstance(configured_database, str) or not configured_database.strip():
+        raise ControlPlaneError("CAM config identity has no unambiguous database.db_path")
+    configured_path = Path(configured_database).expanduser()
+    if not configured_path.is_absolute():
+        configured_path = config.parent / configured_path
+    configured_path = configured_path.resolve(strict=False)
+    if configured_path != database:
+        raise ControlPlaneError(
+            f"CAM config/database identity mismatch: config binds {configured_path}, "
+            f"but --cam-db pins {database}"
+        )
 
     receipt = None
     if request.mining_receipt is not None:
@@ -217,36 +264,54 @@ def _resolve_request(request: ControlPlaneRequest) -> ControlPlaneRequest:
     )
 
 
-def _hash_file(path: Path) -> str:
+def _hash_path_identity(path: Path) -> str:
+    """Hash content plus structural metadata without following symlinks."""
     digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
+    root = path.parent if path.is_file() or path.is_symlink() else path
+    items = [path] if path.is_file() or path.is_symlink() else [path, *path.rglob("*")]
+    for item in sorted(items, key=lambda value: str(value)):
+        relative = "." if item == path else str(item.relative_to(root if item == path else path))
+        stat = item.lstat()
+        if item.is_symlink():
+            kind = "symlink"
+        elif item.is_dir():
+            kind = "directory"
+        elif item.is_file():
+            kind = "file"
+        else:
+            kind = "other"
+        digest.update(
+            f"{relative}\0{kind}\0{stat.st_mode}\0{stat.st_size}\0{stat.st_mtime_ns}\0".encode(
+                "utf-8"
+            )
+        )
+        if item.is_symlink():
+            digest.update(os.readlink(item).encode("utf-8"))
+        elif item.is_file():
+            with item.open("rb") as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                    digest.update(chunk)
     return digest.hexdigest()
 
 
-def _hash_target(path: Path) -> str:
-    if path.is_file():
-        return _hash_file(path)
+def _hash_sqlite_identity(database: Path) -> str:
     digest = hashlib.sha256()
-    for item in sorted(path.rglob("*")):
-        if ".git" in item.parts or not item.is_file():
-            continue
-        digest.update(str(item.relative_to(path)).encode("utf-8"))
-        with item.open("rb") as handle:
-            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                digest.update(chunk)
+    for suffix in ("", "-wal", "-shm", "-journal"):
+        path = Path(str(database) + suffix)
+        digest.update(f"{path.name}\0{path.exists()}\0".encode("utf-8"))
+        if path.exists():
+            digest.update(_hash_path_identity(path).encode("ascii"))
     return digest.hexdigest()
 
 
 def _identity_hashes(request: ControlPlaneRequest) -> dict[str, str]:
     hashes = {
-        "target": _hash_target(request.target),
-        "database": _hash_file(request.runtime.database),
-        "config": _hash_file(request.runtime.config),
+        "target": _hash_path_identity(request.target),
+        "database": _hash_sqlite_identity(request.runtime.database),
+        "config": _hash_path_identity(request.runtime.config),
     }
     if request.runtime.model_profiles is not None:
-        hashes["model_profiles"] = _hash_file(request.runtime.model_profiles)
+        hashes["model_profiles"] = _hash_path_identity(request.runtime.model_profiles)
     return hashes
 
 
@@ -257,7 +322,12 @@ def plan_request(
     resolved = _resolve_request(request)
     before = _identity_hashes(resolved)
     registry = _load_registry(registry_path)
-    route = select_route(registry, intent=resolved.intent, operation=resolved.operation)
+    route = select_route(
+        registry,
+        intent=resolved.intent,
+        request=resolved.request,
+        operation=resolved.operation,
+    )
     after = _identity_hashes(resolved)
     if after != before:
         raise ControlPlaneError("Planning changed a pinned target or CAM runtime identity")
