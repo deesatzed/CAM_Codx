@@ -110,6 +110,31 @@ def test_contract_schema_2_has_all_approved_workflow_intents() -> None:
     assert contract["checked_date"] == "2026-08-12"
     assert contract["ownership"]["hub_path"] == "/Volumes/WS4TB/waswiki/CAM_Codx"
     assert contract["ownership"]["runtime_path"] == "/Volumes/WS4TB/waswiki/CAM_CAM"
+    for intent, policy in contract["workflow_intents"].items():
+        assert set(policy) == {"description", "default_command"}
+        assert policy["description"].strip()
+        defaults = [
+            route
+            for route in contract["command_routes"]
+            if route["command_path"] == policy["default_command"]
+        ]
+        assert len(defaults) == 1, intent
+        route = defaults[0]
+        assert route["cam_codx_route"] == intent
+        assert route["kind"] == "command"
+        assert route["command_status"] == "canonical"
+        assert route["classification"] == "managed"
+        assert route["hidden"] is False
+
+
+def test_validator_rejects_invalid_intent_default(tmp_path: Path) -> None:
+    contract = _contract()
+    contract["workflow_intents"]["assess"]["default_command"] = "models current"
+
+    result = _run_validator(tmp_path, contract, _manifest_fixture())
+
+    assert result.returncode != 0
+    assert "invalid default command" in result.stderr
 
 
 def test_every_command_route_has_complete_policy_and_runtime_shape() -> None:

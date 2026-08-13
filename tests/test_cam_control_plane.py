@@ -29,23 +29,6 @@ ALL_INTENTS = {
     "doctor",
     "setup",
 }
-EXPECTED_DEFAULTS = {
-    "assess": "brief-query",
-    "plan": "camify",
-    "build": "create",
-    "fix": "enhance",
-    "verify": "validate",
-    "record": "learn proof",
-    "mine": "mine",
-    "knowledge": "kb search",
-    "models": "models current",
-    "self-enhance": "self-enhance status",
-    "evolution": "evolution status",
-    "doctor": "doctor capabilities",
-    "setup": "setup",
-}
-
-
 def _runtime_fixture(tmp_path: Path) -> dict[str, Path]:
     target = tmp_path / "target"
     target.mkdir(parents=True)
@@ -140,6 +123,7 @@ def test_plan_supports_every_workflow_intent_without_execution(tmp_path: Path, i
     }
 
     result = plan_request(request, registry_path=CONTRACT)
+    contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
 
     after = {
         "target": _snapshot(request.target),
@@ -152,7 +136,7 @@ def test_plan_supports_every_workflow_intent_without_execution(tmp_path: Path, i
     assert result.target == request.target.resolve()
     assert result.run_id == "swe-run-001"
     assert result.mining_receipt == request.mining_receipt.resolve()
-    assert result.route.command_path == EXPECTED_DEFAULTS[intent]
+    assert result.route.command_path == contract["workflow_intents"][intent]["default_command"]
     assert result.route.cam_codx_route == intent
     assert result.planning_writes == "none"
     assert result.operation_executed is False
@@ -206,17 +190,32 @@ def test_unknown_intent_is_rejected(tmp_path: Path) -> None:
         plan_request(_request(tmp_path, intent="invent-magic"), registry_path=CONTRACT)
 
 
-def test_request_semantics_select_a_specific_admin_operation() -> None:
+def test_non_default_admin_operation_must_be_explicit() -> None:
     from tools.cam_control_plane import select_route
 
     contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
 
     assert select_route(
         contract, intent="self-enhance", request="Rollback the failed self enhancement"
-    ).command_path == "self-enhance rollback"
+    ).command_path == "self-enhance status"
     assert select_route(
-        contract, intent="models", request="Show the model catalog"
+        contract, intent="models", request="Show the model catalog", operation="models catalog"
     ).command_path == "models catalog"
+
+
+@pytest.mark.parametrize(
+    "request_text",
+    [
+        "Do not set models; show current models",
+        "Compare models set with models current",
+        "The docs mention models set",
+    ],
+)
+def test_free_text_cannot_select_a_risk_elevating_operation(request_text: str) -> None:
+    from tools.cam_control_plane import select_route
+
+    contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
+    assert select_route(contract, intent="models", request=request_text).command_path == "models current"
 
 
 @pytest.mark.parametrize("field", ["database", "config"])
@@ -294,6 +293,43 @@ def test_registry_missing_commands_fail_closed(tmp_path: Path) -> None:
 
     with pytest.raises(ControlPlaneError, match="no managed command"):
         plan_request(_request(tmp_path / "request", intent="setup"), registry_path=registry)
+
+
+def test_malformed_config_fails_as_controlled_cli_error(tmp_path: Path) -> None:
+    fixture = _runtime_fixture(tmp_path)
+    fixture["config"].write_text('database = "not-a-table"\n', encoding="utf-8")
+
+    completed = subprocess.run(
+        [*_cli_args(fixture), "--json"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 2
+    assert "CAM_Codx plan error:" in completed.stderr
+    assert "Traceback" not in completed.stderr
+
+
+def test_malformed_registry_fails_as_controlled_cli_error(tmp_path: Path) -> None:
+    fixture = _runtime_fixture(tmp_path)
+    contract = json.loads(CONTRACT.read_text(encoding="utf-8"))
+    contract["command_routes"][0].pop("approval_classes")
+    registry = tmp_path / "malformed-registry.json"
+    registry.write_text(json.dumps(contract), encoding="utf-8")
+
+    completed = subprocess.run(
+        [*_cli_args(fixture), "--registry", str(registry), "--json"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 2
+    assert "CAM_Codx plan error:" in completed.stderr
+    assert "Traceback" not in completed.stderr
 
 
 def test_optional_run_and_receipt_are_optional(tmp_path: Path) -> None:

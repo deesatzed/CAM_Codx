@@ -14,7 +14,6 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import re
 import sys
 import tomllib
 from typing import Any
@@ -22,20 +21,19 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_REGISTRY = ROOT / "agent-packs" / "contract" / "cam_agent_capabilities.json"
-SAFE_INTENT_DEFAULTS = {
-    "assess": "brief-query",
-    "plan": "camify",
-    "build": "create",
-    "fix": "enhance",
-    "verify": "validate",
-    "record": "learn proof",
-    "mine": "mine",
-    "knowledge": "kb search",
-    "models": "models current",
-    "self-enhance": "self-enhance status",
-    "evolution": "evolution status",
-    "doctor": "doctor capabilities",
-    "setup": "setup",
+_ROUTE_FIELDS = {
+    "command_path": str,
+    "kind": str,
+    "hidden": bool,
+    "command_status": str,
+    "classification": str,
+    "cam_codx_route": str,
+    "default_mode": str,
+    "side_effect_class": str,
+    "provider_spend": bool,
+    "approval_classes": list,
+    "artifacts": list,
+    "runtime_source_refs": list,
 }
 
 
@@ -105,10 +103,33 @@ def _load_registry(path: Path) -> dict[str, Any]:
         raise ControlPlaneError(f"Cannot read capability registry {path}: {exc}") from exc
     if not isinstance(payload, dict) or payload.get("schema_version") != "2.0":
         raise ControlPlaneError("Capability registry must use schema 2.0")
-    if not isinstance(payload.get("workflow_intents"), dict):
+    intents = payload.get("workflow_intents")
+    if not isinstance(intents, dict) or not intents:
         raise ControlPlaneError("Capability registry has no workflow intents")
-    if not isinstance(payload.get("command_routes"), list):
+    for intent, policy in intents.items():
+        if (
+            not isinstance(intent, str)
+            or not isinstance(policy, dict)
+            or not isinstance(policy.get("description"), str)
+            or not isinstance(policy.get("default_command"), str)
+        ):
+            raise ControlPlaneError(f"Capability registry intent {intent!r} is malformed")
+    routes = payload.get("command_routes")
+    if not isinstance(routes, list) or not routes:
         raise ControlPlaneError("Capability registry has no command routes")
+    for index, route in enumerate(routes):
+        if not isinstance(route, dict):
+            raise ControlPlaneError(f"Capability registry route {index} is not an object")
+        for field, expected_type in _ROUTE_FIELDS.items():
+            if not isinstance(route.get(field), expected_type):
+                raise ControlPlaneError(
+                    f"Capability registry route {index} has invalid {field!r}"
+                )
+        for field in ("approval_classes", "artifacts", "runtime_source_refs"):
+            if not route[field] or not all(isinstance(item, str) and item for item in route[field]):
+                raise ControlPlaneError(
+                    f"Capability registry route {index} has invalid {field!r} values"
+                )
     return payload
 
 
@@ -129,7 +150,7 @@ def _to_route_plan(route: dict[str, Any]) -> RoutePlan:
 def select_route(
     registry: dict[str, Any], *, intent: str, request: str = "", operation: str | None = None
 ) -> RoutePlan:
-    """Select one explicit/semantic route, with a safe intent-specific fallback."""
+    """Select one explicit route, or the contract's safe intent default."""
     intents = registry["workflow_intents"]
     if intent not in intents:
         raise ControlPlaneError(
@@ -167,24 +188,7 @@ def select_route(
     if not candidates:
         raise ControlPlaneError(f"Intent {intent!r} has no managed command in the registry")
     by_path = {route["command_path"]: route for route in candidates}
-    request_words = set(re.findall(r"[a-z0-9]+", request.lower()))
-    intent_words = set(re.findall(r"[a-z0-9]+", intent.lower()))
-    semantic_matches = []
-    for route in candidates:
-        command_words = re.findall(r"[a-z0-9]+", route["command_path"].lower())
-        specific_words = [word for word in command_words if word not in intent_words]
-        # Do not guess from generic family words.  A semantic route is selected
-        # only when every operation-specific word is explicit in the request.
-        if specific_words and set(specific_words) <= request_words:
-            semantic_matches.append((len(specific_words), len(command_words), route))
-    if semantic_matches:
-        _, _, matched = max(
-            semantic_matches,
-            key=lambda item: (item[0], item[1], item[2]["command_path"]),
-        )
-        return _to_route_plan(matched)
-
-    default_path = SAFE_INTENT_DEFAULTS.get(intent)
+    default_path = intents[intent]["default_command"]
     default = by_path.get(default_path)
     if default is None:
         raise ControlPlaneError(
@@ -230,7 +234,10 @@ def _resolve_request(request: ControlPlaneRequest) -> ControlPlaneRequest:
         config_payload = tomllib.loads(config.read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, tomllib.TOMLDecodeError) as exc:
         raise ControlPlaneError(f"CAM config identity is unreadable or invalid: {exc}") from exc
-    configured_database = config_payload.get("database", {}).get("db_path")
+    database_config = config_payload.get("database")
+    if not isinstance(database_config, dict):
+        raise ControlPlaneError("CAM config identity has no unambiguous [database] table")
+    configured_database = database_config.get("db_path")
     if not isinstance(configured_database, str) or not configured_database.strip():
         raise ControlPlaneError("CAM config identity has no unambiguous database.db_path")
     configured_path = Path(configured_database).expanduser()

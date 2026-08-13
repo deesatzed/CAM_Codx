@@ -727,19 +727,19 @@
     }
   },
   "workflow_intents": {
-    "assess": "Understand a new idea or repository and recall relevant prior work.",
-    "plan": "Define scope, gaps, risks, checks, and the next bounded milestone.",
-    "build": "Start or continue a bounded implementation.",
-    "fix": "Diagnose, mitigate, repair, or recommend redevelopment.",
-    "verify": "Test a result and its claims.",
-    "record": "Persist a verified outcome with limitations and provenance.",
-    "mine": "Add knowledge from an explicit source under bounded scope.",
-    "knowledge": "Inspect or maintain existing CAM knowledge.",
-    "models": "Inspect, compare, select, promote, or roll back models and profiles.",
-    "self-enhance": "Evaluate or improve CAM with separate live-swap approval.",
-    "evolution": "Manage champion/challenger evolution.",
-    "doctor": "Diagnose CAM runtime, configuration, security, or environment health.",
-    "setup": "Install or repair CAM_Codx and CAM_CAM."
+    "assess": {"description": "Understand a new idea or repository and recall relevant prior work.", "default_command": "brief-query"},
+    "plan": {"description": "Define scope, gaps, risks, checks, and the next bounded milestone.", "default_command": "camify"},
+    "build": {"description": "Start or continue a bounded implementation.", "default_command": "create"},
+    "fix": {"description": "Diagnose, mitigate, repair, or recommend redevelopment.", "default_command": "enhance"},
+    "verify": {"description": "Test a result and its claims.", "default_command": "validate"},
+    "record": {"description": "Persist a verified outcome with limitations and provenance.", "default_command": "learn proof"},
+    "mine": {"description": "Add knowledge from an explicit source under bounded scope.", "default_command": "mine"},
+    "knowledge": {"description": "Inspect or maintain existing CAM knowledge.", "default_command": "kb search"},
+    "models": {"description": "Inspect, compare, select, promote, or roll back models and profiles.", "default_command": "models current"},
+    "self-enhance": {"description": "Evaluate or improve CAM with separate live-swap approval.", "default_command": "self-enhance status"},
+    "evolution": {"description": "Manage champion/challenger evolution.", "default_command": "evolution status"},
+    "doctor": {"description": "Diagnose CAM runtime, configuration, security, or environment health.", "default_command": "doctor capabilities"},
+    "setup": {"description": "Install or repair CAM_Codx and CAM_CAM.", "default_command": "setup"}
   },
   "command_routes": [
     {

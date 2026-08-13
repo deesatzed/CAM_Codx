@@ -391,3 +391,13 @@
   capability-registry, and agent-pack tests, plus CLI help and `git diff
   --check`. No CAM operation, provider call, database mutation, target write,
   model-profile change, or runtime-config change occurred.
+- Quality review found that unordered free-text matching could interpret a
+  negated mention as a mutating operation. Non-default operations now require
+  the explicit `operation` field; ordinary text always uses the one default
+  command declared by the capability contract for that intent. The registry
+  validator proves each default is one visible managed canonical command in
+  the matching family.
+- Full selected-route/config shape checks now turn malformed registries and
+  TOML database tables into controlled exit-code-2 errors without tracebacks.
+  The hardened combined suite passes `69` tests and generated agent-pack drift
+  checks pass.

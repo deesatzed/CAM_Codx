@@ -306,6 +306,18 @@ def validate_registry(contract: dict[str, Any], manifest: dict[str, Any]) -> dic
     if not isinstance(intents_payload, dict) or not intents_payload:
         raise RegistryValidationError("workflow_intents must be a non-empty object")
     intents = set(intents_payload)
+    for intent, policy in intents_payload.items():
+        if (
+            not isinstance(policy, dict)
+            or set(policy) != {"description", "default_command"}
+            or not isinstance(policy["description"], str)
+            or not policy["description"].strip()
+            or not isinstance(policy["default_command"], str)
+            or not policy["default_command"].strip()
+        ):
+            raise RegistryValidationError(
+                f"workflow intent {intent!r} must define description and default_command"
+            )
     routes = contract.get("command_routes")
     if not isinstance(routes, list) or not routes:
         raise RegistryValidationError("command_routes must be a non-empty list")
@@ -339,6 +351,20 @@ def validate_registry(contract: dict[str, Any], manifest: dict[str, Any]) -> dic
     for index, route in enumerate(routes):
         _validate_route_shape(route, index, intents)
     routes_by_path = {route["command_path"]: route for route in routes}
+    for intent, policy in intents_payload.items():
+        default_path = policy["default_command"]
+        default = routes_by_path.get(default_path)
+        if (
+            default is None
+            or default["kind"] != "command"
+            or default["command_status"] != "canonical"
+            or default["classification"] != "managed"
+            or default["hidden"]
+            or default["cam_codx_route"] != intent
+        ):
+            raise RegistryValidationError(
+                f"workflow intent {intent!r} has invalid default command {default_path!r}"
+            )
     for route in routes:
         if route["command_status"] != "alias":
             continue
