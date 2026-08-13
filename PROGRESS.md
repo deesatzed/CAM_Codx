@@ -360,3 +360,7 @@
   explicit runtime checkout, compares its digest, and then validates registry
   coverage. The hardened gate passes `29` focused tests and live 139-path
   conformance.
+- Final specification review aligned all alias safety tuples with their
+  canonical targets and made parity a validator invariant. It also corrected
+  the report/delta/synergy pairs to local initialization/write policy with no
+  provider spend, matching their current runtime implementations.

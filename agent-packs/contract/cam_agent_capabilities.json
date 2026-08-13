@@ -875,9 +875,9 @@
       "command_status": "alias",
       "classification": "hidden_compatibility",
       "cam_codx_route": "knowledge",
-      "risk_class": "corpus_write",
-      "side_effect_class": "corpus_or_ledger_write",
-      "default_mode": "preview",
+      "risk_class": "local_record_write",
+      "side_effect_class": "local_state_write",
+      "default_mode": "read_only_if_initialized",
       "approval_class": "bounded_phase",
       "provider_spend": false,
       "config_change": false,
@@ -901,11 +901,11 @@
       "command_status": "alias",
       "classification": "hidden_compatibility",
       "cam_codx_route": "knowledge",
-      "risk_class": "corpus_write",
-      "side_effect_class": "corpus_or_ledger_write",
+      "risk_class": "local_record_write",
+      "side_effect_class": "local_state_write",
       "default_mode": "read_only_if_initialized",
-      "approval_class": "provider_spend",
-      "provider_spend": true,
+      "approval_class": "bounded_phase",
+      "provider_spend": false,
       "config_change": false,
       "promotion": false,
       "artifacts": [
@@ -917,8 +917,7 @@
       ],
       "alias_target": "learn report",
       "approval_classes": [
-        "bounded_phase",
-        "provider_spend"
+        "bounded_phase"
       ]
     },
     {
@@ -2553,11 +2552,11 @@
       "command_status": "canonical",
       "classification": "managed",
       "cam_codx_route": "assess",
-      "risk_class": "corpus_write",
-      "side_effect_class": "corpus_or_ledger_write",
+      "risk_class": "local_record_write",
+      "side_effect_class": "local_state_write",
       "default_mode": "read_only_if_initialized",
-      "approval_class": "provider_spend",
-      "provider_spend": true,
+      "approval_class": "bounded_phase",
+      "provider_spend": false,
       "config_change": false,
       "promotion": false,
       "artifacts": [
@@ -2568,8 +2567,7 @@
         "CAM_CAM/src/claw/cli/capability_manifest.py"
       ],
       "approval_classes": [
-        "bounded_phase",
-        "provider_spend"
+        "bounded_phase"
       ]
     },
     {
@@ -2655,11 +2653,11 @@
       "command_status": "canonical",
       "classification": "managed",
       "cam_codx_route": "assess",
-      "risk_class": "corpus_write",
-      "side_effect_class": "corpus_or_ledger_write",
+      "risk_class": "local_record_write",
+      "side_effect_class": "local_state_write",
       "default_mode": "read_only_if_initialized",
-      "approval_class": "provider_spend",
-      "provider_spend": true,
+      "approval_class": "bounded_phase",
+      "provider_spend": false,
       "config_change": false,
       "promotion": false,
       "artifacts": [
@@ -2670,8 +2668,7 @@
         "CAM_CAM/src/claw/cli/capability_manifest.py"
       ],
       "approval_classes": [
-        "bounded_phase",
-        "provider_spend"
+        "bounded_phase"
       ]
     },
     {
@@ -2707,11 +2704,11 @@
       "command_status": "canonical",
       "classification": "managed",
       "cam_codx_route": "knowledge",
-      "risk_class": "corpus_write",
-      "side_effect_class": "corpus_or_ledger_write",
+      "risk_class": "local_record_write",
+      "side_effect_class": "local_state_write",
       "default_mode": "read_only_if_initialized",
-      "approval_class": "provider_spend",
-      "provider_spend": true,
+      "approval_class": "bounded_phase",
+      "provider_spend": false,
       "config_change": false,
       "promotion": false,
       "artifacts": [
@@ -2722,8 +2719,7 @@
         "CAM_CAM/src/claw/cli/capability_manifest.py"
       ],
       "approval_classes": [
-        "bounded_phase",
-        "provider_spend"
+        "bounded_phase"
       ]
     },
     {

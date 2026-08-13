@@ -96,6 +96,16 @@ ROUTE_KEYS = {
     "artifacts",
     "runtime_source_refs",
 }
+ALIAS_POLICY_FIELDS = (
+    "risk_class",
+    "side_effect_class",
+    "default_mode",
+    "approval_class",
+    "approval_classes",
+    "provider_spend",
+    "config_change",
+    "promotion",
+)
 
 
 class RegistryValidationError(ValueError):
@@ -321,6 +331,14 @@ def validate_registry(contract: dict[str, Any], manifest: dict[str, Any]) -> dic
         if target is None or target["command_status"] != "canonical":
             raise RegistryValidationError(
                 f"{route['command_path']}: alias target must be a registered canonical path"
+            )
+        divergent = [
+            field for field in ALIAS_POLICY_FIELDS if route[field] != target[field]
+        ]
+        if divergent:
+            raise RegistryValidationError(
+                f"{route['command_path']}: alias policy differs from canonical target "
+                + ", ".join(divergent)
             )
 
     manifest_items = manifest.get("items")

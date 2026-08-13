@@ -168,6 +168,22 @@ def test_hidden_aliases_and_hidden_canonical_commands_are_distinct() -> None:
     assert all(by_path[path]["command_status"] == "canonical" for path in hidden_canonical)
     assert all(by_path[path]["classification"] == "managed" for path in hidden_canonical)
 
+    policy_fields = {
+        "risk_class",
+        "side_effect_class",
+        "default_mode",
+        "approval_class",
+        "approval_classes",
+        "provider_spend",
+        "config_change",
+        "promotion",
+    }
+    for route in aliases:
+        target = by_path[route["alias_target"]]
+        assert {field: route[field] for field in policy_fields} == {
+            field: target[field] for field in policy_fields
+        }
+
 
 def test_known_runtime_boundaries_have_conservative_policy() -> None:
     routes = {_route_path(route): route for route in _contract()["command_routes"]}
@@ -295,6 +311,19 @@ def test_validator_handles_unhashable_enum_values_without_traceback(tmp_path: Pa
     assert result.returncode != 0
     assert "invalid classification" in result.stderr.lower()
     assert "traceback" not in result.stderr.lower()
+
+
+def test_validator_rejects_alias_policy_drift(tmp_path: Path) -> None:
+    contract = _contract()
+    route = next(
+        route for route in contract["command_routes"] if route["command_path"] == "synergies"
+    )
+    route["default_mode"] = "preview"
+
+    result = _run_validator(tmp_path, contract, _manifest_fixture())
+
+    assert result.returncode != 0
+    assert "alias policy differs from canonical target" in result.stderr.lower()
 
 
 def test_manifest_fixture_records_source_revision_and_digest() -> None:
