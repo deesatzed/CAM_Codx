@@ -345,3 +345,6 @@
   and target-executing commands as read-only. The follow-up audit corrected
   those route policies conservatively, added closed policy vocabularies and
   approval/flag invariants, and added named runtime-boundary regressions.
+- The second policy-truth pass also corrected `synergies`, `kb brains`, and
+  `self-enhance status`: each opens SQLite through an engine path that may
+  create files or set WAL state, so none is represented as side-effect-free.

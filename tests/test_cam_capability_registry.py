@@ -170,6 +170,9 @@ def test_known_runtime_boundaries_have_conservative_policy() -> None:
         "models benchmark fixtures",
         "models benchmark plan",
         "models benchmark report",
+        "kb brains",
+        "self-enhance status",
+        "synergies",
     }
     assert all(routes[path]["side_effect_class"] != "none" for path in artifact_writers)
     assert all(routes[path]["approval_class"] != "none" for path in artifact_writers)
@@ -186,6 +189,12 @@ def test_known_runtime_boundaries_have_conservative_policy() -> None:
     assert routes["premine"]["side_effect_class"] == "external_or_filesystem_write"
     assert routes["validate"]["side_effect_class"] == "validation_command_execution"
     assert routes["evolution champion-db"]["promotion"]
+
+    for path in {"kb brains", "self-enhance status", "synergies"}:
+        assert routes[path]["risk_class"] == "local_record_write"
+        assert routes[path]["side_effect_class"] == "local_state_write"
+        assert routes[path]["default_mode"] == "read_only_if_initialized"
+        assert routes[path]["approval_class"] == "bounded_phase"
 
 
 def test_validator_rejects_spend_without_provider_approval(tmp_path: Path) -> None:
