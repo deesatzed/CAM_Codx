@@ -366,3 +366,19 @@
 - The final quality pass extended alias parity to workflow routes and artifact
   promises, added a complete risk/default-mode matrix, and made malformed
   manifest values and provenance fail with controlled diagnostics.
+## 2026-08-13 read-only CAM_Codx control-plane router
+
+- Added a typed, registry-backed `cam_control_plane.py plan` surface for the
+  six everyday SWE intents and seven explicit administrative families.
+- Planning requires pinned absolute identities for the target, CAM executable,
+  database, config, and optional model profile plus optional SWE Run and mining
+  receipt references. Unknown intents, unresolved/non-executable paths,
+  colliding runtime identities, intent/operation mismatch, and registry gaps
+  fail closed.
+- The JSON result and human status card expose the goal, selected route,
+  target, memory mode, operation write boundary, provider-spend possibility,
+  mining status, approvals, and next action. Planning does not import or invoke
+  CAM_CAM and explicitly records `operation_executed=false`.
+- TDD RED produced `24` expected failures while the module was absent. GREEN
+  passes `24` focused tests, including before/after hashes for the target,
+  database, config, and model profiles, plus CLI JSON/card/help checks.
