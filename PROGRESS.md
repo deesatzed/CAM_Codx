@@ -340,3 +340,8 @@
   tests; the live snapshot validator, generator `--check`, and
   `git diff --check` also passed. These checks made no provider call and did
   not change a CAM database, model profile, or runtime configuration.
+- Specification review found that shape-only policy validation had mislabeled
+  several provider-backed, artifact-writing, service-starting, schema-writing,
+  and target-executing commands as read-only. The follow-up audit corrected
+  those route policies conservatively, added closed policy vocabularies and
+  approval/flag invariants, and added named runtime-boundary regressions.

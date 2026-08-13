@@ -141,6 +141,64 @@ def test_hidden_paths_are_aliases_and_never_managed_choices() -> None:
     assert not any(route["classification"] == "managed" for route in hidden)
 
 
+def test_known_runtime_boundaries_have_conservative_policy() -> None:
+    routes = {_route_path(route): route for route in _contract()["command_routes"]}
+
+    provider_routes = {
+        "chat",
+        "doctor keycheck",
+        "doctor status",
+        "evaluate",
+        "ideate",
+        "learn search",
+        "preflight",
+        "pulse freshness",
+        "quickstart",
+        "status",
+        "task quickstart",
+    }
+    assert all(routes[path]["provider_spend"] for path in provider_routes)
+    assert all(routes[path]["approval_class"] == "provider_spend" for path in provider_routes)
+
+    artifact_writers = {
+        "benchmark",
+        "doctor audit",
+        "forge benchmark",
+        "gaps",
+        "kb export-kit",
+        "kb instances manifest",
+        "models benchmark fixtures",
+        "models benchmark plan",
+        "models benchmark report",
+    }
+    assert all(routes[path]["side_effect_class"] != "none" for path in artifact_writers)
+    assert all(routes[path]["approval_class"] != "none" for path in artifact_writers)
+
+    for path in {"dashboard", "mcp"}:
+        assert routes[path]["risk_class"] == "cam_live_mutation"
+        assert routes[path]["default_mode"] == "service"
+        assert routes[path]["approval_class"] == "live_cam_mutation"
+        assert routes[path]["provider_spend"]
+        assert routes[path]["promotion"]
+
+    assert routes["dashboard"]["config_change"]
+    assert routes["models catalog"]["risk_class"] == "external_network_read"
+    assert routes["premine"]["side_effect_class"] == "external_or_filesystem_write"
+    assert routes["validate"]["side_effect_class"] == "validation_command_execution"
+    assert routes["evolution champion-db"]["promotion"]
+
+
+def test_validator_rejects_spend_without_provider_approval(tmp_path: Path) -> None:
+    contract = _contract()
+    route = next(route for route in contract["command_routes"] if route["command_path"] == "mine")
+    route["approval_class"] = "none"
+
+    result = _run_validator(tmp_path, contract, _manifest_fixture())
+
+    assert result.returncode != 0
+    assert "provider spend lacks provider approval" in result.stderr.lower()
+
+
 def test_validator_accepts_an_exact_manifest(tmp_path: Path) -> None:
     contract = _contract()
 

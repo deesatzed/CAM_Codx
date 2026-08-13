@@ -19,6 +19,51 @@ CLASSIFICATIONS = {
     "hidden_compatibility",
 }
 COMMAND_STATUSES = {"canonical", "alias"}
+RISK_CLASSES = {
+    "cam_live_mutation",
+    "corpus_write",
+    "external_network_mutation",
+    "external_network_read",
+    "external_provider_call",
+    "local_record_write",
+    "promotion_configuration",
+    "read_only",
+    "target_code_mutation",
+}
+SIDE_EFFECT_CLASSES = {
+    "configuration_or_selection_write",
+    "configuration_write",
+    "corpus_or_ledger_write",
+    "external_network_read",
+    "external_or_filesystem_write",
+    "external_provider_call",
+    "live_runtime_and_configuration_write",
+    "local_state_write",
+    "none",
+    "read_only_subprocess",
+    "target_repository_write",
+    "validation_command_execution",
+}
+DEFAULT_MODES = {
+    "execute",
+    "interactive_preview",
+    "plan_only",
+    "preview",
+    "read_only",
+    "read_only_if_initialized",
+    "route_selection",
+    "service",
+}
+APPROVAL_CLASSES = {
+    "bounded_phase",
+    "configuration_change",
+    "external_network",
+    "live_cam_mutation",
+    "none",
+    "promotion",
+    "provider_spend",
+    "target_mutation",
+}
 ROUTE_KEYS = {
     "command_path",
     "kind",
@@ -77,9 +122,15 @@ def _validate_route_shape(route: Any, index: int, intents: set[str]) -> None:
         raise RegistryValidationError(f"{path}: invalid classification")
     if route["cam_codx_route"] not in intents:
         raise RegistryValidationError(f"{path}: unknown CAM_Codx route")
-    for field in ("risk_class", "side_effect_class", "default_mode", "approval_class"):
-        if not isinstance(route[field], str) or not route[field]:
-            raise RegistryValidationError(f"{path}: {field} must be a non-empty string")
+    enumerated_fields = {
+        "risk_class": RISK_CLASSES,
+        "side_effect_class": SIDE_EFFECT_CLASSES,
+        "default_mode": DEFAULT_MODES,
+        "approval_class": APPROVAL_CLASSES,
+    }
+    for field, allowed in enumerated_fields.items():
+        if route[field] not in allowed:
+            raise RegistryValidationError(f"{path}: invalid {field}")
     for field in ("provider_spend", "config_change", "promotion"):
         if not isinstance(route[field], bool):
             raise RegistryValidationError(f"{path}: {field} must be boolean")
@@ -92,6 +143,22 @@ def _validate_route_shape(route: Any, index: int, intents: set[str]) -> None:
         raise RegistryValidationError(f"{path}: hidden status and classification disagree")
     if route["hidden"] != (route["command_status"] == "alias"):
         raise RegistryValidationError(f"{path}: hidden status and command status disagree")
+    if route["provider_spend"] and route["approval_class"] not in {
+        "provider_spend",
+        "live_cam_mutation",
+    }:
+        raise RegistryValidationError(f"{path}: provider spend lacks provider approval")
+    if route["config_change"] and route["approval_class"] not in {
+        "configuration_change",
+        "promotion",
+        "live_cam_mutation",
+    }:
+        raise RegistryValidationError(f"{path}: config change lacks configuration approval")
+    if route["promotion"] and route["approval_class"] not in {
+        "promotion",
+        "live_cam_mutation",
+    }:
+        raise RegistryValidationError(f"{path}: promotion lacks promotion approval")
 
 
 def validate_registry(contract: dict[str, Any], manifest: dict[str, Any]) -> dict[str, Any]:
