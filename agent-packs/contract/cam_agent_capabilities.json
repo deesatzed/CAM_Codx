@@ -874,7 +874,7 @@
       "hidden": true,
       "command_status": "alias",
       "classification": "hidden_compatibility",
-      "cam_codx_route": "knowledge",
+      "cam_codx_route": "assess",
       "risk_class": "local_record_write",
       "side_effect_class": "local_state_write",
       "default_mode": "read_only_if_initialized",
@@ -883,7 +883,7 @@
       "config_change": false,
       "promotion": false,
       "artifacts": [
-        "cam_operation_receipt"
+        "inspection_report"
       ],
       "runtime_source_refs": [
         "CAM_CAM/src/claw/cli/_monolith.py",
@@ -900,7 +900,7 @@
       "hidden": true,
       "command_status": "alias",
       "classification": "hidden_compatibility",
-      "cam_codx_route": "knowledge",
+      "cam_codx_route": "assess",
       "risk_class": "local_record_write",
       "side_effect_class": "local_state_write",
       "default_mode": "read_only_if_initialized",
@@ -1745,7 +1745,7 @@
       "hidden": true,
       "command_status": "alias",
       "classification": "hidden_compatibility",
-      "cam_codx_route": "verify",
+      "cam_codx_route": "knowledge",
       "risk_class": "local_record_write",
       "side_effect_class": "local_state_write",
       "default_mode": "execute",
@@ -1754,7 +1754,7 @@
       "config_change": false,
       "promotion": false,
       "artifacts": [
-        "verification_report"
+        "inspection_report"
       ],
       "runtime_source_refs": [
         "CAM_CAM/src/claw/cli/_monolith.py",
@@ -1825,7 +1825,7 @@
       "cam_codx_route": "knowledge",
       "risk_class": "corpus_write",
       "side_effect_class": "corpus_or_ledger_write",
-      "default_mode": "read_only",
+      "default_mode": "read_only_if_initialized",
       "approval_class": "bounded_phase",
       "provider_spend": false,
       "config_change": false,

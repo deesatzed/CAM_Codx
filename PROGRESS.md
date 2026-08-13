@@ -357,10 +357,12 @@
   policies and restored read-only truth for `mine-report`.
 - Pinned the independent manifest fixture to CAM_CAM commit `5075645` and its
   content digest. The cross-repo gate now generates the live manifest from an
-  explicit runtime checkout, compares its digest, and then validates registry
-  coverage. The hardened gate passes `29` focused tests and live 139-path
-  conformance.
+  explicit runtime checkout, compares its digest and exact Git revision, and
+  then validates registry coverage.
 - Final specification review aligned all alias safety tuples with their
   canonical targets and made parity a validator invariant. It also corrected
   the report/delta/synergy pairs to local initialization/write policy with no
   provider spend, matching their current runtime implementations.
+- The final quality pass extended alias parity to workflow routes and artifact
+  promises, added a complete risk/default-mode matrix, and made malformed
+  manifest values and provenance fail with controlled diagnostics.

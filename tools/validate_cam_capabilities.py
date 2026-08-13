@@ -78,6 +78,17 @@ RISK_SIDE_EFFECTS = {
     "read_only": {"none", "read_only_subprocess"},
     "target_code_mutation": {"target_repository_write", "validation_command_execution"},
 }
+RISK_DEFAULT_MODES = {
+    "cam_live_mutation": {"preview", "service"},
+    "corpus_write": {"execute", "interactive_preview", "preview", "read_only_if_initialized"},
+    "external_network_mutation": {"execute", "preview"},
+    "external_network_read": {"execute"},
+    "external_provider_call": {"read_only"},
+    "local_record_write": {"execute", "preview", "read_only", "read_only_if_initialized"},
+    "promotion_configuration": {"execute", "preview"},
+    "read_only": {"read_only", "route_selection"},
+    "target_code_mutation": {"execute", "plan_only", "preview"},
+}
 ROUTE_KEYS = {
     "command_path",
     "kind",
@@ -97,6 +108,7 @@ ROUTE_KEYS = {
     "runtime_source_refs",
 }
 ALIAS_POLICY_FIELDS = (
+    "cam_codx_route",
     "risk_class",
     "side_effect_class",
     "default_mode",
@@ -105,6 +117,7 @@ ALIAS_POLICY_FIELDS = (
     "provider_spend",
     "config_change",
     "promotion",
+    "artifacts",
 )
 
 
@@ -244,6 +257,8 @@ def _validate_route_shape(route: Any, index: int, intents: set[str]) -> None:
     risk = route["risk_class"]
     if side_effect not in RISK_SIDE_EFFECTS[risk]:
         raise RegistryValidationError(f"{path}: incompatible risk and side effect")
+    if route["default_mode"] not in RISK_DEFAULT_MODES[risk]:
+        raise RegistryValidationError(f"{path}: incompatible risk and default mode")
     if route["provider_spend"] and "provider_spend" not in approval_classes:
         raise RegistryValidationError(f"{path}: provider spend lacks provider approval")
     if "provider_spend" in approval_classes and not route["provider_spend"]:
@@ -349,7 +364,9 @@ def validate_registry(contract: dict[str, Any], manifest: dict[str, Any]) -> dic
     for index, item in enumerate(manifest_items):
         if not isinstance(item, dict) or set(item) != {"path", "kind", "hidden"}:
             raise RegistryValidationError(f"manifest items[{index}] has invalid shape")
-        if item["kind"] not in {"command", "group"} or not isinstance(item["hidden"], bool):
+        if not _is_enum(item["kind"], {"command", "group"}) or not isinstance(
+            item["hidden"], bool
+        ):
             raise RegistryValidationError(f"manifest item {item.get('path', index)} has invalid values")
         path = item["path"]
         if not isinstance(path, str) or not path:
@@ -413,14 +430,41 @@ def main(argv: list[str] | None = None) -> int:
             if args.runtime_repo is None:
                 raise RegistryValidationError("--pinned-manifest requires --runtime-repo")
             pinned = _load_json(args.pinned_manifest)
-            expected = pinned.get("source", {}).get("manifest_sha256")
+            source_metadata = pinned.get("source")
+            if not isinstance(source_metadata, dict):
+                raise RegistryValidationError("pinned manifest source must be an object")
+            expected = source_metadata.get("manifest_sha256")
             if not isinstance(expected, str) or len(expected) != 64:
                 raise RegistryValidationError("pinned manifest lacks a valid source digest")
             if _manifest_digest(pinned) != expected:
                 raise RegistryValidationError("pinned manifest content does not match its source digest")
             if _manifest_digest(manifest) != expected:
                 raise RegistryValidationError("live manifest differs from pinned digest")
+            pinned_commit = source_metadata.get("commit")
+            if not isinstance(pinned_commit, str) or len(pinned_commit) != 40:
+                raise RegistryValidationError("pinned manifest lacks a valid source commit")
+            try:
+                revision = subprocess.run(
+                    ["git", "rev-parse", "HEAD"],
+                    cwd=args.runtime_repo.resolve(),
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
+                    check=False,
+                )
+            except (OSError, subprocess.TimeoutExpired) as exc:
+                raise RegistryValidationError(f"cannot inspect CAM_CAM revision: {exc}") from exc
+            if revision.returncode != 0:
+                raise RegistryValidationError(
+                    "cannot inspect CAM_CAM revision: "
+                    + (revision.stderr.strip() or revision.stdout.strip())
+                )
+            if revision.stdout.strip() != pinned_commit:
+                raise RegistryValidationError(
+                    f"live CAM_CAM revision {revision.stdout.strip()} differs from pinned {pinned_commit}"
+                )
             print(f"Live manifest matches pinned digest: {expected}")
+            print(f"Live CAM_CAM revision matches pinned commit: {pinned_commit}")
         summary = validate_registry(_load_json(args.contract), manifest)
     except RegistryValidationError as exc:
         print(f"Capability registry invalid: {exc}", file=sys.stderr)

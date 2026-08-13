@@ -169,6 +169,7 @@ def test_hidden_aliases_and_hidden_canonical_commands_are_distinct() -> None:
     assert all(by_path[path]["classification"] == "managed" for path in hidden_canonical)
 
     policy_fields = {
+        "cam_codx_route",
         "risk_class",
         "side_effect_class",
         "default_mode",
@@ -177,6 +178,7 @@ def test_hidden_aliases_and_hidden_canonical_commands_are_distinct() -> None:
         "provider_spend",
         "config_change",
         "promotion",
+        "artifacts",
     }
     for route in aliases:
         target = by_path[route["alias_target"]]
@@ -280,12 +282,22 @@ def test_validator_rejects_spend_without_provider_approval(tmp_path: Path) -> No
         (
             "preflight",
             {"default_mode": "read_only"},
-            "target write cannot default to read only",
+            "incompatible risk and default mode",
         ),
         (
             "mine",
             {"side_effect_class": "none"},
             "incompatible risk and side effect",
+        ),
+        (
+            "mine",
+            {"default_mode": "read_only"},
+            "incompatible risk and default mode",
+        ),
+        (
+            "dashboard",
+            {"default_mode": "read_only"},
+            "incompatible risk and default mode",
         ),
     ],
 )
@@ -310,6 +322,48 @@ def test_validator_handles_unhashable_enum_values_without_traceback(tmp_path: Pa
 
     assert result.returncode != 0
     assert "invalid classification" in result.stderr.lower()
+    assert "traceback" not in result.stderr.lower()
+
+
+def test_validator_handles_unhashable_manifest_values_without_traceback(tmp_path: Path) -> None:
+    manifest = _manifest_fixture()
+    manifest["items"][0]["kind"] = []
+
+    result = _run_validator(tmp_path, _contract(), manifest)
+
+    assert result.returncode != 0
+    assert "invalid values" in result.stderr.lower()
+    assert "traceback" not in result.stderr.lower()
+
+
+def test_live_validator_handles_malformed_source_metadata(tmp_path: Path) -> None:
+    pinned = _manifest_fixture()
+    pinned["source"] = []
+    pinned_path = tmp_path / "pinned.json"
+    pinned_path.write_text(json.dumps(pinned), encoding="utf-8")
+    runtime_repo = Path(
+        os.environ.get("CAM_CAM_RUNTIME_REPO", ROOT.parent / "CAM_CAM")
+    ).resolve()
+    if not (runtime_repo / "src" / "claw" / "cli").is_dir():
+        pytest.skip(f"adjacent CAM_CAM checkout unavailable: {runtime_repo}")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(VALIDATOR_PATH),
+            "--runtime-repo",
+            str(runtime_repo),
+            "--pinned-manifest",
+            str(pinned_path),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "source must be an object" in result.stderr.lower()
     assert "traceback" not in result.stderr.lower()
 
 
@@ -358,6 +412,38 @@ def test_adjacent_cam_runtime_conforms_to_registry_and_pinned_manifest() -> None
 
     assert result.returncode == 0, result.stderr
     assert "live manifest matches pinned digest" in result.stdout.lower()
+    assert "live cam_cam revision matches pinned commit" in result.stdout.lower()
+
+
+def test_live_validator_rejects_pinned_revision_mismatch(tmp_path: Path) -> None:
+    pinned = _manifest_fixture()
+    pinned["source"]["commit"] = "0" * 40
+    pinned_path = tmp_path / "pinned.json"
+    pinned_path.write_text(json.dumps(pinned), encoding="utf-8")
+    runtime_repo = Path(
+        os.environ.get("CAM_CAM_RUNTIME_REPO", ROOT.parent / "CAM_CAM")
+    ).resolve()
+    if not (runtime_repo / "src" / "claw" / "cli").is_dir():
+        pytest.skip(f"adjacent CAM_CAM checkout unavailable: {runtime_repo}")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(VALIDATOR_PATH),
+            "--runtime-repo",
+            str(runtime_repo),
+            "--pinned-manifest",
+            str(pinned_path),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode != 0
+    assert "differs from pinned" in result.stderr.lower()
+    assert "traceback" not in result.stderr.lower()
 
 
 def test_validator_accepts_an_exact_manifest(tmp_path: Path) -> None:
