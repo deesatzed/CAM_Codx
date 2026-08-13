@@ -2,10 +2,14 @@ from __future__ import annotations
 
 from collections import Counter
 from copy import deepcopy
+import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
+
+import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -44,6 +48,7 @@ ROUTE_KEYS = {
     "side_effect_class",
     "default_mode",
     "approval_class",
+    "approval_classes",
     "provider_spend",
     "config_change",
     "promotion",
@@ -62,6 +67,17 @@ def _route_path(route: dict) -> str:
 
 def _manifest_fixture() -> dict:
     return json.loads(MANIFEST_FIXTURE_PATH.read_text(encoding="utf-8"))
+
+
+def _manifest_core(manifest: dict) -> dict:
+    return {"schema_version": manifest["schema_version"], "items": manifest["items"]}
+
+
+def _manifest_digest(manifest: dict) -> str:
+    encoded = json.dumps(
+        _manifest_core(manifest), sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _run_validator(tmp_path: Path, contract: dict, manifest: dict) -> subprocess.CompletedProcess[str]:
@@ -113,6 +129,8 @@ def test_every_command_route_has_complete_policy_and_runtime_shape() -> None:
         assert route["side_effect_class"]
         assert route["default_mode"]
         assert route["approval_class"]
+        assert isinstance(route["approval_classes"], list) and route["approval_classes"]
+        assert route["approval_class"] in route["approval_classes"]
         assert isinstance(route["provider_spend"], bool)
         assert isinstance(route["config_change"], bool)
         assert isinstance(route["promotion"], bool)
@@ -124,21 +142,31 @@ def test_every_command_route_has_complete_policy_and_runtime_shape() -> None:
     assert len(route_paths) == len(set(route_paths))
     assert Counter(route["classification"] for route in contract["command_routes"])[
         "hidden_compatibility"
-    ] == 15
+    ] == 11
 
 
-def test_hidden_paths_are_aliases_and_never_managed_choices() -> None:
+def test_hidden_aliases_and_hidden_canonical_commands_are_distinct() -> None:
     routes = _contract()["command_routes"]
-    hidden = [route for route in routes if route["classification"] == "hidden_compatibility"]
-
-    assert {_route_path(route) for route in hidden} >= {
-        "forge-export",
+    by_path = {_route_path(route): route for route in routes}
+    aliases = [route for route in routes if route["command_status"] == "alias"]
+    hidden_canonical = {
         "evolution approve",
+        "govern",
+        "mine-report",
+        "prism-demo",
+    }
+
+    assert {_route_path(route) for route in aliases} >= {
+        "forge-export",
         "quickstart",
     }
-    assert all(route["command_status"] == "alias" for route in hidden)
-    assert all(route["hidden"] for route in hidden)
-    assert not any(route["classification"] == "managed" for route in hidden)
+    assert all(route["hidden"] for route in aliases)
+    assert all(route["classification"] == "hidden_compatibility" for route in aliases)
+    assert all(route.get("alias_target") for route in aliases)
+    assert all(by_path[route["alias_target"]]["command_status"] == "canonical" for route in aliases)
+    assert all(by_path[path]["hidden"] for path in hidden_canonical)
+    assert all(by_path[path]["command_status"] == "canonical" for path in hidden_canonical)
+    assert all(by_path[path]["classification"] == "managed" for path in hidden_canonical)
 
 
 def test_known_runtime_boundaries_have_conservative_policy() -> None:
@@ -189,6 +217,12 @@ def test_known_runtime_boundaries_have_conservative_policy() -> None:
     assert routes["premine"]["side_effect_class"] == "external_or_filesystem_write"
     assert routes["validate"]["side_effect_class"] == "validation_command_execution"
     assert routes["evolution champion-db"]["promotion"]
+    assert routes["kb community publish"]["risk_class"] == "external_network_mutation"
+    assert routes["kb community import"]["risk_class"] == "external_network_read"
+    assert "external_network" in routes["kb community publish"]["approval_classes"]
+    assert "bounded_phase" in routes["kb community import"]["approval_classes"]
+    assert routes["mine-report"]["risk_class"] == "read_only"
+    assert not routes["mine-report"]["provider_spend"]
 
     for path in {"kb brains", "self-enhance status", "synergies"}:
         assert routes[path]["risk_class"] == "local_record_write"
@@ -200,12 +234,101 @@ def test_known_runtime_boundaries_have_conservative_policy() -> None:
 def test_validator_rejects_spend_without_provider_approval(tmp_path: Path) -> None:
     contract = _contract()
     route = next(route for route in contract["command_routes"] if route["command_path"] == "mine")
-    route["approval_class"] = "none"
+    route["approval_class"] = "bounded_phase"
+    route["approval_classes"] = ["bounded_phase"]
 
     result = _run_validator(tmp_path, contract, _manifest_fixture())
 
     assert result.returncode != 0
     assert "provider spend lacks provider approval" in result.stderr.lower()
+
+
+@pytest.mark.parametrize(
+    ("path", "changes", "message"),
+    [
+        (
+            "doctor keycheck",
+            {"provider_spend": False, "approval_class": "none", "approval_classes": ["none"]},
+            "external provider risk requires provider spend",
+        ),
+        (
+            "init",
+            {"config_change": False, "approval_class": "bounded_phase", "approval_classes": ["bounded_phase"]},
+            "configuration write requires config change",
+        ),
+        (
+            "evolution champion-db",
+            {"promotion": False, "approval_class": "bounded_phase", "approval_classes": ["bounded_phase"]},
+            "promotion risk requires promotion flag",
+        ),
+        (
+            "preflight",
+            {"default_mode": "read_only"},
+            "target write cannot default to read only",
+        ),
+        (
+            "mine",
+            {"side_effect_class": "none"},
+            "incompatible risk and side effect",
+        ),
+    ],
+)
+def test_validator_rejects_incoherent_policy_tuples(
+    tmp_path: Path, path: str, changes: dict, message: str
+) -> None:
+    contract = _contract()
+    route = next(route for route in contract["command_routes"] if route["command_path"] == path)
+    route.update(changes)
+
+    result = _run_validator(tmp_path, contract, _manifest_fixture())
+
+    assert result.returncode != 0
+    assert message in result.stderr.lower()
+
+
+def test_validator_handles_unhashable_enum_values_without_traceback(tmp_path: Path) -> None:
+    contract = _contract()
+    contract["command_routes"][0]["classification"] = []
+
+    result = _run_validator(tmp_path, contract, _manifest_fixture())
+
+    assert result.returncode != 0
+    assert "invalid classification" in result.stderr.lower()
+    assert "traceback" not in result.stderr.lower()
+
+
+def test_manifest_fixture_records_source_revision_and_digest() -> None:
+    manifest = _manifest_fixture()
+
+    assert manifest["source"]["repo"] == "CAM_CAM"
+    assert len(manifest["source"]["commit"]) == 40
+    assert manifest["source"]["manifest_sha256"] == _manifest_digest(manifest)
+
+
+def test_adjacent_cam_runtime_conforms_to_registry_and_pinned_manifest() -> None:
+    runtime_repo = Path(
+        os.environ.get("CAM_CAM_RUNTIME_REPO", ROOT.parent / "CAM_CAM")
+    ).resolve()
+    if not (runtime_repo / "src" / "claw" / "cli").is_dir():
+        pytest.skip(f"adjacent CAM_CAM checkout unavailable: {runtime_repo}")
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(VALIDATOR_PATH),
+            "--runtime-repo",
+            str(runtime_repo),
+            "--pinned-manifest",
+            str(MANIFEST_FIXTURE_PATH),
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "live manifest matches pinned digest" in result.stdout.lower()
 
 
 def test_validator_accepts_an_exact_manifest(tmp_path: Path) -> None:

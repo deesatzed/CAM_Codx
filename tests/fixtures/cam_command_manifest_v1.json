@@ -696,5 +696,10 @@
       "path": "validate"
     }
   ],
-  "schema_version": 1
+  "schema_version": 1,
+  "source": {
+    "repo": "CAM_CAM",
+    "commit": "5075645dc3a046d1f4500788cbb964c61f19ae40",
+    "manifest_sha256": "657891d41861bbee400c922beecdbfc7d272055b930d91eef8d1d10cfcdb5fb4"
+  }
 }

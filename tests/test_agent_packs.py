@@ -139,10 +139,24 @@ def test_generator_derives_direct_runtime_reference_without_hidden_aliases() -> 
     rendered = generate_agent_packs.render_direct_runtime_troubleshooting_reference(contract)
 
     assert "## Direct CAM_CAM Runtime Troubleshooting" in rendered
-    assert "`mine`" in rendered
     assert "`chat`" in rendered
+    assert "`mcp`" in rendered
+    assert "`mine`" not in rendered
     assert "`forge-export`" not in rendered
     assert "`evolution approve`" not in rendered
+    assert "Managed commands remain directly callable" in rendered
+
+
+def test_generator_lists_hidden_canonical_commands_as_explicit_internal_routes() -> None:
+    contract = _contract()
+
+    rendered = generate_agent_packs.render_managed_internal_reference(contract)
+
+    assert "`evolution approve`" in rendered
+    assert "`govern`" in rendered
+    assert "`mine-report`" in rendered
+    assert "`prism-demo`" in rendered
+    assert "`forge-export`" not in rendered
 
 
 def test_json_examples_parse() -> None:

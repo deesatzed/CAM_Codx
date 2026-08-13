@@ -83,7 +83,7 @@ def _render_command_route_table(routes: list[dict[str, Any]]) -> str:
             f"`{route['command_path']}` | "
             f"`{route['cam_codx_route']}` | "
             f"{route['default_mode']} | "
-            f"{route['approval_class']} | "
+            f"{', '.join(route['approval_classes'])} | "
             f"{route['side_effect_class']} |"
         )
     return "\n".join(lines)
@@ -94,7 +94,9 @@ def render_managed_capability_reference(contract: dict[str, Any]) -> str:
     routes = [
         route
         for route in contract["command_routes"]
-        if route["classification"] == "managed" and route["kind"] == "command"
+        if route["classification"] == "managed"
+        and route["kind"] == "command"
+        and not route["hidden"]
     ]
     return "\n".join(
         [
@@ -107,19 +109,42 @@ def render_managed_capability_reference(contract: dict[str, Any]) -> str:
     )
 
 
+def render_managed_internal_reference(contract: dict[str, Any]) -> str:
+    """Render hidden canonical operations available only through explicit workflows."""
+    routes = [
+        route
+        for route in contract["command_routes"]
+        if route["classification"] == "managed"
+        and route["kind"] == "command"
+        and route["hidden"]
+        and route["command_status"] == "canonical"
+    ]
+    return "\n".join(
+        [
+            "## Explicit Managed Internal Capabilities",
+            "",
+            "These standalone operations are intentionally absent from normal choices. CAM_Codx may route them only through their explicit advanced workflow and approval policy.",
+            "",
+            _render_command_route_table(routes),
+        ]
+    )
+
+
 def render_direct_runtime_troubleshooting_reference(contract: dict[str, Any]) -> str:
     """Render visible CAM_CAM commands available for diagnosis and recovery."""
     routes = [
         route
         for route in contract["command_routes"]
         if route["kind"] == "command"
-        and route["classification"] != "hidden_compatibility"
+        and route["classification"] == "troubleshooting_only"
+        and not route["hidden"]
     ]
     return "\n".join(
         [
             "## Direct CAM_CAM Runtime Troubleshooting",
             "",
             "Direct runtime invocation is for troubleshooting, runtime development, recovery, regression isolation, and existing expert scripts.",
+            "Managed commands remain directly callable for compatible expert scripts, but they are documented once in the CAM_Codx-managed table above.",
             "",
             _render_command_route_table(routes),
         ]
@@ -179,6 +204,8 @@ def render_contract_doc(contract: dict[str, Any]) -> str:
         render_capability_table(contract),
         "",
         render_managed_capability_reference(contract),
+        "",
+        render_managed_internal_reference(contract),
         "",
         render_direct_runtime_troubleshooting_reference(contract),
         "",

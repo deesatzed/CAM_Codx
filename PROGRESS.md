@@ -329,8 +329,8 @@
   the single registry for host capabilities, the 13 approved CAM_Codx workflow
   intents, and every CAM_CAM command/group route.
 - Captured an independent schema-version-1 manifest snapshot from CAM_CAM Task
-  1 and validated exact coverage of `139` paths: `122` managed, `2`
-  troubleshooting-only, and `15` hidden compatibility paths.
+  1 and validated exact coverage of `139` paths: `126` managed, `2`
+  troubleshooting-only, and `11` hidden compatibility aliases.
 - Added strict validation for missing, unknown, duplicate, multiply classified,
   kind-mismatched, hidden-mismatched, and incomplete-policy routes. Hidden
   compatibility commands remain callable but are omitted from generated normal
@@ -348,3 +348,15 @@
 - The second policy-truth pass also corrected `synergies`, `kb brains`, and
   `self-enhance status`: each opens SQLite through an engine path that may
   create files or set WAL state, so none is represented as side-effect-free.
+- Quality review separated the 11 genuine hidden aliases from four hidden
+  canonical operations (`evolution approve`, `govern`, `mine-report`, and
+  `prism-demo`) and added explicit alias targets. Hidden canonical operations
+  remain manager-routable but are absent from normal choices.
+- Added compound `approval_classes` plus a risk/side-effect/default/flag
+  compatibility matrix. Corrected community publish/import external-network
+  policies and restored read-only truth for `mine-report`.
+- Pinned the independent manifest fixture to CAM_CAM commit `5075645` and its
+  content digest. The cross-repo gate now generates the live manifest from an
+  explicit runtime checkout, compares its digest, and then validates registry
+  coverage. The hardened gate passes `29` focused tests and live 139-path
+  conformance.
