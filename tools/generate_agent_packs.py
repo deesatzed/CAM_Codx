@@ -72,6 +72,60 @@ def render_capability_table(contract: dict[str, Any], ids: list[str] | None = No
     return "\n".join(lines)
 
 
+def _render_command_route_table(routes: list[dict[str, Any]]) -> str:
+    lines = [
+        "| Runtime command | CAM_Codx route | Default | Approval | Side effect |",
+        "| --- | --- | --- | --- | --- |",
+    ]
+    for route in sorted(routes, key=lambda item: item["command_path"]):
+        lines.append(
+            "| "
+            f"`{route['command_path']}` | "
+            f"`{route['cam_codx_route']}` | "
+            f"{route['default_mode']} | "
+            f"{route['approval_class']} | "
+            f"{route['side_effect_class']} |"
+        )
+    return "\n".join(lines)
+
+
+def render_managed_capability_reference(contract: dict[str, Any]) -> str:
+    """Render normal CAM_Codx-managed runtime paths from the shared contract."""
+    routes = [
+        route
+        for route in contract["command_routes"]
+        if route["classification"] == "managed" and route["kind"] == "command"
+    ]
+    return "\n".join(
+        [
+            "## Managed CAM_Codx Capabilities",
+            "",
+            "Use these through CAM_Codx during normal work. The runtime command is shown for traceability, not as the default operator interface.",
+            "",
+            _render_command_route_table(routes),
+        ]
+    )
+
+
+def render_direct_runtime_troubleshooting_reference(contract: dict[str, Any]) -> str:
+    """Render visible CAM_CAM commands available for diagnosis and recovery."""
+    routes = [
+        route
+        for route in contract["command_routes"]
+        if route["kind"] == "command"
+        and route["classification"] != "hidden_compatibility"
+    ]
+    return "\n".join(
+        [
+            "## Direct CAM_CAM Runtime Troubleshooting",
+            "",
+            "Direct runtime invocation is for troubleshooting, runtime development, recovery, regression isolation, and existing expert scripts.",
+            "",
+            _render_command_route_table(routes),
+        ]
+    )
+
+
 def render_source_doc_table(contract: dict[str, Any]) -> str:
     lines = [
         "| Source | Checked | URL | Note |",
@@ -123,6 +177,10 @@ def render_contract_doc(contract: dict[str, Any]) -> str:
         "## Capabilities",
         "",
         render_capability_table(contract),
+        "",
+        render_managed_capability_reference(contract),
+        "",
+        render_direct_runtime_troubleshooting_reference(contract),
         "",
         "## Capability Details",
         "",

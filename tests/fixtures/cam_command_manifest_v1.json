@@ -1,0 +1,700 @@
+{
+  "items": [
+    {
+      "hidden": false,
+      "kind": "group",
+      "path": "ab-test"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "ab-test start"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "ab-test status"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "ab-test stop"
+    },
+    {
+      "hidden": true,
+      "kind": "command",
+      "path": "add-goal"
+    },
+    {
+      "hidden": true,
+      "kind": "command",
+      "path": "assimilation-delta"
+    },
+    {
+      "hidden": true,
+      "kind": "command",
+      "path": "assimilation-report"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "benchmark"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "brief-query"
+    },
+    {
+      "hidden": false,
+      "kind": "group",
+      "path": "cag"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "cag convert"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "cag rebuild"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "cag status"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "camify"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "chat"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "create"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "dashboard"
+    },
+    {
+      "hidden": false,
+      "kind": "group",
+      "path": "doctor"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "doctor audit"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "doctor capabilities"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "doctor expectations"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "doctor keycheck"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "doctor routing"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "doctor status"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "enhance"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "enrich"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "evaluate"
+    },
+    {
+      "hidden": false,
+      "kind": "group",
+      "path": "evolution"
+    },
+    {
+      "hidden": true,
+      "kind": "command",
+      "path": "evolution approve"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "evolution champion-db"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "evolution loop"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "evolution register"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "evolution run"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "evolution status"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "federate"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "fleet-enhance"
+    },
+    {
+      "hidden": false,
+      "kind": "group",
+      "path": "forge"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "forge benchmark"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "forge export"
+    },
+    {
+      "hidden": true,
+      "kind": "command",
+      "path": "forge-benchmark"
+    },
+    {
+      "hidden": true,
+      "kind": "command",
+      "path": "forge-export"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "gaps"
+    },
+    {
+      "hidden": true,
+      "kind": "command",
+      "path": "govern"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "ideate"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "init"
+    },
+    {
+      "hidden": false,
+      "kind": "group",
+      "path": "kb"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "kb bootstrap"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "kb brains"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "kb capability"
+    },
+    {
+      "hidden": false,
+      "kind": "group",
+      "path": "kb community"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "kb community approve"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "kb community browse"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "kb community import"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "kb community publish"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "kb community status"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "kb domains"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "kb export-kit"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "kb insights"
+    },
+    {
+      "hidden": false,
+      "kind": "group",
+      "path": "kb instances"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "kb instances add"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "kb instances list"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "kb instances manifest"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "kb instances query"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "kb instances remove"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "kb patterns"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "kb search"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "kb seed"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "kb synergies"
+    },
+    {
+      "hidden": true,
+      "kind": "command",
+      "path": "keycheck"
+    },
+    {
+      "hidden": false,
+      "kind": "group",
+      "path": "learn"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "learn backfill-components"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "learn delta"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "learn ingest-codex-outcomes"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "learn proof"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "learn reassess"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "learn report"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "learn search"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "learn synergies"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "learn usage"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "mcp"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "mine"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "mine-all"
+    },
+    {
+      "hidden": true,
+      "kind": "command",
+      "path": "mine-report"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "mine-self"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "mine-workspace"
+    },
+    {
+      "hidden": false,
+      "kind": "group",
+      "path": "models"
+    },
+    {
+      "hidden": false,
+      "kind": "group",
+      "path": "models benchmark"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "models benchmark advance"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "models benchmark fixtures"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "models benchmark plan"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "models benchmark report"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "models benchmark run"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "models benchmark select"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "models catalog"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "models current"
+    },
+    {
+      "hidden": false,
+      "kind": "group",
+      "path": "models profile"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "models profile list"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "models profile show"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "models profile use"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "models rollback"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "models set"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "preflight"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "premine"
+    },
+    {
+      "hidden": true,
+      "kind": "command",
+      "path": "prism-demo"
+    },
+    {
+      "hidden": false,
+      "kind": "group",
+      "path": "pulse"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "pulse daemon"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "pulse discoveries"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "pulse freshness"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "pulse ingest"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "pulse ingest-hf"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "pulse preflight"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "pulse refresh"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "pulse report"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "pulse scan"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "pulse scans"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "pulse status"
+    },
+    {
+      "hidden": true,
+      "kind": "command",
+      "path": "quickstart"
+    },
+    {
+      "hidden": true,
+      "kind": "command",
+      "path": "reassess"
+    },
+    {
+      "hidden": true,
+      "kind": "command",
+      "path": "results"
+    },
+    {
+      "hidden": true,
+      "kind": "command",
+      "path": "runbook"
+    },
+    {
+      "hidden": false,
+      "kind": "group",
+      "path": "security"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "security scan"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "security status"
+    },
+    {
+      "hidden": false,
+      "kind": "group",
+      "path": "self-enhance"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "self-enhance rollback"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "self-enhance start"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "self-enhance status"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "self-enhance swap"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "self-enhance validate"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "setup"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "stats"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "status"
+    },
+    {
+      "hidden": true,
+      "kind": "command",
+      "path": "synergies"
+    },
+    {
+      "hidden": false,
+      "kind": "group",
+      "path": "task"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "task add"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "task quickstart"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "task results"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "task runbook"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
+      "path": "validate"
+    }
+  ],
+  "schema_version": 1
+}

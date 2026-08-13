@@ -323,3 +323,20 @@
   packs, setup wizard, manager, Development Brief, and pull/mine coordinator;
   `python tools/generate_agent_packs.py --check` and `git diff --check` also
   passed.
+## 2026-08-12 CAM runtime capability registry
+
+- Extended the existing agent capability contract to schema `2.0`; it remains
+  the single registry for host capabilities, the 13 approved CAM_Codx workflow
+  intents, and every CAM_CAM command/group route.
+- Captured an independent schema-version-1 manifest snapshot from CAM_CAM Task
+  1 and validated exact coverage of `139` paths: `122` managed, `2`
+  troubleshooting-only, and `15` hidden compatibility paths.
+- Added strict validation for missing, unknown, duplicate, multiply classified,
+  kind-mismatched, hidden-mismatched, and incomplete-policy routes. Hidden
+  compatibility commands remain callable but are omitted from generated normal
+  and direct-runtime references.
+- TDD RED produced `9 failed, 9 passed` before the schema, validator, and
+  generator support existed. Focused GREEN passed `18` registry/agent-pack
+  tests; the live snapshot validator, generator `--check`, and
+  `git diff --check` also passed. These checks made no provider call and did
+  not change a CAM database, model profile, or runtime configuration.

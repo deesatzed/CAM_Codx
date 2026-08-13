@@ -121,6 +121,30 @@ def test_generated_files_are_current() -> None:
     assert missing_or_stale == []
 
 
+def test_generator_derives_managed_capability_reference_from_contract() -> None:
+    contract = _contract()
+
+    rendered = generate_agent_packs.render_managed_capability_reference(contract)
+
+    assert "## Managed CAM_Codx Capabilities" in rendered
+    assert "`mine`" in rendered
+    assert "`models benchmark run`" in rendered
+    assert "`chat`" not in rendered
+    assert "`forge-export`" not in rendered
+
+
+def test_generator_derives_direct_runtime_reference_without_hidden_aliases() -> None:
+    contract = _contract()
+
+    rendered = generate_agent_packs.render_direct_runtime_troubleshooting_reference(contract)
+
+    assert "## Direct CAM_CAM Runtime Troubleshooting" in rendered
+    assert "`mine`" in rendered
+    assert "`chat`" in rendered
+    assert "`forge-export`" not in rendered
+    assert "`evolution approve`" not in rendered
+
+
 def test_json_examples_parse() -> None:
     json_paths = [
         ROOT / "agent-packs" / "claude-code" / ".mcp.json.example",
