@@ -3,7 +3,10 @@ from pathlib import Path
 import os
 import subprocess
 
+import pytest
+
 from tools.cam_setup_wizard import (
+    CodexSkillMigrationError,
     ImportResult,
     create_cam_codx_wrapper,
     create_default_cam_codx_wrapper,
@@ -337,6 +340,43 @@ def test_explicit_migration_moves_only_known_cam_skills_and_writes_restore_metad
     assert all(entry["original_path"].startswith(str(skills)) for entry in metadata["entries"])
     assert migration.backup_dir.stat().st_mode & 0o777 == 0o700
     assert migration.restore_metadata.stat().st_mode & 0o777 == 0o600
+
+
+def test_partial_migration_failure_preserves_recovery_metadata(
+    tmp_path: Path, monkeypatch
+) -> None:
+    codex_home = tmp_path / ".codex"
+    skills = codex_home / "skills"
+    for name in ("cam-codx-development-brief", "cam-codx-swe"):
+        path = skills / name
+        path.mkdir(parents=True)
+        (path / "SKILL.md").write_text(name, encoding="utf-8")
+
+    from tools import cam_setup_wizard
+
+    real_move = cam_setup_wizard.shutil.move
+    calls = 0
+
+    def fail_second_move(source: str, destination: str):
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            raise OSError("fixture move failure")
+        return real_move(source, destination)
+
+    monkeypatch.setattr(cam_setup_wizard.shutil, "move", fail_second_move)
+
+    with pytest.raises(CodexSkillMigrationError) as raised:
+        migrate_codex_skills(codex_home, timestamp="20260814T020304Z")
+
+    metadata_path = raised.value.restore_metadata
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    assert metadata["status"] == "partial"
+    assert len(metadata["entries"]) == 1
+    moved = metadata["entries"][0]
+    assert Path(moved["backup_path"]).is_dir()
+    assert not Path(moved["original_path"]).exists()
+    assert (skills / "cam-codx-swe").is_dir()
 
 
 def test_setup_skill_documents_canonical_install_and_explicit_recoverable_migration() -> None:

@@ -509,3 +509,9 @@
   `22` setup/canonical-skill tests; wizard help and `git diff --check` pass.
   Verification used temporary Codex homes only and did not alter installed
   user skills, CAM runtime state, a corpus, model, or configuration.
+- Specification review found that legacy migration ran before canonical
+  installation and that the partial-failure branch lacked proof. Setup now
+  installs `cam-codx` successfully before moving any legacy entry. A forced
+  second-move failure produces a controlled error pointing to `restore.json`,
+  leaves the first move recoverable, leaves the unattempted legacy skill in
+  place, and records `status=partial`. The selected suite is now `117 passed`.

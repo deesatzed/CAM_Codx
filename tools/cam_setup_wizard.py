@@ -92,6 +92,14 @@ class CodexSkillMigration:
     restore_metadata: Path
 
 
+class CodexSkillMigrationError(RuntimeError):
+    """A partial legacy migration with a durable restoration map."""
+
+    def __init__(self, restore_metadata: Path):
+        self.restore_metadata = restore_metadata
+        super().__init__(f"legacy skill migration was partial; restore map: {restore_metadata}")
+
+
 def local_state_paths(cam_home: Path) -> LocalStatePaths:
     cam_home = cam_home.expanduser().resolve()
     return LocalStatePaths(
@@ -432,10 +440,10 @@ def migrate_codex_skills(
                 }
             )
             _write_migration_metadata(metadata_path, payload)
-    except Exception:
+    except Exception as exc:
         payload["status"] = "partial"
         _write_migration_metadata(metadata_path, payload)
-        raise
+        raise CodexSkillMigrationError(metadata_path) from exc
     payload["status"] = "complete"
     _write_migration_metadata(metadata_path, payload)
     return CodexSkillMigration(backup_dir, tuple(moved), metadata_path)
@@ -613,11 +621,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.migrate_codex_skills and not args.install_codex_skill:
         print("--migrate-codex-skills requires --install-codex-skill", file=sys.stderr)
         return 2
-    if args.migrate_codex_skills:
-        skill_migration = migrate_codex_skills(args.codex_home)
     if args.install_codex_skill:
         skill_root = Path(__file__).resolve().parents[1] / "templates" / "skills"
         skill_installs = install_codex_skills(skill_root, args.codex_home)
+    if args.migrate_codex_skills:
+        try:
+            skill_migration = migrate_codex_skills(args.codex_home)
+        except CodexSkillMigrationError as exc:
+            print(str(exc), file=sys.stderr)
+            return 2
 
     report = write_report(
         cam_home,
