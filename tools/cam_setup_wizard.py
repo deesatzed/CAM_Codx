@@ -10,7 +10,10 @@ public Git repos.
 from __future__ import annotations
 
 import argparse
+from datetime import UTC, datetime
+import json
 import os
+import re
 import shlex
 import shutil
 import stat
@@ -27,6 +30,13 @@ REPOS = {
 }
 
 TOML_CONFIGS = ("claw", "claw_cheap", "claw_dspro", "claw_grok")
+LEGACY_CAM_CODEX_SKILLS = (
+    "cam-codx-development-brief",
+    "cam-codx-pull-mine-dir",
+    "cam-codx-session",
+    "cam-codx-setup",
+    "cam-codx-swe",
+)
 
 
 @dataclass(frozen=True)
@@ -73,6 +83,13 @@ class CamCodxWrapper:
 class CodexSkillInstall:
     source: Path
     dest: Path
+
+
+@dataclass(frozen=True)
+class CodexSkillMigration:
+    backup_dir: Path
+    moved: tuple[Path, ...]
+    restore_metadata: Path
 
 
 def local_state_paths(cam_home: Path) -> LocalStatePaths:
@@ -343,30 +360,85 @@ def install_codex_skill(source: Path, codex_home: Path) -> Path:
 
 
 def install_codex_skills(source_root: Path, codex_home: Path) -> list[CodexSkillInstall]:
-    """Install the setup, routine SWE, brief, and pull/mine skills together."""
+    """Install the single canonical CAM_Codx skill."""
 
     source_root = source_root.expanduser().resolve()
-    installs: list[CodexSkillInstall] = []
-    for name in (
-        "cam-codx-setup",
-        "cam-codx-swe",
-        "cam-codx-development-brief",
-        "cam-codx-pull-mine-dir",
-    ):
-        source = source_root / name
-        if not (source / "SKILL.md").is_file():
-            # Older CAM_Codx checkouts may predate the routine skill. Keep setup
-            # usable and let the report name the missing optional asset.
-            continue
-        installs.append(
-            CodexSkillInstall(
-                source=source,
-                dest=install_codex_skill(source, codex_home),
-            )
+    source = source_root / "cam-codx"
+    if not (source / "SKILL.md").is_file():
+        raise FileNotFoundError(f"canonical CAM Codex skill missing under {source_root}")
+    return [
+        CodexSkillInstall(
+            source=source,
+            dest=install_codex_skill(source, codex_home),
         )
-    if not installs:
-        raise FileNotFoundError(f"no CAM Codex skill templates found under {source_root}")
-    return installs
+    ]
+
+
+def known_installed_legacy_skills(codex_home: Path) -> list[Path]:
+    """Return known CAM-owned legacy skill entries without changing them."""
+
+    skills = codex_home.expanduser().resolve() / "skills"
+    return sorted(
+        (skills / name for name in LEGACY_CAM_CODEX_SKILLS if (skills / name).exists()),
+        key=lambda path: path.name,
+    )
+
+
+def _write_migration_metadata(path: Path, payload: dict) -> None:
+    temporary = path.with_name(f".{path.name}.tmp")
+    temporary.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    temporary.chmod(0o600)
+    temporary.replace(path)
+    path.chmod(0o600)
+
+
+def migrate_codex_skills(
+    codex_home: Path, *, timestamp: str | None = None
+) -> CodexSkillMigration:
+    """Move only known CAM legacy skills into a recoverable timestamped backup."""
+
+    codex_home = codex_home.expanduser().resolve()
+    skills = codex_home / "skills"
+    timestamp = timestamp or datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+    if not re.fullmatch(r"[0-9]{8}T[0-9]{6}(?:[0-9]{6})?Z", timestamp):
+        raise ValueError("migration timestamp must be a compact UTC timestamp")
+    backup_root = codex_home / "skill-backups"
+    backup_root.mkdir(parents=True, exist_ok=True)
+    backup_root.chmod(0o700)
+    backup_dir = backup_root / f"cam-codx-legacy-{timestamp}"
+    backup_dir.mkdir(mode=0o700)
+    metadata_path = backup_dir / "restore.json"
+    entries: list[dict[str, str]] = []
+    moved: list[Path] = []
+    payload = {
+        "schema_version": 1,
+        "created_at": timestamp,
+        "status": "in_progress",
+        "skills_directory": str(skills),
+        "entries": entries,
+        "restore_note": "Move each backup_path back to original_path after removing any replacement.",
+    }
+    _write_migration_metadata(metadata_path, payload)
+    try:
+        for source in known_installed_legacy_skills(codex_home):
+            destination = backup_dir / source.name
+            shutil.move(str(source), str(destination))
+            moved.append(destination)
+            entries.append(
+                {
+                    "name": source.name,
+                    "original_path": str(source),
+                    "backup_path": str(destination),
+                }
+            )
+            _write_migration_metadata(metadata_path, payload)
+    except Exception:
+        payload["status"] = "partial"
+        _write_migration_metadata(metadata_path, payload)
+        raise
+    payload["status"] = "complete"
+    _write_migration_metadata(metadata_path, payload)
+    return CodexSkillMigration(backup_dir, tuple(moved), metadata_path)
 
 
 def write_report(
@@ -378,6 +450,8 @@ def write_report(
     wrapper: CamCodxWrapper | None = None,
     skill_install: CodexSkillInstall | None = None,
     skill_installs: list[CodexSkillInstall] | None = None,
+    legacy_skill_entries: list[Path] | None = None,
+    skill_migration: CodexSkillMigration | None = None,
 ) -> Path:
     paths = local_state_paths(cam_home)
     report = paths.reports / "setup_report.md"
@@ -421,6 +495,16 @@ def write_report(
         for installed in installed_skills:
             lines.append(f"- source: `{installed.source}`")
             lines.append(f"- installed: `{installed.dest}`")
+    lines.extend(["", "## Codex Skill Migration", ""])
+    if skill_migration is not None:
+        lines.append(f"- backup: `{skill_migration.backup_dir}`")
+        lines.append(f"- restore metadata: `{skill_migration.restore_metadata}`")
+        lines.extend(f"- moved: `{path.name}`" for path in skill_migration.moved)
+    elif legacy_skill_entries:
+        lines.append("- legacy CAM skills detected and left unchanged (migration not requested):")
+        lines.extend(f"  - `{path}`" for path in legacy_skill_entries)
+    else:
+        lines.append("- no legacy CAM skill entries detected")
     lines.extend(["", "## Local State", ""])
     local_state = validate_local_state(cam_home)
     lines.extend(f"- {item}" for item in local_state) if local_state else lines.append("- empty")
@@ -464,6 +548,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--wrapper-env", type=Path)
     parser.add_argument("--skip-wrapper", action="store_true")
     parser.add_argument("--install-codex-skill", action="store_true")
+    parser.add_argument(
+        "--migrate-codex-skills",
+        action="store_true",
+        help="move known legacy CAM skills to a timestamped recoverable backup",
+    )
     parser.add_argument("--codex-home", type=Path, default=Path(os.environ.get("CODEX_HOME", Path.home() / ".codex")))
     parser.add_argument("--non-interactive", action="store_true")
     parser.add_argument("--skip-clone", action="store_true")
@@ -519,6 +608,13 @@ def main(argv: list[str] | None = None) -> int:
             wrapper = create_default_cam_codx_wrapper(cam_home)
 
     skill_installs: list[CodexSkillInstall] = []
+    legacy_skill_entries = known_installed_legacy_skills(args.codex_home)
+    skill_migration: CodexSkillMigration | None = None
+    if args.migrate_codex_skills and not args.install_codex_skill:
+        print("--migrate-codex-skills requires --install-codex-skill", file=sys.stderr)
+        return 2
+    if args.migrate_codex_skills:
+        skill_migration = migrate_codex_skills(args.codex_home)
     if args.install_codex_skill:
         skill_root = Path(__file__).resolve().parents[1] / "templates" / "skills"
         skill_installs = install_codex_skills(skill_root, args.codex_home)
@@ -531,6 +627,8 @@ def main(argv: list[str] | None = None) -> int:
         import_result,
         wrapper,
         skill_installs=skill_installs,
+        legacy_skill_entries=legacy_skill_entries,
+        skill_migration=skill_migration,
     )
     print(f"Setup report written: {report}")
     print("")
@@ -544,6 +642,17 @@ def main(argv: list[str] | None = None) -> int:
         print("Codex skills installed:")
         for installed in skill_installs:
             print(f"  {installed.dest}")
+        print("")
+    if skill_migration is not None:
+        print("Legacy CAM skills moved to recoverable backup:")
+        print(f"  {skill_migration.backup_dir}")
+        print(f"Restore metadata: {skill_migration.restore_metadata}")
+        print("")
+    elif legacy_skill_entries:
+        print("Legacy CAM skills detected and left unchanged:")
+        for path in legacy_skill_entries:
+            print(f"  {path}")
+        print("Use --migrate-codex-skills with --install-codex-skill to back them up.")
         print("")
     print("Next:")
     print(f"  cd {paths.repos / 'CAM_Codx'}")

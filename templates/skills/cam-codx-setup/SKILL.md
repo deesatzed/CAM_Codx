@@ -29,6 +29,22 @@ python tools/cam_setup_wizard.py \
   --non-interactive
 ```
 
+Default installation installs only `cam-codx`. It reports known legacy CAM
+skills but leaves them untouched.
+
+To migrate the old CAM-managed skill directories, request it explicitly:
+
+```bash
+python tools/cam_setup_wizard.py \
+  --cam-home <CAM_HOME> --skip-clone \
+  --install-codex-skill --migrate-codex-skills --non-interactive
+```
+
+Migration moves only known CAM-owned legacy entries into a timestamped backup
+under the Codex home and writes `restore.json` with original and backup paths.
+Keep that restore metadata until the canonical skill is verified. Unrelated
+skills remain untouched; the wizard never silently deletes legacy entries.
+
 If CAM_CAM is not in `<CAM_HOME>/CAM_CAM` or `<CAM_HOME>/repos/CAM_CAM`, pass
 the explicit runtime paths:
 

@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 import os
 import subprocess
@@ -10,7 +11,9 @@ from tools.cam_setup_wizard import (
     install_codex_skill,
     import_existing_runtime_state,
     install_codex_skills,
+    known_installed_legacy_skills,
     local_state_paths,
+    migrate_codex_skills,
     write_report,
 )
 
@@ -262,10 +265,11 @@ def test_install_codex_skill_copies_template_to_codex_home(tmp_path: Path) -> No
     assert (dest / "SKILL.md").read_text(encoding="utf-8").startswith("---")
 
 
-def test_install_codex_skills_installs_all_routine_cam_skills(tmp_path: Path) -> None:
+def test_install_codex_skills_installs_only_canonical_cam_codx(tmp_path: Path) -> None:
     codex_home = tmp_path / ".codex"
     source_root = tmp_path / "CAM_Codx" / "templates" / "skills"
     for name in (
+        "cam-codx",
         "cam-codx-setup",
         "cam-codx-swe",
         "cam-codx-development-brief",
@@ -280,12 +284,71 @@ def test_install_codex_skills_installs_all_routine_cam_skills(tmp_path: Path) ->
 
     installs = install_codex_skills(source_root, codex_home)
 
-    assert {item.dest.name for item in installs} == {
+    assert {item.dest.name for item in installs} == {"cam-codx"}
+    assert (codex_home / "skills" / "cam-codx" / "SKILL.md").is_file()
+    assert not (codex_home / "skills" / "cam-codx-swe").exists()
+
+
+def test_legacy_skills_are_reported_without_implicit_migration(tmp_path: Path) -> None:
+    codex_home = tmp_path / ".codex"
+    skills = codex_home / "skills"
+    for name in ("cam-codx-swe", "cam-codx-session", "unrelated-skill"):
+        path = skills / name
+        path.mkdir(parents=True)
+        (path / "SKILL.md").write_text(name, encoding="utf-8")
+
+    legacy = known_installed_legacy_skills(codex_home)
+
+    assert [path.name for path in legacy] == ["cam-codx-session", "cam-codx-swe"]
+    assert all(path.exists() for path in legacy)
+    assert (skills / "unrelated-skill" / "SKILL.md").read_text(encoding="utf-8") == "unrelated-skill"
+
+
+def test_explicit_migration_moves_only_known_cam_skills_and_writes_restore_metadata(
+    tmp_path: Path,
+) -> None:
+    codex_home = tmp_path / ".codex"
+    skills = codex_home / "skills"
+    legacy_names = {
         "cam-codx-setup",
         "cam-codx-swe",
         "cam-codx-development-brief",
         "cam-codx-pull-mine-dir",
+        "cam-codx-session",
     }
-    assert (codex_home / "skills" / "cam-codx-swe" / "SKILL.md").is_file()
-    assert (codex_home / "skills" / "cam-codx-development-brief" / "SKILL.md").is_file()
-    assert (codex_home / "skills" / "cam-codx-pull-mine-dir" / "SKILL.md").is_file()
+    for name in legacy_names | {"unrelated-skill"}:
+        path = skills / name
+        path.mkdir(parents=True)
+        (path / "SKILL.md").write_text(name, encoding="utf-8")
+
+    migration = migrate_codex_skills(codex_home, timestamp="20260814T010203Z")
+
+    assert migration.backup_dir.name == "cam-codx-legacy-20260814T010203Z"
+    assert {path.name for path in migration.moved} == legacy_names
+    assert all(not (skills / name).exists() for name in legacy_names)
+    assert all((migration.backup_dir / name / "SKILL.md").is_file() for name in legacy_names)
+    unrelated = skills / "unrelated-skill" / "SKILL.md"
+    assert unrelated.read_text(encoding="utf-8") == "unrelated-skill"
+    assert migration.restore_metadata.is_file()
+    metadata = json.loads(migration.restore_metadata.read_text(encoding="utf-8"))
+    assert metadata["schema_version"] == 1
+    assert metadata["status"] == "complete"
+    assert {entry["name"] for entry in metadata["entries"]} == legacy_names
+    assert all(entry["original_path"].startswith(str(skills)) for entry in metadata["entries"])
+    assert migration.backup_dir.stat().st_mode & 0o777 == 0o700
+    assert migration.restore_metadata.stat().st_mode & 0o777 == 0o600
+
+
+def test_setup_skill_documents_canonical_install_and_explicit_recoverable_migration() -> None:
+    skill = (
+        Path(__file__).resolve().parents[1]
+        / "templates"
+        / "skills"
+        / "cam-codx-setup"
+        / "SKILL.md"
+    ).read_text(encoding="utf-8")
+
+    assert "--migrate-codex-skills" in skill
+    assert "timestamped" in skill.lower()
+    assert "restore" in skill.lower()
+    assert "installs only `cam-codx`" in skill.lower()

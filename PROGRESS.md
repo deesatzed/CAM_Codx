@@ -489,3 +489,23 @@
 - The mining dry run now pins profiles/local defaults, exact provider/model,
   repository count, duration, and cost. A live run may remove only `--dry-run`
   from the reviewed command; any changed value requires new review.
+
+## 2026-08-14 canonical skill setup migration
+
+- Changed default Codex skill installation from four specialized skills to the
+  single canonical `cam-codx` package. Existing legacy entries are detected
+  and reported but remain untouched unless migration is explicitly requested.
+- Added `--migrate-codex-skills`, valid only with canonical installation. It
+  moves exactly `cam-codx-setup`, `cam-codx-swe`,
+  `cam-codx-development-brief`, `cam-codx-pull-mine-dir`, and
+  `cam-codx-session`; unrelated skills are never selected.
+- Each explicit migration creates a timestamped mode-0700 backup and updates a
+  mode-0600 `restore.json` after every move. The metadata records original and
+  backup paths and remains `partial` if a move fails, so migration never
+  silently deletes or strands already moved entries without a recovery map.
+- Updated the setup skill to document canonical-only installation, explicit
+  migration, backup, restoration metadata, and the unrelated-skill boundary.
+- TDD RED failed at import before the migration helpers existed. GREEN passes
+  `22` setup/canonical-skill tests; wizard help and `git diff --check` pass.
+  Verification used temporary Codex homes only and did not alter installed
+  user skills, CAM runtime state, a corpus, model, or configuration.
