@@ -438,3 +438,13 @@
   concurrent consumers produce exactly one success. The hardened combined
   suite passes `146` tests; direct-script CLI help, generator drift, and
   `git diff --check` pass.
+- Quality review then found that a wrapper could be replaced in place at the
+  same path and that `--dry-run` burned the single-use approval. Packet scope
+  now binds the wrapper SHA-256 and verifies it both during validation and
+  immediately before dispatch. Approval validation is separate from atomic
+  consumption, so a dry run checks the supplied approval but leaves it usable
+  for the later real execution.
+- In-place replacement and dry-run-then-execute regressions pass. Final
+  focused manager/registry verification is `61 passed`; the combined Task 4
+  compatibility surface is `148 passed`, with direct CLI help, generator
+  drift, and `git diff --check` green.

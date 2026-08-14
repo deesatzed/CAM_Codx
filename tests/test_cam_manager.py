@@ -396,6 +396,23 @@ def test_execution_rejects_recomputed_wrapper_substitution(tmp_path: Path) -> No
     assert not marker.exists()
 
 
+def test_execution_rejects_in_place_wrapper_replacement(tmp_path: Path) -> None:
+    wrapper, _output = _fake_wrapper(tmp_path)
+    state = tmp_path / "state"
+    packet_path = prepare_packet(
+        operation="models current",
+        wrapper=wrapper,
+        state_dir=state,
+    )
+    marker = tmp_path / "replacement-ran"
+    wrapper.write_text(f"#!/bin/sh\nprintf replaced > {marker}\n", encoding="utf-8")
+    wrapper.chmod(0o700)
+
+    with pytest.raises(ManagerError, match="wrapper content has changed"):
+        execute_packet(packet_path, state_dir=state, wrapper=wrapper)
+    assert not marker.exists()
+
+
 def test_packet_rejects_top_level_policy_that_differs_from_bound_scope(tmp_path: Path) -> None:
     wrapper, _output = _fake_wrapper(tmp_path)
     state = tmp_path / "state"
@@ -466,6 +483,33 @@ def test_approval_consumption_is_atomic_under_concurrency(tmp_path: Path) -> Non
 
     assert results.count("consumed") == 1
     assert sum("already been consumed" in result for result in results) == 1
+
+
+def test_dry_run_validates_but_does_not_consume_approval(
+    tmp_path: Path, monkeypatch
+) -> None:
+    wrapper, output = _fake_wrapper(tmp_path)
+    state = tmp_path / "state"
+    packet_path = prepare_packet(operation="task add", wrapper=wrapper, state_dir=state)
+    approval_path = issue_approval(packet_path, state_dir=state)
+
+    assert execute_packet(
+        packet_path,
+        state_dir=state,
+        wrapper=wrapper,
+        approval_path=approval_path,
+        dry_run=True,
+    ) == (None, None)
+
+    monkeypatch.setenv("CAM_MANAGER_TEST_OUTPUT", str(output))
+    receipt, returncode = execute_packet(
+        packet_path,
+        state_dir=state,
+        wrapper=wrapper,
+        approval_path=approval_path,
+    )
+    assert receipt is not None
+    assert returncode == 0
 
 
 def test_execution_uses_list_form_subprocess_without_a_shell(tmp_path: Path, monkeypatch) -> None:

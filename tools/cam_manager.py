@@ -133,6 +133,17 @@ def _contract_bytes(path: Path) -> tuple[Path, bytes]:
     return resolved, data
 
 
+def _file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    try:
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+    except OSError as exc:
+        raise ManagerError(f"Cannot read executable identity: {path}") from exc
+    return digest.hexdigest()
+
+
 def load_operation_catalog(
     contract_path: Path = DEFAULT_CONTRACT,
 ) -> dict[str, OperationPolicy]:
@@ -338,6 +349,7 @@ def prepare_packet(
     wrapper = wrapper.expanduser().resolve()
     if not wrapper.is_file() or not os.access(wrapper, os.X_OK):
         raise ManagerError(f"CAM wrapper is not executable: {wrapper}")
+    wrapper_sha256 = _file_sha256(wrapper)
     if not workflow_id.strip():
         raise ManagerError("workflow_id must not be empty")
     if not math.isfinite(budget_usd) or budget_usd < 0:
@@ -356,6 +368,7 @@ def prepare_packet(
         "phase": phase,
         "workflow_id": workflow_id,
         "wrapper": str(wrapper),
+        "wrapper_sha256": wrapper_sha256,
         "argv": argv,
         "target_repo": str(target_repo) if target_repo else None,
         "budget_usd": round(float(budget_usd), 12),
@@ -374,6 +387,7 @@ def prepare_packet(
         "operation": operation,
         "phase": phase,
         "wrapper": str(wrapper),
+        "wrapper_sha256": wrapper_sha256,
         "argv": argv,
         "target_repo": str(target_repo) if target_repo else None,
         "budget_usd": round(float(budget_usd), 12),
@@ -466,13 +480,13 @@ def _approval_was_consumed(state_dir: Path, approval_id: str) -> bool:
     return False
 
 
-def consume_approval(
+def validate_approval(
     approval_path: Path,
     packet: dict[str, Any],
     *,
     state_dir: Path,
 ) -> dict[str, Any]:
-    """Validate and consume a single approval for *packet*."""
+    """Validate an unused approval for *packet* without consuming it."""
 
     approval = _read_json(approval_path)
     if approval.get("schema_version") != SCHEMA_VERSION:
@@ -496,6 +510,19 @@ def consume_approval(
         raise ManagerError("Approval expiry is invalid") from exc
     if expires <= _now():
         raise ManagerError("Approval has expired")
+    return approval
+
+
+def consume_approval(
+    approval_path: Path,
+    packet: dict[str, Any],
+    *,
+    state_dir: Path,
+) -> dict[str, Any]:
+    """Validate and atomically consume a single approval for *packet*."""
+
+    approval = validate_approval(approval_path, packet, state_dir=state_dir)
+    approval_id = str(approval["approval_id"])
     paths = _state_paths(state_dir)
     claim = paths["consumed"] / f"{hashlib.sha256(approval_id.encode()).hexdigest()}.json"
     claim_payload = _canonical(
@@ -551,6 +578,7 @@ def execute_packet(
         "phase",
         "workflow_id",
         "wrapper",
+        "wrapper_sha256",
         "argv",
         "target_repo",
         "budget_usd",
@@ -570,6 +598,8 @@ def execute_packet(
         raise ManagerError(f"Trusted CAM wrapper is not executable: {expected_wrapper}")
     if packet.get("wrapper") != str(expected_wrapper) or argv[0] != str(expected_wrapper):
         raise ManagerError("Packet wrapper identity differs from the trusted CAM wrapper")
+    if packet.get("wrapper_sha256") != _file_sha256(expected_wrapper):
+        raise ManagerError("Trusted CAM wrapper content has changed; prepare a new packet")
     contract_path_value = packet.get("contract_path")
     if not isinstance(contract_path_value, str) or not contract_path_value:
         raise ManagerError("Packet contract path is invalid")
@@ -593,6 +623,9 @@ def execute_packet(
     if policy.requires_approval:
         if approval_path is None:
             raise ManagerError(f"Operation {operation} requires an approval receipt")
+        if dry_run:
+            validate_approval(approval_path, packet, state_dir=state_dir)
+            return None, None
         consume_approval(approval_path, packet, state_dir=state_dir)
     if dry_run:
         return None, None
@@ -601,6 +634,8 @@ def execute_packet(
     cwd = Path(target_repo) if target_repo else None
     if cwd is not None and not cwd.is_dir():
         raise ManagerError(f"Packet target repository is not a directory: {cwd}")
+    if packet.get("wrapper_sha256") != _file_sha256(expected_wrapper):
+        raise ManagerError("Trusted CAM wrapper content changed before execution")
     started = _now()
     completed = subprocess.run(
         argv,
