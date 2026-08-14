@@ -426,3 +426,15 @@
   CLI help, and `git diff --check` also pass. Tests use fixture wrappers only;
   no live CAM operation, provider call, corpus write, target mutation,
   promotion, or configuration change occurred.
+- Specification review found three fail-closed gaps: the manager's partial
+  contract validation could accept contradictory spend/approval policy, a
+  recomputed packet could substitute its executable wrapper, and approval
+  reuse was guarded by a check-then-append race. The manager now calls the
+  same strict policy validator as the registry gate, requires the trusted
+  wrapper identity again at execution, and atomically claims each approval
+  through an exclusive mode-0600 consumption record before dispatch.
+- New regressions prove an unsafe `provider_spend=true`/`approval=none`
+  contract is rejected, a recomputed wrapper substitution never runs, and two
+  concurrent consumers produce exactly one success. The hardened combined
+  suite passes `146` tests; direct-script CLI help, generator drift, and
+  `git diff --check` pass.

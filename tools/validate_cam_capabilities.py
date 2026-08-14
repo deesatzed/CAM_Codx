@@ -298,8 +298,8 @@ def _validate_route_shape(route: Any, index: int, intents: set[str]) -> None:
         raise RegistryValidationError(f"{path}: read-only route cannot require mutation approval")
 
 
-def validate_registry(contract: dict[str, Any], manifest: dict[str, Any]) -> dict[str, Any]:
-    """Return path/class counts after strict contract-to-manifest validation."""
+def validate_contract(contract: dict[str, Any]) -> dict[str, Any]:
+    """Validate contract policy independently of a runtime manifest."""
     if contract.get("schema_version") != "2.0":
         raise RegistryValidationError("contract schema_version must be 2.0")
     intents_payload = contract.get("workflow_intents")
@@ -381,6 +381,21 @@ def validate_registry(contract: dict[str, Any], manifest: dict[str, Any]) -> dic
                 f"{route['command_path']}: alias policy differs from canonical target "
                 + ", ".join(divergent)
             )
+
+    return {
+        "intents": intents_payload,
+        "routes": routes,
+        "route_paths": route_paths,
+        "routes_by_path": routes_by_path,
+    }
+
+
+def validate_registry(contract: dict[str, Any], manifest: dict[str, Any]) -> dict[str, Any]:
+    """Return path/class counts after strict contract-to-manifest validation."""
+    validated = validate_contract(contract)
+    routes = validated["routes"]
+    route_paths = validated["route_paths"]
+    routes_by_path = validated["routes_by_path"]
 
     manifest_items = manifest.get("items")
     if manifest.get("schema_version") != 1 or not isinstance(manifest_items, list):

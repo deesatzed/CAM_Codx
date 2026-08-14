@@ -22,6 +22,11 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from tools.validate_cam_capabilities import RegistryValidationError, validate_contract
+
 
 SCHEMA_VERSION = 2
 DEFAULT_TTL_HOURS = 4.0
@@ -140,9 +145,11 @@ def load_operation_catalog(
         raise ManagerError(f"CAM capability contract is invalid JSON: {resolved}") from exc
     if not isinstance(contract, dict) or contract.get("schema_version") != "2.0":
         raise ManagerError("CAM capability contract must use schema 2.0")
-    intents = contract.get("workflow_intents")
-    if not isinstance(intents, dict) or not intents:
-        raise ManagerError("CAM capability contract workflow_intents must be non-empty")
+    try:
+        validate_contract(contract)
+    except RegistryValidationError as exc:
+        raise ManagerError(f"CAM capability contract policy is invalid: {exc}") from exc
+    intents = contract["workflow_intents"]
     routes = contract.get("command_routes")
     if not isinstance(routes, list) or not routes:
         raise ManagerError("CAM capability contract command_routes must be non-empty")
@@ -256,6 +263,7 @@ def _state_paths(state_dir: Path) -> dict[str, Path]:
         "packets": root / "packets",
         "approvals": root / "approvals",
         "executions": root / "executions",
+        "consumed": root / "consumed",
         "events": root / "events.jsonl",
     }
     for path in paths.values():
@@ -405,7 +413,7 @@ def issue_approval(
         raise ManagerError("Unsupported packet schema")
     if packet.get("scope_digest") != scope_digest(packet.get("scope", {})):
         raise ManagerError("Packet scope digest is invalid")
-    if ttl_hours <= 0 or ttl_hours > 24 * 7:
+    if not math.isfinite(ttl_hours) or ttl_hours <= 0 or ttl_hours > 24 * 7:
         raise ManagerError("Approval TTL must be greater than zero and at most 168 hours")
     if not approved_by.strip():
         raise ManagerError("approved_by must not be empty")
@@ -443,6 +451,9 @@ def issue_approval(
 
 def _approval_was_consumed(state_dir: Path, approval_id: str) -> bool:
     paths = _state_paths(state_dir)
+    claim = paths["consumed"] / f"{hashlib.sha256(approval_id.encode()).hexdigest()}.json"
+    if claim.exists():
+        return True
     if not paths["events"].exists():
         return False
     for line in paths["events"].read_text(encoding="utf-8").splitlines():
@@ -468,7 +479,8 @@ def consume_approval(
         raise ManagerError("Unsupported approval schema")
     if approval.get("status") != "issued":
         raise ManagerError("Approval is not in issued state")
-    if _approval_was_consumed(state_dir, str(approval.get("approval_id"))):
+    approval_id = str(approval.get("approval_id"))
+    if _approval_was_consumed(state_dir, approval_id):
         raise ManagerError("Approval has already been consumed")
     if approval.get("packet_id") != packet.get("packet_id"):
         raise ManagerError("Approval packet mismatch")
@@ -484,6 +496,26 @@ def consume_approval(
         raise ManagerError("Approval expiry is invalid") from exc
     if expires <= _now():
         raise ManagerError("Approval has expired")
+    paths = _state_paths(state_dir)
+    claim = paths["consumed"] / f"{hashlib.sha256(approval_id.encode()).hexdigest()}.json"
+    claim_payload = _canonical(
+        {
+            "schema_version": SCHEMA_VERSION,
+            "approval_id": approval_id,
+            "packet_id": packet.get("packet_id"),
+            "scope_digest": packet.get("scope_digest"),
+            "consumed_at": _timestamp(_now()),
+        }
+    )
+    try:
+        descriptor = os.open(claim, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except FileExistsError as exc:
+        raise ManagerError("Approval has already been consumed") from exc
+    try:
+        os.write(descriptor, claim_payload + b"\n")
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
     _append_event(
         state_dir,
         {
@@ -501,6 +533,7 @@ def execute_packet(
     packet_path: Path,
     *,
     state_dir: Path,
+    wrapper: Path,
     approval_path: Path | None = None,
     dry_run: bool = False,
     contract_path: Path = DEFAULT_CONTRACT,
@@ -532,6 +565,11 @@ def execute_packet(
     argv = packet.get("argv")
     if not isinstance(argv, list) or not argv or not all(isinstance(item, str) for item in argv):
         raise ManagerError("Packet argv is invalid")
+    expected_wrapper = wrapper.expanduser().resolve()
+    if not expected_wrapper.is_file() or not os.access(expected_wrapper, os.X_OK):
+        raise ManagerError(f"Trusted CAM wrapper is not executable: {expected_wrapper}")
+    if packet.get("wrapper") != str(expected_wrapper) or argv[0] != str(expected_wrapper):
+        raise ManagerError("Packet wrapper identity differs from the trusted CAM wrapper")
     contract_path_value = packet.get("contract_path")
     if not isinstance(contract_path_value, str) or not contract_path_value:
         raise ManagerError("Packet contract path is invalid")
@@ -650,6 +688,7 @@ def _parser() -> argparse.ArgumentParser:
     execute.add_argument("packet", type=Path)
     execute.add_argument("--approval", type=Path)
     execute.add_argument("--state-dir", type=Path, required=True)
+    execute.add_argument("--wrapper", type=Path, required=True)
     execute.add_argument("--dry-run", action="store_true")
     execute.add_argument("--contract", type=Path, default=DEFAULT_CONTRACT)
 
@@ -693,6 +732,7 @@ def main(argv: list[str] | None = None) -> int:
             receipt, returncode = execute_packet(
                 args.packet,
                 state_dir=args.state_dir,
+                wrapper=args.wrapper,
                 approval_path=args.approval,
                 dry_run=args.dry_run,
                 contract_path=args.contract,

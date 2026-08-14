@@ -1,7 +1,9 @@
+from concurrent.futures import ThreadPoolExecutor
 import json
 import math
 import os
 from pathlib import Path
+from threading import Barrier
 from types import SimpleNamespace
 
 import pytest
@@ -9,6 +11,7 @@ import pytest
 from tools.cam_manager import (
     DEFAULT_CONTRACT,
     ManagerError,
+    consume_approval,
     execute_packet,
     issue_approval,
     load_operation_catalog,
@@ -79,12 +82,13 @@ def test_mutating_packet_requires_matching_single_use_approval(tmp_path: Path, m
     )
 
     with pytest.raises(ManagerError, match="requires an approval"):
-        execute_packet(packet_path, state_dir=state)
+        execute_packet(packet_path, state_dir=state, wrapper=wrapper)
 
     approval_path = issue_approval(packet_path, state_dir=state, approved_by="test")
     monkeypatch.setenv("CAM_MANAGER_TEST_OUTPUT", str(output))
     receipt_path, returncode = execute_packet(
         packet_path,
+        wrapper=wrapper,
         approval_path=approval_path,
         state_dir=state,
     )
@@ -101,7 +105,9 @@ def test_mutating_packet_requires_matching_single_use_approval(tmp_path: Path, m
         "--skip-swap",
     ]
     with pytest.raises(ManagerError, match="already been consumed"):
-        execute_packet(packet_path, approval_path=approval_path, state_dir=state)
+        execute_packet(
+            packet_path, approval_path=approval_path, state_dir=state, wrapper=wrapper
+        )
 
     receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
     assert "stdout" not in receipt and "stderr" not in receipt
@@ -117,7 +123,9 @@ def test_read_only_packet_runs_without_approval(tmp_path: Path, monkeypatch) -> 
         state_dir=state,
     )
     monkeypatch.setenv("CAM_MANAGER_TEST_OUTPUT", str(output))
-    receipt_path, returncode = execute_packet(packet_path, state_dir=state)
+    receipt_path, returncode = execute_packet(
+        packet_path, state_dir=state, wrapper=wrapper
+    )
 
     assert returncode == 0
     assert receipt_path is not None
@@ -147,7 +155,9 @@ def test_changed_packet_scope_cannot_use_old_approval(tmp_path: Path) -> None:
     changed.write_text(json.dumps(packet), encoding="utf-8")
 
     with pytest.raises(ManagerError, match="scope mismatch"):
-        execute_packet(changed, approval_path=approval_path, state_dir=state)
+        execute_packet(
+            changed, approval_path=approval_path, state_dir=state, wrapper=wrapper
+        )
 
 
 def test_secret_bearing_arguments_are_rejected(tmp_path: Path) -> None:
@@ -296,13 +306,27 @@ def test_missing_or_malformed_contract_fails_closed(tmp_path: Path) -> None:
     missing = tmp_path / "missing.json"
     malformed = tmp_path / "malformed.json"
     malformed.write_text(
-        '{"schema_version":"2.0","workflow_intents":{"assess":{}},"command_routes":[]}',
+        '{"schema_version":"2.0","workflow_intents":{"assess":{"description":"x","default_command":"brief-query"}},"command_routes":[]}',
         encoding="utf-8",
     )
 
     with pytest.raises(ManagerError, match="capability contract"):
         load_operation_catalog(missing)
     with pytest.raises(ManagerError, match="command_routes"):
+        load_operation_catalog(malformed)
+
+
+def test_contract_policy_contradiction_fails_closed(tmp_path: Path) -> None:
+    contract = json.loads(DEFAULT_CONTRACT.read_text(encoding="utf-8"))
+    mine = next(
+        route for route in contract["command_routes"] if route["command_path"] == "mine"
+    )
+    mine["approval_class"] = "none"
+    mine["approval_classes"] = ["none"]
+    malformed = tmp_path / "unsafe-contract.json"
+    malformed.write_text(json.dumps(contract), encoding="utf-8")
+
+    with pytest.raises(ManagerError, match="policy is invalid"):
         load_operation_catalog(malformed)
 
 
@@ -321,7 +345,12 @@ def test_packet_execution_fails_when_contract_drifts(tmp_path: Path) -> None:
     contract.write_text(json.dumps(payload), encoding="utf-8")
 
     with pytest.raises(ManagerError, match="contract.*drift"):
-        execute_packet(packet_path, state_dir=tmp_path / "state", contract_path=contract)
+        execute_packet(
+            packet_path,
+            state_dir=tmp_path / "state",
+            wrapper=wrapper,
+            contract_path=contract,
+        )
 
 
 def test_read_only_packet_rejects_recomputed_scope_tampering(tmp_path: Path) -> None:
@@ -338,7 +367,33 @@ def test_read_only_packet_rejects_recomputed_scope_tampering(tmp_path: Path) -> 
     changed.write_text(json.dumps(packet), encoding="utf-8")
 
     with pytest.raises(ManagerError, match="scope digest"):
-        execute_packet(changed, state_dir=state)
+        execute_packet(changed, state_dir=state, wrapper=wrapper)
+
+
+def test_execution_rejects_recomputed_wrapper_substitution(tmp_path: Path) -> None:
+    wrapper, _output = _fake_wrapper(tmp_path)
+    state = tmp_path / "state"
+    packet_path = prepare_packet(
+        operation="models current",
+        wrapper=wrapper,
+        state_dir=state,
+    )
+    marker = tmp_path / "evil-ran"
+    evil = tmp_path / "evil-wrapper"
+    evil.write_text(f"#!/bin/sh\nprintf evil > {marker}\n", encoding="utf-8")
+    evil.chmod(0o700)
+    packet = json.loads(packet_path.read_text(encoding="utf-8"))
+    packet["wrapper"] = str(evil)
+    packet["argv"][0] = str(evil)
+    packet["scope"]["wrapper"] = str(evil)
+    packet["scope"]["argv"][0] = str(evil)
+    packet["scope_digest"] = scope_digest(packet["scope"])
+    changed = tmp_path / "changed-wrapper.json"
+    changed.write_text(json.dumps(packet), encoding="utf-8")
+
+    with pytest.raises(ManagerError, match="trusted CAM wrapper"):
+        execute_packet(changed, state_dir=state, wrapper=wrapper)
+    assert not marker.exists()
 
 
 def test_packet_rejects_top_level_policy_that_differs_from_bound_scope(tmp_path: Path) -> None:
@@ -355,7 +410,7 @@ def test_packet_rejects_top_level_policy_that_differs_from_bound_scope(tmp_path:
     changed.write_text(json.dumps(packet), encoding="utf-8")
 
     with pytest.raises(ManagerError, match="scope"):
-        execute_packet(changed, state_dir=state)
+        execute_packet(changed, state_dir=state, wrapper=wrapper)
 
 
 @pytest.mark.parametrize("budget", [-1.0, math.inf, -math.inf, math.nan])
@@ -385,7 +440,32 @@ def test_expired_approval_is_rejected(tmp_path: Path) -> None:
     approval_path.write_text(json.dumps(approval), encoding="utf-8")
 
     with pytest.raises(ManagerError, match="expired"):
-        execute_packet(packet_path, approval_path=approval_path, state_dir=state)
+        execute_packet(
+            packet_path, approval_path=approval_path, state_dir=state, wrapper=wrapper
+        )
+
+
+def test_approval_consumption_is_atomic_under_concurrency(tmp_path: Path) -> None:
+    wrapper, _output = _fake_wrapper(tmp_path)
+    state = tmp_path / "state"
+    packet_path = prepare_packet(operation="task add", wrapper=wrapper, state_dir=state)
+    packet = json.loads(packet_path.read_text(encoding="utf-8"))
+    approval_path = issue_approval(packet_path, state_dir=state)
+    barrier = Barrier(2)
+
+    def consume() -> str:
+        barrier.wait()
+        try:
+            consume_approval(approval_path, packet, state_dir=state)
+        except ManagerError as exc:
+            return str(exc)
+        return "consumed"
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(lambda _index: consume(), range(2)))
+
+    assert results.count("consumed") == 1
+    assert sum("already been consumed" in result for result in results) == 1
 
 
 def test_execution_uses_list_form_subprocess_without_a_shell(tmp_path: Path, monkeypatch) -> None:
@@ -404,7 +484,7 @@ def test_execution_uses_list_form_subprocess_without_a_shell(tmp_path: Path, mon
 
     monkeypatch.setattr("tools.cam_manager.subprocess.run", fake_run)
 
-    execute_packet(packet_path, state_dir=state)
+    execute_packet(packet_path, state_dir=state, wrapper=wrapper)
 
     assert calls == [
         (

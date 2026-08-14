@@ -708,6 +708,7 @@ def launch_candidate_if_warranted(
         manager_receipt_path, returncode = execute_packet(
             packet_path,
             state_dir=config.state_dir,
+            wrapper=config.wrapper,
             approval_path=approval_path,
         )
     except Exception:
