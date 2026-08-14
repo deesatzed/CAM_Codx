@@ -1,0 +1,4 @@
+interface:
+  display_name: "CAM Codex"
+  short_description: "Manage SWE and CAM work with evidence gates"
+  default_prompt: "Use $cam-codx to manage this software task with CAM recall and explicit evidence gates."

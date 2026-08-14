@@ -448,3 +448,29 @@
   focused manager/registry verification is `61 passed`; the combined Task 4
   compatibility surface is `148 passed`, with direct CLI help, generator
   drift, and `git diff --check` green.
+
+## 2026-08-14 canonical CAM_Codx skill
+
+- Initialized the canonical `cam-codx` skill with the official skill-creator
+  scaffold and UI metadata, then replaced the placeholder with one concise
+  normal-work router and four one-level progressive references: SWE,
+  knowledge/mining, administration, and safety/approvals.
+- The required flow reads target truth first, resolves exact runtime
+  identities, plans before execution, displays the route/write/spend/mining
+  card, uses the contract-driven fixed-operation manager, makes evidence
+  selection/rejection and landing explicit, verifies, and records only the
+  proved outcome.
+- The SWE playbook covers early new-project recall, in-progress continuation,
+  rescue, mitigation, troubleshooting, re-development, dissimilar donor
+  evidence, landing maps, and failed-verification handling. It reuses the
+  existing Development Brief and pull/mine coordinator rather than copying
+  their implementation.
+- The skill exposes all six everyday intents and seven administrative
+  families while stating no implicit mining, no implicit promotion, separate
+  provider/target/promotion/live approvals, and direct CAM_CAM only for
+  troubleshooting/runtime development/recovery.
+- TDD RED produced seven failures against the generated placeholder. GREEN is
+  `7 passed`; the repo frontmatter validator reports zero failures, the
+  official quick validator reports `Skill is valid!`, and `git diff --check`
+  passes. No CAM command, provider call, corpus write, target mutation,
+  promotion, or configuration change occurred.
