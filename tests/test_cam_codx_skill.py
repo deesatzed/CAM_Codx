@@ -94,8 +94,10 @@ def test_skill_plans_before_execution_and_uses_contract_manager() -> None:
 
 def test_skill_reuses_existing_helpers_and_has_explicit_unsafe_boundaries() -> None:
     text = _all_skill_text().lower()
-    assert "cam-codx-development-brief" in text
-    assert "cam-codx-pull-mine-dir" in text
+    assert "tools/development_brief.py" in text
+    assert "tools/cam_pull_mine_dir.py" in text
+    assert "cam-codx-development-brief" not in text
+    assert "cam-codx-pull-mine-dir" not in text
     for phrase in (
         "no implicit mining",
         "no implicit promotion",

@@ -474,3 +474,8 @@
   official quick validator reports `Skill is valid!`, and `git diff --check`
   passes. No CAM command, provider call, corpus write, target mutation,
   promotion, or configuration change occurred.
+- Specification review found that the first draft still named two legacy
+  skills as dependencies. The canonical playbooks now call
+  `tools/development_brief.py` and `tools/cam_pull_mine_dir.py` directly, with
+  pinned arguments and an explicit mining dry run. Tests forbid references to
+  the legacy skill entrypoints, preserving one normal CAM_Codx skill.

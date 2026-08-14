@@ -2,10 +2,11 @@
 
 ## Recall existing knowledge
 
-Use `assess` for the safe default Development Brief. Invoke
-`cam-codx-development-brief` when the developer asks what prior, adjacent,
-cloned, unfinished, or dissimilar work can improve a new, continuing, rescue,
-or re-development decision. Query only the pinned corpus and cite provenance.
+Use `assess` for the safe default Development Brief. Run
+`<CAM_CODEX>/tools/development_brief.py` when the developer asks what prior,
+adjacent, cloned, unfinished, or dissimilar work can improve a new,
+continuing, rescue, or re-development decision. Query only the pinned corpus
+and cite provenance; do not require a separate legacy skill entrypoint.
 
 Use `knowledge` for an explicitly named knowledge operation such as searching,
 auditing, exporting, comparing, or maintaining existing CAM records. Plan the
@@ -28,11 +29,18 @@ convert a mined finding into an implementation instruction.
 
 ## Explicit mining
 
-Ordinary SWE work never mines. Use the existing `cam-codx-pull-mine-dir`
-coordinator only when the user explicitly requests repository update/mining.
+Ordinary SWE work never mines. Use the existing coordinator directly only when
+the user explicitly requests repository update/mining:
+
+```text
+python <CAM_CODEX>/tools/cam_pull_mine_dir.py \
+  --source-root <explicit-repository-directory> \
+  --cam-command <absolute-cam> --cam-db <absolute-claw.db> \
+  --cam-config <absolute-claw.toml> --state-dir <manager-state> --dry-run
+```
+
 Pin the source directory, `claw.db`, configuration, model, provider, cost cap,
-time bound, and receipt location. Run its dry run first when required by the
-current operator contract.
+time bound, and receipt location. Review the dry run before a live invocation.
 
 Mining may update the named corpus and ledger and produce a delta receipt. It
 must stop before build selection. Assess the receipt and findings afterward;

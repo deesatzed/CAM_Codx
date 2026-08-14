@@ -6,8 +6,15 @@ plan. CAM evidence proposes; Codex decides; repository checks arbitrate.
 ## New project
 
 1. Use `assess` to state the idea, user need, constraints, and target.
-2. When prior, adjacent, cloned, or dissimilar builds could help, invoke
-   `cam-codx-development-brief`. Keep unavailable or stale evidence labeled.
+2. When prior, adjacent, cloned, or dissimilar builds could help, run the
+   existing helper directly:
+
+   ```text
+   python <CAM_CODEX>/tools/development_brief.py new \
+     --task <request> --cam-command <absolute-cam> --cam-db <absolute-claw.db>
+   ```
+
+   Keep unavailable or stale evidence labeled.
 3. Separate candidates into `selected`, `rejected`, and `needs investigation`.
    Cite source repository/component, evidence, fitness, failures, and license
    status. Similarity alone is not a reason to select.
@@ -30,8 +37,9 @@ plan. CAM evidence proposes; Codex decides; repository checks arbitrate.
 
 1. Reproduce the failure and classify it: implementation defect, architecture
    gap, dependency/environment drift, missing evidence, or stale direction.
-2. Use `cam-codx-development-brief` for prior fixes and failures, including
-   lessons from dissimilar repositories.
+2. Run `tools/development_brief.py continue-rescue` for prior fixes and
+   failures, including lessons from dissimilar repositories. Pin the target,
+   CAM command, and database identities.
 3. Use `fix` to diagnose before mutation. Rank continue, mitigate, repair,
    replace, and re-development options by evidence and cost.
 4. Keep rejected approaches and why they failed. A past failure is useful
