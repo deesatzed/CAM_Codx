@@ -11,6 +11,8 @@ import sys
 
 import pytest
 
+from tools.cam_manager import load_operation_catalog
+
 
 ROOT = Path(__file__).resolve().parents[1]
 CONTRACT_PATH = ROOT / "agent-packs" / "contract" / "cam_agent_capabilities.json"
@@ -210,6 +212,19 @@ def test_hidden_aliases_and_hidden_canonical_commands_are_distinct() -> None:
         assert {field: route[field] for field in policy_fields} == {
             field: target[field] for field in policy_fields
         }
+
+
+def test_manager_catalog_selects_every_and_only_executable_managed_canonical_route() -> None:
+    routes = _contract()["command_routes"]
+    expected = {
+        route["command_path"]
+        for route in routes
+        if route["kind"] == "command"
+        and route["classification"] == "managed"
+        and route["command_status"] == "canonical"
+    }
+
+    assert set(load_operation_catalog()) == expected
 
 
 def test_known_runtime_boundaries_have_conservative_policy() -> None:

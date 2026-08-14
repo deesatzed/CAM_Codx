@@ -10,8 +10,10 @@ wrapper. No shell is involved and terminal approvals are single-use.
 from __future__ import annotations
 
 import argparse
+from dataclasses import asdict, dataclass
 import hashlib
 import json
+import math
 import os
 import subprocess
 import sys
@@ -21,60 +23,30 @@ from pathlib import Path
 from typing import Any
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 DEFAULT_TTL_HOURS = 4.0
+ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_CONTRACT = ROOT / "agent-packs" / "contract" / "cam_agent_capabilities.json"
 
-# The prefix is the safety boundary. Options may be appended, but a packet can
-# never replace a benchmark/self-enhance command with an arbitrary CAM command.
-OPERATION_PREFIXES: dict[str, tuple[str, ...]] = {
-    "inspect": ("status",),
-    "models-current": ("models", "current"),
-    "models-catalog": ("models", "catalog"),
-    "benchmark-plan": ("models", "benchmark", "plan"),
-    "benchmark-run": ("models", "benchmark", "run"),
-    "benchmark-report": ("models", "benchmark", "report"),
-    "benchmark-advance": ("models", "benchmark", "advance"),
-    "benchmark-select": ("models", "benchmark", "select"),
-    "self-enhance-status": ("self-enhance", "status"),
-    "self-enhance-start": ("self-enhance", "start"),
-    "self-enhance-validate": ("self-enhance", "validate"),
-    "self-enhance-swap": ("self-enhance", "swap"),
-    "self-enhance-rollback": ("self-enhance", "rollback"),
-    # CAM_CAM's current LLM role/profile controls are ``models set``,
-    # ``models rollback``, and ``models profile use``. Keep these explicit so
-    # a stale embeddings command cannot be approved by the manager.
-    "models-promote": ("models", "set"),
-    "models-rollback": ("models", "rollback"),
-    "models-profile-use": ("models", "profile", "use"),
-}
-
-OPERATION_PHASE: dict[str, str] = {
-    "inspect": "inspect",
-    "models-current": "inspect",
-    "models-catalog": "inspect",
-    "benchmark-plan": "plan",
-    "benchmark-run": "run",
-    "benchmark-report": "report",
-    "benchmark-advance": "advance",
-    "benchmark-select": "select",
-    "self-enhance-status": "inspect",
-    "self-enhance-start": "self-enhance",
-    "self-enhance-validate": "self-enhance",
-    "self-enhance-swap": "promote",
-    "self-enhance-rollback": "promote",
-    "models-promote": "promote",
-    "models-rollback": "promote",
-    "models-profile-use": "promote",
-}
-
-READ_ONLY_OPERATIONS = {
-    "inspect",
-    "models-current",
-    "models-catalog",
-    "benchmark-report",
-    "benchmark-select",
-    "self-enhance-status",
-    "self-enhance-validate",
+# These names preserve existing CAM_Codx manager scripts.  They translate to
+# exact canonical contract paths and carry no independent policy.
+LEGACY_OPERATION_ALIASES: dict[str, str] = {
+    "inspect": "status",
+    "models-current": "models current",
+    "models-catalog": "models catalog",
+    "benchmark-plan": "models benchmark plan",
+    "benchmark-run": "models benchmark run",
+    "benchmark-report": "models benchmark report",
+    "benchmark-advance": "models benchmark advance",
+    "benchmark-select": "models benchmark select",
+    "self-enhance-status": "self-enhance status",
+    "self-enhance-start": "self-enhance start",
+    "self-enhance-validate": "self-enhance validate",
+    "self-enhance-swap": "self-enhance swap",
+    "self-enhance-rollback": "self-enhance rollback",
+    "models-promote": "models set",
+    "models-rollback": "models rollback",
+    "models-profile-use": "models profile use",
 }
 
 _SECRET_MARKERS = (
@@ -90,6 +62,154 @@ _SECRET_MARKERS = (
 
 class ManagerError(ValueError):
     """A user-correctable manager or approval error."""
+
+
+@dataclass(frozen=True)
+class OperationPolicy:
+    """One executable canonical CAM route derived from the shared contract."""
+
+    command_path: str
+    argv_prefix: tuple[str, ...]
+    phase: str
+    risk_class: str
+    side_effect_class: str
+    default_mode: str
+    approval_classes: tuple[str, ...]
+    provider_spend: bool
+    config_change: bool
+    promotion: bool
+    artifacts: tuple[str, ...]
+    runtime_source_refs: tuple[str, ...]
+
+    @property
+    def requires_approval(self) -> bool:
+        return self.approval_classes != ("none",)
+
+    def to_dict(self) -> dict[str, Any]:
+        payload = asdict(self)
+        for field in (
+            "argv_prefix",
+            "approval_classes",
+            "artifacts",
+            "runtime_source_refs",
+        ):
+            payload[field] = list(payload[field])
+        return payload
+
+
+_ROUTE_TYPES = {
+    "command_path": str,
+    "kind": str,
+    "hidden": bool,
+    "command_status": str,
+    "classification": str,
+    "cam_codx_route": str,
+    "risk_class": str,
+    "side_effect_class": str,
+    "default_mode": str,
+    "approval_classes": list,
+    "provider_spend": bool,
+    "config_change": bool,
+    "promotion": bool,
+    "artifacts": list,
+    "runtime_source_refs": list,
+}
+_KINDS = {"command", "group"}
+_STATUSES = {"canonical", "alias"}
+_CLASSIFICATIONS = {"managed", "troubleshooting_only", "hidden_compatibility"}
+
+
+def _contract_bytes(path: Path) -> tuple[Path, bytes]:
+    resolved = path.expanduser().resolve()
+    try:
+        data = resolved.read_bytes()
+    except OSError as exc:
+        raise ManagerError(f"Cannot read CAM capability contract: {resolved}") from exc
+    return resolved, data
+
+
+def load_operation_catalog(
+    contract_path: Path = DEFAULT_CONTRACT,
+) -> dict[str, OperationPolicy]:
+    """Load every executable managed canonical command, failing closed."""
+
+    resolved, data = _contract_bytes(contract_path)
+    try:
+        contract = json.loads(data)
+    except json.JSONDecodeError as exc:
+        raise ManagerError(f"CAM capability contract is invalid JSON: {resolved}") from exc
+    if not isinstance(contract, dict) or contract.get("schema_version") != "2.0":
+        raise ManagerError("CAM capability contract must use schema 2.0")
+    intents = contract.get("workflow_intents")
+    if not isinstance(intents, dict) or not intents:
+        raise ManagerError("CAM capability contract workflow_intents must be non-empty")
+    routes = contract.get("command_routes")
+    if not isinstance(routes, list) or not routes:
+        raise ManagerError("CAM capability contract command_routes must be non-empty")
+
+    catalog: dict[str, OperationPolicy] = {}
+    seen: set[str] = set()
+    for index, route in enumerate(routes):
+        if not isinstance(route, dict):
+            raise ManagerError(f"CAM capability contract route {index} must be an object")
+        for field, expected in _ROUTE_TYPES.items():
+            if not isinstance(route.get(field), expected):
+                raise ManagerError(
+                    f"CAM capability contract route {index} has invalid {field!r}"
+                )
+        path = route["command_path"]
+        if not path or path != " ".join(path.split()) or path in seen:
+            raise ManagerError(f"CAM capability contract has invalid/duplicate route {path!r}")
+        seen.add(path)
+        if route["kind"] not in _KINDS:
+            raise ManagerError(f"CAM capability contract route {path!r} has invalid kind")
+        if route["command_status"] not in _STATUSES:
+            raise ManagerError(f"CAM capability contract route {path!r} has invalid status")
+        if route["classification"] not in _CLASSIFICATIONS:
+            raise ManagerError(
+                f"CAM capability contract route {path!r} has invalid classification"
+            )
+        if route["cam_codx_route"] not in intents:
+            raise ManagerError(f"CAM capability contract route {path!r} has invalid phase")
+        for field in ("approval_classes", "artifacts", "runtime_source_refs"):
+            values = route[field]
+            if not values or not all(isinstance(value, str) and value for value in values):
+                raise ManagerError(
+                    f"CAM capability contract route {path!r} has invalid {field}"
+                )
+        if not (
+            route["kind"] == "command"
+            and route["classification"] == "managed"
+            and route["command_status"] == "canonical"
+        ):
+            continue
+        catalog[path] = OperationPolicy(
+            command_path=path,
+            argv_prefix=tuple(path.split()),
+            phase=route["cam_codx_route"],
+            risk_class=route["risk_class"],
+            side_effect_class=route["side_effect_class"],
+            default_mode=route["default_mode"],
+            approval_classes=tuple(route["approval_classes"]),
+            provider_spend=route["provider_spend"],
+            config_change=route["config_change"],
+            promotion=route["promotion"],
+            artifacts=tuple(route["artifacts"]),
+            runtime_source_refs=tuple(route["runtime_source_refs"]),
+        )
+    if not catalog:
+        raise ManagerError("CAM capability contract has no managed canonical commands")
+    return catalog
+
+
+def _resolve_operation(
+    operation: str, catalog: dict[str, OperationPolicy]
+) -> tuple[str, OperationPolicy]:
+    canonical = LEGACY_OPERATION_ALIASES.get(operation, operation)
+    policy = catalog.get(canonical)
+    if policy is None:
+        raise ManagerError(f"Unsupported manager operation: {operation}")
+    return canonical, policy
 
 
 def _now() -> datetime:
@@ -199,25 +319,29 @@ def prepare_packet(
     target_repo: Path | None = None,
     budget_usd: float = 0.0,
     state_dir: Path,
+    contract_path: Path = DEFAULT_CONTRACT,
 ) -> Path:
     """Create an immutable execution packet and return its path."""
 
-    if operation not in OPERATION_PREFIXES:
-        raise ManagerError(f"Unsupported manager operation: {operation}")
+    catalog = load_operation_catalog(contract_path)
+    operation, policy = _resolve_operation(operation, catalog)
+    resolved_contract, contract_data = _contract_bytes(contract_path)
+    contract_sha256 = hashlib.sha256(contract_data).hexdigest()
     wrapper = wrapper.expanduser().resolve()
     if not wrapper.is_file() or not os.access(wrapper, os.X_OK):
         raise ManagerError(f"CAM wrapper is not executable: {wrapper}")
     if not workflow_id.strip():
         raise ManagerError("workflow_id must not be empty")
-    if budget_usd < 0:
-        raise ManagerError("budget_usd cannot be negative")
+    if not math.isfinite(budget_usd) or budget_usd < 0:
+        raise ManagerError("budget_usd must be finite and non-negative")
     if target_repo is not None:
         target_repo = target_repo.expanduser().resolve()
         if not target_repo.is_dir():
             raise ManagerError(f"Target repository is not a directory: {target_repo}")
     extra_args = _normalise_args(args, None)
-    argv = [str(wrapper), *OPERATION_PREFIXES[operation], *extra_args]
-    phase = OPERATION_PHASE[operation]
+    argv = [str(wrapper), *policy.argv_prefix, *extra_args]
+    phase = policy.phase
+    operation_policy = policy.to_dict()
     scope = {
         "schema_version": SCHEMA_VERSION,
         "operation": operation,
@@ -227,6 +351,9 @@ def prepare_packet(
         "argv": argv,
         "target_repo": str(target_repo) if target_repo else None,
         "budget_usd": round(float(budget_usd), 12),
+        "contract_path": str(resolved_contract),
+        "contract_sha256": contract_sha256,
+        "operation_policy": operation_policy,
     }
     packet_id = f"packet-{_now().strftime('%Y%m%dT%H%M%SZ')}-{uuid.uuid4().hex[:10]}"
     packet = {
@@ -234,7 +361,7 @@ def prepare_packet(
         "packet_id": packet_id,
         "created_at": _timestamp(_now()),
         "status": "prepared",
-        "requires_approval": operation not in READ_ONLY_OPERATIONS,
+        "requires_approval": policy.requires_approval,
         "workflow_id": workflow_id,
         "operation": operation,
         "phase": phase,
@@ -242,6 +369,9 @@ def prepare_packet(
         "argv": argv,
         "target_repo": str(target_repo) if target_repo else None,
         "budget_usd": round(float(budget_usd), 12),
+        "contract_path": str(resolved_contract),
+        "contract_sha256": contract_sha256,
+        "operation_policy": operation_policy,
         "scope": scope,
         "scope_digest": scope_digest(scope),
     }
@@ -273,6 +403,8 @@ def issue_approval(
     packet = _read_json(packet_path)
     if packet.get("schema_version") != SCHEMA_VERSION:
         raise ManagerError("Unsupported packet schema")
+    if packet.get("scope_digest") != scope_digest(packet.get("scope", {})):
+        raise ManagerError("Packet scope digest is invalid")
     if ttl_hours <= 0 or ttl_hours > 24 * 7:
         raise ManagerError("Approval TTL must be greater than zero and at most 168 hours")
     if not approved_by.strip():
@@ -371,21 +503,56 @@ def execute_packet(
     state_dir: Path,
     approval_path: Path | None = None,
     dry_run: bool = False,
+    contract_path: Path = DEFAULT_CONTRACT,
 ) -> tuple[Path | None, int | None]:
     """Execute one packet through its fixed wrapper, returning receipt/code."""
 
     packet = _read_json(packet_path)
     if packet.get("schema_version") != SCHEMA_VERSION:
         raise ManagerError("Unsupported packet schema")
+    scope = packet.get("scope")
+    if not isinstance(scope, dict) or packet.get("scope_digest") != scope_digest(scope):
+        raise ManagerError("Packet scope digest is invalid")
+    for field in (
+        "operation",
+        "phase",
+        "workflow_id",
+        "wrapper",
+        "argv",
+        "target_repo",
+        "budget_usd",
+        "contract_path",
+        "contract_sha256",
+        "operation_policy",
+    ):
+        if packet.get(field) != scope.get(field):
+            raise ManagerError(
+                f"Packet scope digest binding mismatch: top-level {field} differs from scope"
+            )
     argv = packet.get("argv")
     if not isinstance(argv, list) or not argv or not all(isinstance(item, str) for item in argv):
         raise ManagerError("Packet argv is invalid")
+    contract_path_value = packet.get("contract_path")
+    if not isinstance(contract_path_value, str) or not contract_path_value:
+        raise ManagerError("Packet contract path is invalid")
+    expected_contract = contract_path.expanduser().resolve()
+    if Path(contract_path_value) != expected_contract:
+        raise ManagerError("Packet contract identity differs from the approved contract")
+    _resolved_contract, contract_data = _contract_bytes(expected_contract)
+    if hashlib.sha256(contract_data).hexdigest() != packet.get("contract_sha256"):
+        raise ManagerError("CAM capability contract drift detected; prepare a new packet")
+    catalog = load_operation_catalog(expected_contract)
     operation = str(packet.get("operation"))
-    if operation not in OPERATION_PREFIXES:
-        raise ManagerError("Packet operation is not allowlisted")
-    if tuple(argv[1 : 1 + len(OPERATION_PREFIXES[operation])]) != OPERATION_PREFIXES[operation]:
+    policy = catalog.get(operation)
+    if policy is None or packet.get("operation_policy") != policy.to_dict():
+        raise ManagerError("Packet operation policy is not allowlisted by the contract")
+    if packet.get("phase") != policy.phase:
+        raise ManagerError("Packet phase is not allowlisted by the contract")
+    if tuple(argv[1 : 1 + len(policy.argv_prefix)]) != policy.argv_prefix:
         raise ManagerError("Packet command prefix is not allowlisted")
-    if packet.get("requires_approval"):
+    if packet.get("requires_approval") is not policy.requires_approval:
+        raise ManagerError("Packet approval policy differs from the contract")
+    if policy.requires_approval:
         if approval_path is None:
             raise ManagerError(f"Operation {operation} requires an approval receipt")
         consume_approval(approval_path, packet, state_dir=state_dir)
@@ -462,7 +629,7 @@ def _parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     prepare = sub.add_parser("prepare", help="prepare a fixed CAM operation packet")
-    prepare.add_argument("operation", choices=sorted(OPERATION_PREFIXES))
+    prepare.add_argument("operation", help="exact canonical CAM command path")
     prepare.add_argument("--wrapper", type=Path, required=True)
     prepare.add_argument("--arg", action="append", dest="args")
     prepare.add_argument("--args-json")
@@ -470,6 +637,7 @@ def _parser() -> argparse.ArgumentParser:
     prepare.add_argument("--target-repo", type=Path)
     prepare.add_argument("--budget-usd", type=float, default=0.0)
     prepare.add_argument("--state-dir", type=Path, required=True)
+    prepare.add_argument("--contract", type=Path, default=DEFAULT_CONTRACT)
     prepare.add_argument("--output", type=Path)
 
     approve = sub.add_parser("approve", help="issue a one-use approval receipt")
@@ -483,6 +651,7 @@ def _parser() -> argparse.ArgumentParser:
     execute.add_argument("--approval", type=Path)
     execute.add_argument("--state-dir", type=Path, required=True)
     execute.add_argument("--dry-run", action="store_true")
+    execute.add_argument("--contract", type=Path, default=DEFAULT_CONTRACT)
 
     status = sub.add_parser("status", help="show manager state counts")
     status.add_argument("--state-dir", type=Path, required=True)
@@ -502,6 +671,7 @@ def main(argv: list[str] | None = None) -> int:
                 target_repo=args.target_repo,
                 budget_usd=args.budget_usd,
                 state_dir=args.state_dir,
+                contract_path=args.contract,
             )
             if args.output:
                 args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -525,6 +695,7 @@ def main(argv: list[str] | None = None) -> int:
                 state_dir=args.state_dir,
                 approval_path=args.approval,
                 dry_run=args.dry_run,
+                contract_path=args.contract,
             )
             if receipt:
                 print(f"Execution receipt: {receipt}")

@@ -401,3 +401,28 @@
   TOML database tables into controlled exit-code-2 errors without tracebacks.
   The hardened combined suite passes `69` tests and generated agent-pack drift
   checks pass.
+
+## 2026-08-13 contract-driven CAM approval manager
+
+- Replaced the duplicated manager prefix, phase, and read-only maps with a
+  strict adapter over the shared capability contract. All `110` executable
+  managed canonical CAM commands, including the four hidden canonical
+  advanced operations, now receive a fixed list-form argv prefix and the
+  contract's CAM_Codx phase. Groups, troubleshooting-only commands, and hidden
+  compatibility aliases cannot be selected as canonical manager operations.
+- Retained the existing hyphenated manager operation names only as translations
+  to exact canonical command paths. They carry no separate risk, side-effect,
+  approval, spend, configuration, or promotion policy.
+- Packets now bind the canonical operation policy and trusted contract digest
+  into their content-addressed scope. Preparation and execution fail closed on
+  missing/malformed contracts, changed contract bytes, changed packet fields,
+  changed policy, invalid prefixes, or an unexpected contract identity.
+- Preserved secret rejection, digest-bound approvals, expiry, single-use
+  consumption, secure receipts, and `shell=False` execution. Extended budget
+  validation to reject NaN and infinities as well as negative values.
+- TDD RED failed at collection because the new contract adapter did not exist.
+  GREEN passes `56` focused manager/registry tests and `143` combined manager,
+  registry, pull/mine, control-plane, and agent-pack tests. Generator drift,
+  CLI help, and `git diff --check` also pass. Tests use fixture wrappers only;
+  no live CAM operation, provider call, corpus write, target mutation,
+  promotion, or configuration change occurred.
