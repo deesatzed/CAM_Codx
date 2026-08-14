@@ -23,31 +23,45 @@ CAM_CAM responsible for runtime behavior, the corpus, providers, and models.
    python <CAM_CODEX>/tools/cam_control_plane.py plan \
      --intent <intent> --target <absolute-target> --request <request> \
      --cam-command <absolute-cam> --cam-db <absolute-claw.db> \
-     --cam-config <absolute-claw.toml>
+     --cam-config <absolute-claw.toml> \
+     --operation "<explicit canonical command path>"
    ```
 
 4. Show the plan card: goal, route, target, memory mode, writes, provider
    spend, mining, approval, and next action. Free text uses only the capability
    contract default; pass an explicit operation for any non-default route.
-5. For an executable phase, prepare the exact canonical command path through
-   the contract-driven manager:
+5. For an executable phase, choose the exact canonical command path from the
+   planner result or the generated capability contract reference. Pass each
+   operation argument with repeated `--arg`, or pass one JSON array of strings
+   with `--args-json`; never compose a shell command. Prepare it through the
+   contract-driven manager:
 
    ```text
    python <CAM_CODEX>/tools/cam_manager.py prepare "<canonical command path>" \
-     --wrapper <trusted-wrapper> --state-dir <manager-state>
+     --wrapper <trusted-wrapper> --state-dir <manager-state> \
+     --args-json '["<argument>", "<value>"]'
+   ```
+
+6. Inspect the packet's complete approval classes. If they are `none`, skip
+   approval. Otherwise, verify that an explicit user authorization covers
+   every declared class and the exact scope, then record its real source:
+
+   ```text
    python <CAM_CODEX>/tools/cam_manager.py approve <packet> \
-     --state-dir <manager-state>
+     --state-dir <manager-state> --approved-by "<actual authorization source>"
    python <CAM_CODEX>/tools/cam_manager.py execute <packet> \
      --approval <approval> --wrapper <trusted-wrapper> \
      --state-dir <manager-state>
    ```
 
-   Omit approval only when the capability contract declares `none`.
-6. Inspect CAM evidence; select or reject it explicitly. Create a landing map
+   A generic request to use CAM_Codx is not sensitive-operation approval. Do
+   not self-authorize provider spend, configuration change, promotion, or live
+   CAM mutation. Omit `--approval` only when the contract declares `none`.
+7. Inspect CAM evidence; select or reject it explicitly. Create a landing map
    before adapting a recalled component into the target.
-7. Perform the bounded Codex edit, run target-owned checks, and distinguish
+8. Perform the bounded Codex edit, run target-owned checks, and distinguish
    fixture, smoke, and live evidence.
-8. Record only the verified outcome, failure, partial result, and limitations.
+9. Record only the verified outcome, failure, partial result, and limitations.
 
 ## Intent router
 

@@ -479,3 +479,13 @@
   `tools/development_brief.py` and `tools/cam_pull_mine_dir.py` directly, with
   pinned arguments and an explicit mining dry run. Tests forbid references to
   the legacy skill entrypoints, preserving one normal CAM_Codx skill.
+- Quality review found that approval looked automatic, non-default operation
+  and argument syntax was incomplete, and the mining example omitted the
+  bounds promised by its prose. The skill now requires authorization covering
+  every declared class, records the actual source with `--approved-by`, and
+  forbids Codex from self-authorizing spend, configuration, promotion, or live
+  mutation. Planner and manager examples show explicit canonical operations
+  and list-form JSON arguments.
+- The mining dry run now pins profiles/local defaults, exact provider/model,
+  repository count, duration, and cost. A live run may remove only `--dry-run`
+  from the reviewed command; any changed value requires new review.

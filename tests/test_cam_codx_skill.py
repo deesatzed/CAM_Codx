@@ -88,6 +88,10 @@ def test_skill_plans_before_execution_and_uses_contract_manager() -> None:
     assert "cam_manager.py approve" in body
     assert "cam_manager.py execute" in body
     assert "--wrapper" in body
+    assert "--operation" in body
+    assert "--args-json" in body
+    assert "--approved-by" in body
+    assert "do not self-authorize provider spend" in " ".join(body.lower().split())
     assert body.index("cam_control_plane.py plan") < body.index("cam_manager.py prepare")
     assert "capability contract" in body.lower()
 
@@ -128,6 +132,24 @@ def test_playbooks_cover_new_continuing_rescue_and_evidence_selection_needs() ->
         "verified outcome",
     ):
         assert phrase in swe
+
+
+def test_mining_playbook_pins_live_bounds_and_reuses_reviewed_values() -> None:
+    knowledge = (SKILL / "references" / "knowledge-playbooks.md").read_text(
+        encoding="utf-8"
+    )
+    for flag in (
+        "--profiles",
+        "--local-defaults",
+        "--exact-model",
+        "--max-repos",
+        "--max-minutes",
+        "--max-cost-usd",
+        "--dry-run",
+    ):
+        assert flag in knowledge
+    assert "exact same values" in knowledge
+    assert "remove only `--dry-run`" in knowledge
 
 
 def test_skill_contains_no_stale_paths_secrets_or_implicit_live_actions() -> None:

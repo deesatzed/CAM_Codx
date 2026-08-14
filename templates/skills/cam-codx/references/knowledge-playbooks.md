@@ -36,11 +36,18 @@ the user explicitly requests repository update/mining:
 python <CAM_CODEX>/tools/cam_pull_mine_dir.py \
   --source-root <explicit-repository-directory> \
   --cam-command <absolute-cam> --cam-db <absolute-claw.db> \
-  --cam-config <absolute-claw.toml> --state-dir <manager-state> --dry-run
+  --cam-config <absolute-claw.toml> --profiles <absolute-model-profiles> \
+  --local-defaults <absolute-local-defaults> \
+  --exact-model <provider-and-model-id> --max-repos <count> \
+  --max-minutes <minutes> --max-cost-usd <amount> \
+  --state-dir <manager-state> --dry-run
 ```
 
 Pin the source directory, `claw.db`, configuration, model, provider, cost cap,
 time bound, and receipt location. Review the dry run before a live invocation.
+Only after matching explicit authorization, repeat the reviewed command with
+the exact same values and remove only `--dry-run`; any changed bound requires a
+new review.
 
 Mining may update the named corpus and ledger and produce a delta receipt. It
 must stop before build selection. Assess the receipt and findings afterward;
