@@ -292,6 +292,88 @@ def test_install_codex_skills_installs_only_canonical_cam_codx(tmp_path: Path) -
     assert not (codex_home / "skills" / "cam-codx-swe").exists()
 
 
+def test_install_codex_skills_preserves_previous_canonical_in_recoverable_backup(
+    tmp_path: Path,
+) -> None:
+    codex_home = tmp_path / ".codex"
+    source = tmp_path / "templates" / "skills" / "cam-codx"
+    source.mkdir(parents=True)
+    (source / "SKILL.md").write_text("new canonical", encoding="utf-8")
+    installed = codex_home / "skills" / "cam-codx"
+    installed.mkdir(parents=True)
+    (installed / "SKILL.md").write_text("old canonical", encoding="utf-8")
+
+    result = install_codex_skills(source.parent, codex_home)[0]
+
+    assert (result.dest / "SKILL.md").read_text(encoding="utf-8") == "new canonical"
+    assert result.previous_backup is not None
+    assert (result.previous_backup / "cam-codx" / "SKILL.md").read_text(
+        encoding="utf-8"
+    ) == "old canonical"
+    assert result.restore_metadata is not None
+    metadata = json.loads(result.restore_metadata.read_text(encoding="utf-8"))
+    assert metadata["status"] == "complete"
+    assert metadata["entries"][0]["state"] == "moved"
+    assert result.previous_backup.stat().st_mode & 0o777 == 0o700
+    assert result.restore_metadata.stat().st_mode & 0o777 == 0o600
+
+
+def test_install_codex_skill_copy_failure_keeps_existing_canonical(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from tools import cam_setup_wizard
+
+    codex_home = tmp_path / ".codex"
+    source = tmp_path / "templates" / "cam-codx"
+    source.mkdir(parents=True)
+    (source / "SKILL.md").write_text("new canonical", encoding="utf-8")
+    installed = codex_home / "skills" / "cam-codx"
+    installed.mkdir(parents=True)
+    (installed / "SKILL.md").write_text("old canonical", encoding="utf-8")
+
+    def fail_copy(_source: Path, _destination: Path) -> None:
+        raise OSError("fixture copy failure")
+
+    monkeypatch.setattr(cam_setup_wizard.shutil, "copytree", fail_copy)
+
+    with pytest.raises(OSError, match="fixture copy failure"):
+        install_codex_skill(source, codex_home)
+
+    assert (installed / "SKILL.md").read_text(encoding="utf-8") == "old canonical"
+    assert not list(installed.parent.glob(".cam-codx.stage-*"))
+
+
+def test_install_codex_skill_swap_failure_restores_existing_canonical(
+    tmp_path: Path, monkeypatch
+) -> None:
+    codex_home = tmp_path / ".codex"
+    source = tmp_path / "templates" / "cam-codx"
+    source.mkdir(parents=True)
+    (source / "SKILL.md").write_text("new canonical", encoding="utf-8")
+    installed = codex_home / "skills" / "cam-codx"
+    installed.mkdir(parents=True)
+    (installed / "SKILL.md").write_text("old canonical", encoding="utf-8")
+    real_replace = Path.replace
+
+    def fail_stage_replace(path: Path, target: Path) -> Path:
+        if path.name.startswith(".cam-codx.stage-"):
+            raise OSError("fixture swap failure")
+        return real_replace(path, target)
+
+    monkeypatch.setattr(Path, "replace", fail_stage_replace)
+
+    with pytest.raises(OSError, match="fixture swap failure"):
+        install_codex_skill(source, codex_home)
+
+    assert (installed / "SKILL.md").read_text(encoding="utf-8") == "old canonical"
+    assert not list(installed.parent.glob(".cam-codx.stage-*"))
+    restore_files = list((codex_home / "skill-backups").glob("*/restore.json"))
+    assert len(restore_files) == 1
+    metadata = json.loads(restore_files[0].read_text(encoding="utf-8"))
+    assert metadata["status"] == "rolled_back"
+    assert metadata["entries"][0]["state"] == "restored"
+
+
 def test_legacy_skills_are_reported_without_implicit_migration(tmp_path: Path) -> None:
     codex_home = tmp_path / ".codex"
     skills = codex_home / "skills"
@@ -372,11 +454,55 @@ def test_partial_migration_failure_preserves_recovery_metadata(
     metadata_path = raised.value.restore_metadata
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     assert metadata["status"] == "partial"
-    assert len(metadata["entries"]) == 1
+    assert len(metadata["entries"]) == 2
     moved = metadata["entries"][0]
+    planned = metadata["entries"][1]
+    assert moved["state"] == "moved"
     assert Path(moved["backup_path"]).is_dir()
     assert not Path(moved["original_path"]).exists()
+    assert planned["state"] == "planned"
+    assert Path(planned["original_path"]).is_dir()
+    assert not Path(planned["backup_path"]).exists()
     assert (skills / "cam-codx-swe").is_dir()
+
+
+def test_migration_journal_maps_move_before_post_move_state_update(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from tools import cam_setup_wizard
+
+    codex_home = tmp_path / ".codex"
+    legacy = codex_home / "skills" / "cam-codx-swe"
+    legacy.mkdir(parents=True)
+    (legacy / "SKILL.md").write_text("legacy", encoding="utf-8")
+    real_move = cam_setup_wizard.shutil.move
+
+    def interrupt_after_move(source: str, destination: str):
+        real_move(source, destination)
+        raise OSError("fixture interruption after move")
+
+    monkeypatch.setattr(cam_setup_wizard.shutil, "move", interrupt_after_move)
+
+    with pytest.raises(CodexSkillMigrationError) as raised:
+        migrate_codex_skills(codex_home, timestamp="20260814T030405Z")
+
+    metadata = json.loads(raised.value.restore_metadata.read_text(encoding="utf-8"))
+    assert metadata["status"] == "partial"
+    assert metadata["entries"] == [
+        {
+            "name": "cam-codx-swe",
+            "original_path": str(legacy),
+            "backup_path": str(
+                codex_home
+                / "skill-backups"
+                / "cam-codx-legacy-20260814T030405Z"
+                / "cam-codx-swe"
+            ),
+            "state": "planned",
+        }
+    ]
+    assert not legacy.exists()
+    assert Path(metadata["entries"][0]["backup_path"]).is_dir()
 
 
 def test_setup_skill_documents_canonical_install_and_explicit_recoverable_migration() -> None:

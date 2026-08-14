@@ -19,6 +19,7 @@ import shutil
 import stat
 import subprocess
 import sys
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -83,6 +84,8 @@ class CamCodxWrapper:
 class CodexSkillInstall:
     source: Path
     dest: Path
+    previous_backup: Path | None = None
+    restore_metadata: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -355,15 +358,77 @@ def create_default_cam_codx_wrapper(cam_home: Path) -> CamCodxWrapper | None:
     return None
 
 
-def install_codex_skill(source: Path, codex_home: Path) -> Path:
+def _install_codex_skill_safely(
+    source: Path, codex_home: Path
+) -> tuple[Path, Path | None, Path | None]:
     source = source.expanduser().resolve()
     codex_home = codex_home.expanduser().resolve()
     dest = codex_home / "skills" / source.name
     if not (source / "SKILL.md").is_file():
         raise FileNotFoundError(f"skill template missing SKILL.md: {source}")
-    if dest.exists():
-        shutil.rmtree(dest)
-    shutil.copytree(source, dest)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    stage = dest.parent / f".{source.name}.stage-{uuid.uuid4().hex}"
+    backup_dir: Path | None = None
+    metadata_path: Path | None = None
+    previous: Path | None = None
+    backup_moved = False
+    replacement_installed = False
+    try:
+        shutil.copytree(source, stage)
+        if not (stage / "SKILL.md").is_file():
+            raise FileNotFoundError(f"staged skill missing SKILL.md: {stage}")
+        if dest.exists() or dest.is_symlink():
+            timestamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%S%fZ")
+            backup_root = codex_home / "skill-backups"
+            backup_root.mkdir(parents=True, exist_ok=True)
+            backup_root.chmod(0o700)
+            backup_dir = backup_root / f"{source.name}-update-{timestamp}"
+            backup_dir.mkdir(mode=0o700)
+            previous = backup_dir / source.name
+            metadata_path = backup_dir / "restore.json"
+            metadata = {
+                "schema_version": 1,
+                "created_at": timestamp,
+                "status": "planned",
+                "entries": [
+                    {
+                        "name": source.name,
+                        "original_path": str(dest),
+                        "backup_path": str(previous),
+                        "state": "planned",
+                    }
+                ],
+                "restore_note": "Remove the replacement, then move backup_path to original_path.",
+            }
+            _write_migration_metadata(metadata_path, metadata)
+        try:
+            if previous is not None:
+                shutil.move(str(dest), str(previous))
+                backup_moved = True
+                metadata["entries"][0]["state"] = "moved"
+                metadata["status"] = "backup_complete"
+                _write_migration_metadata(metadata_path, metadata)
+            stage.replace(dest)
+            replacement_installed = True
+        except Exception:
+            if backup_moved and not replacement_installed and previous is not None and previous.exists() and not dest.exists():
+                shutil.move(str(previous), str(dest))
+                if metadata_path is not None:
+                    metadata["entries"][0]["state"] = "restored"
+                    metadata["status"] = "rolled_back"
+                    _write_migration_metadata(metadata_path, metadata)
+            raise
+        if metadata_path is not None:
+            metadata["status"] = "complete"
+            _write_migration_metadata(metadata_path, metadata)
+        return dest, backup_dir, metadata_path
+    finally:
+        if stage.exists():
+            shutil.rmtree(stage)
+
+
+def install_codex_skill(source: Path, codex_home: Path) -> Path:
+    dest, _backup, _metadata = _install_codex_skill_safely(source, codex_home)
     return dest
 
 
@@ -374,12 +439,8 @@ def install_codex_skills(source_root: Path, codex_home: Path) -> list[CodexSkill
     source = source_root / "cam-codx"
     if not (source / "SKILL.md").is_file():
         raise FileNotFoundError(f"canonical CAM Codex skill missing under {source_root}")
-    return [
-        CodexSkillInstall(
-            source=source,
-            dest=install_codex_skill(source, codex_home),
-        )
-    ]
+    dest, backup, metadata = _install_codex_skill_safely(source, codex_home)
+    return [CodexSkillInstall(source, dest, backup, metadata)]
 
 
 def known_installed_legacy_skills(codex_home: Path) -> list[Path]:
@@ -394,10 +455,18 @@ def known_installed_legacy_skills(codex_home: Path) -> list[Path]:
 
 def _write_migration_metadata(path: Path, payload: dict) -> None:
     temporary = path.with_name(f".{path.name}.tmp")
-    temporary.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    with temporary.open("w", encoding="utf-8") as handle:
+        handle.write(json.dumps(payload, indent=2, sort_keys=True) + "\n")
+        handle.flush()
+        os.fsync(handle.fileno())
     temporary.chmod(0o600)
     temporary.replace(path)
     path.chmod(0o600)
+    directory = os.open(path.parent, os.O_RDONLY)
+    try:
+        os.fsync(directory)
+    finally:
+        os.close(directory)
 
 
 def migrate_codex_skills(
@@ -416,7 +485,16 @@ def migrate_codex_skills(
     backup_dir = backup_root / f"cam-codx-legacy-{timestamp}"
     backup_dir.mkdir(mode=0o700)
     metadata_path = backup_dir / "restore.json"
-    entries: list[dict[str, str]] = []
+    sources = known_installed_legacy_skills(codex_home)
+    entries: list[dict[str, str]] = [
+        {
+            "name": source.name,
+            "original_path": str(source),
+            "backup_path": str(backup_dir / source.name),
+            "state": "planned",
+        }
+        for source in sources
+    ]
     moved: list[Path] = []
     payload = {
         "schema_version": 1,
@@ -428,17 +506,11 @@ def migrate_codex_skills(
     }
     _write_migration_metadata(metadata_path, payload)
     try:
-        for source in known_installed_legacy_skills(codex_home):
+        for source, entry in zip(sources, entries, strict=True):
             destination = backup_dir / source.name
             shutil.move(str(source), str(destination))
             moved.append(destination)
-            entries.append(
-                {
-                    "name": source.name,
-                    "original_path": str(source),
-                    "backup_path": str(destination),
-                }
-            )
+            entry["state"] = "moved"
             _write_migration_metadata(metadata_path, payload)
     except Exception as exc:
         payload["status"] = "partial"
@@ -503,6 +575,9 @@ def write_report(
         for installed in installed_skills:
             lines.append(f"- source: `{installed.source}`")
             lines.append(f"- installed: `{installed.dest}`")
+            if installed.previous_backup is not None:
+                lines.append(f"- previous canonical backup: `{installed.previous_backup}`")
+                lines.append(f"- restore metadata: `{installed.restore_metadata}`")
     lines.extend(["", "## Codex Skill Migration", ""])
     if skill_migration is not None:
         lines.append(f"- backup: `{skill_migration.backup_dir}`")
@@ -654,6 +729,9 @@ def main(argv: list[str] | None = None) -> int:
         print("Codex skills installed:")
         for installed in skill_installs:
             print(f"  {installed.dest}")
+            if installed.previous_backup is not None:
+                print(f"  previous backup: {installed.previous_backup}")
+                print(f"  restore metadata: {installed.restore_metadata}")
         print("")
     if skill_migration is not None:
         print("Legacy CAM skills moved to recoverable backup:")

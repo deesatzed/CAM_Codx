@@ -515,3 +515,16 @@
   second-move failure produces a controlled error pointing to `restore.json`,
   leaves the first move recoverable, leaves the unattempted legacy skill in
   place, and records `status=partial`. The selected suite is now `117 passed`.
+- Quality review found two crash-safety gaps: replacing an installed canonical
+  skill deleted it before the new copy was known-good, and the migration
+  journal learned each move only after it happened. Canonical updates now copy
+  to a sibling staging directory, durably journal and move the old install to
+  a mode-0700 backup, atomically replace it, and restore it if the swap fails.
+  The report exposes the backup and mode-0600 restore metadata.
+- Legacy migration now durably writes the complete original-to-backup plan
+  before its first move and records a per-entry state after each one. New
+  regressions cover copy failure, swap rollback, successful canonical backup,
+  second-move failure, and interruption after a move but before its state
+  update. Focused setup/skill verification is `27 passed`; the selected Task 6
+  compatibility surface is `121 passed`, with wizard help and `git diff
+  --check` green. All tests used temporary Codex homes.
