@@ -1,10 +1,10 @@
 # CAM_Codx Program Manager
 
-> **Current state:** the setup wizard installs four specialized skills and the
-> manager covers a bounded operation set. **Approved target:** one `cam-codx`
-> skill manages every CAM_CAM capability using the shared capability contract.
-> The target is documented in
-> `plans/2026-08-12-cam-codx-control-plane-design.md` and is not yet implemented.
+Use CAM_Codx to state the outcome you need. The canonical `cam-codx` skill
+selects every managed CAM_CAM capability from the shared contract; the manager
+then binds exact list-form argv, identities, budgets, and one-time approvals.
+Direct CAM_CAM use is reserved for runtime troubleshooting, development,
+recovery, regression isolation, and expert integration.
 
 CAM_Codx can be the routine workflow manager for Codex software-engineering
 tasks without turning every task into a mining job. It owns the plan,
@@ -25,25 +25,21 @@ python tools/cam_setup_wizard.py \
 This installs all four Codex skills:
 
 ```text
-~/.codex/skills/cam-codx-setup/SKILL.md
-~/.codex/skills/cam-codx-swe/SKILL.md
-~/.codex/skills/cam-codx-development-brief/SKILL.md
-~/.codex/skills/cam-codx-pull-mine-dir/SKILL.md
+~/.codex/skills/cam-codx/SKILL.md
 ```
 
-Ask Codex to use `cam-codx-swe` for a build, update, review, or debugging
-task. It starts with repository truth and CAM read-only recall; it does not
-mine, spend, promote a model, or swap CAM automatically.
+Ask Codex: `Use CAM_Codx to build, update, review, or debug this task.` It
+starts with repository truth and CAM read-only recall; it does not mine, spend,
+promote a model, or swap CAM automatically.
 
-Use `cam-codx-development-brief` instead when the work is still in the early
-decision stage: a new project needs useful precedents and pitfalls, or an
-in-progress repository needs a continue/mitigate/re-develop recommendation.
+Use `CAM_Codx` for early decisions too: ask it to assess a new project from
+precedents and pitfalls, or to recommend continue, mitigate, or re-develop.
 That skill is read-only by default and is deliberately separate from the
 manager's approval-governed mutation and spend phases. See
 [CAM Development Brief](CAM_DEVELOPMENT_BRIEF.md).
 
-Use `cam-codx-pull-mine-dir` only for an explicit directory-wide update and
-mining request. It defaults to
+Use `CAM_Codx` only for an explicit directory-wide update and mining request.
+The bounded route defaults to
 `/Volumes/WS4TB/waswiki/repos2mine/repo622sn` when present; use
 `--source-root /absolute/path/to/repos` for another user or machine. Start with
 `--dry-run` to inspect eligibility and write a report without Git updates,

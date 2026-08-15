@@ -1,14 +1,10 @@
 # CAM + CAM_Codx Operator Cheat Sheet
 
-> **UX direction approved 2026-08-12:** CAM_Codx will become the single normal
-> control plane for every CAM_CAM feature. Direct CAM_CAM commands in this
-> document remain useful for troubleshooting and runtime development. The
-> canonical one-skill implementation is planned, not yet complete; current
-> commands and current four-skill setup remain documented truth below.
-
-Normal future phrasing will be `Use CAM_Codx to <desired outcome>`. See
-`CAM_CAPABILITY_AUDIT_2026-08-12.md` for the complete current inventory and
-approved route map.
+Use CAM_Codx to state the outcome you need. It is the normal control plane for
+every managed CAM_CAM capability and selects the registry-backed route,
+side-effect boundary, and required approval. Direct CAM_CAM commands below are
+expert references for troubleshooting, runtime development, recovery, and
+regression isolation.
 
 This is an operator reference for the current CAM family:
 
@@ -89,7 +85,7 @@ that any uncheckpointed WAL data or unavailable federated database is valid.
 
 | Desired outcome | Start here | Do not start with |
 | --- | --- | --- |
-| Start a new project or decide how to rescue one | `cam-codx-development-brief` | Mining, a provider call, or autonomous repair |
+| Start a new project or decide how to rescue one | `Use CAM_Codx to assess or plan` | Mining, a provider call, or autonomous repair |
 | Understand a repo safely | `evaluate --mode structural` or `preflight` | `enhance` |
 | Reuse past CAM knowledge | `kb search`, `federate`, or MCP `query_memory` | Mining the target again |
 | Assess a GitHub repo before cloning | `premine` | Clone/execute it |
@@ -267,15 +263,9 @@ python tools/cam_setup_wizard.py \
 ~/CAM/scripts/cam-codx status
 ```
 
-It installs these four skills under `~/.codex/skills/`:
-
-- `cam-codx-setup` — verify the local CAM installation and narrow wrapper.
-- `cam-codx-swe` — build, update, review, and debug a defined SWE task.
-- `cam-codx-development-brief` — make an early new-project or rescue decision
-  from read-only evidence.
-- `cam-codx-pull-mine-dir` — explicitly update eligible repositories, mine one
-  pinned `claw.db`, and report whether evidence warrants one `--skip-swap`
-  candidate.
+It installs one canonical skill under `~/.codex/skills/cam-codx/`. Ask it for
+setup, assessment, planning, build/fix/verify/record work, or a separately
+authorized mining phase.
 
 ### B. Routine SWE skill
 
@@ -283,7 +273,7 @@ Use this in any project where you want CAM evidence without an implicit mining
 job:
 
 ```text
-Use cam-codx-swe to manage this task. Start read-only, recall relevant CAM
+Use CAM_Codx to manage this task. Start read-only, recall relevant CAM
 methods with provenance, then plan, implement, test, and record outcomes. Do
 not mine, spend, promote models, or self-enhance.
 ```
@@ -298,11 +288,11 @@ Use this before a project plan exists, or when you need an honest decision
 about an in-progress repository:
 
 ```text
-Use cam-codx-development-brief to help me start this new project from relevant prior work.
+Use CAM_Codx to help me start this new project from relevant prior work.
 ```
 
 ```text
-Use cam-codx-development-brief to decide whether this in-progress repository should continue, be mitigated, or be re-developed.
+Use CAM_Codx to decide whether this in-progress repository should continue, be mitigated, or be re-developed.
 ```
 
 The result distinguishes **direct precedent**, **transferable analogy**, and
@@ -319,7 +309,7 @@ Use this only when you explicitly want to update and mine a local directory;
 routine SWE and the Development Brief do not imply it.
 
 ```text
-Use cam-codx-pull-mine-dir to update and mine this repository directory. Use --source-root for another user's folder, begin with --dry-run when I ask for preview, pin claw.db and claw.toml, and report the evidence gate.
+Use CAM_Codx to prepare an explicit update and mining phase for this repository directory. Name the source root, begin with a preview when requested, pin claw.db and claw.toml, and report the evidence gate.
 ```
 
 The default source root is
@@ -382,7 +372,7 @@ CAM_Codx generates host-specific packs from one capability contract:
 
 | Host | Use it for | Verify |
 | --- | --- | --- |
-| Codex | setup, `cam-codx-swe`, Development Brief, `/goal` contracts | Skill installed; wrapper status works |
+| Codex | canonical `cam-codx`, `/goal` contracts | Skill installed; wrapper status works |
 | Claude Code | stdio MCP, project `.mcp.json`, CAM skill | `claude mcp list` and pack `smoke.sh` |
 | Gemini | stdio MCP plus Gemini skill/config templates | `gemini mcp list` and pack `smoke.sh` |
 | Grok Build | stdio MCP, AGENTS/skill/hook templates | `grok inspect` and pack `smoke.sh` |
@@ -413,7 +403,7 @@ git diff --check
 ### Routine update or debugging task
 
 ```text
-Use cam-codx-swe to manage this SWE task. Inspect repository truth files first,
+Use CAM_Codx to manage this SWE task. Inspect repository truth files first,
 run CAM read-only recall, propose the smallest coherent change, run repository
 tests, and record outcomes. Do not mine, spend, change profiles, or self-enhance.
 ```
@@ -421,13 +411,13 @@ tests, and record outcomes. Do not mine, spend, change profiles, or self-enhance
 ### Start a new project from prior work
 
 ```text
-Use cam-codx-development-brief to help me start this new project from relevant prior work. Show direct precedents, transferable analogies, mistakes to avoid, and the smallest safe first step. Do not mine, spend, edit code, or scan other repositories.
+Use CAM_Codx to help me start this new project from relevant prior work. Show direct precedents, transferable analogies, mistakes to avoid, and the smallest safe first step. Do not mine, spend, edit code, or scan other repositories.
 ```
 
 ### Continue, mitigate, or re-develop an ongoing repository
 
 ```text
-Use cam-codx-development-brief to inspect this in-progress repository and recommend continue, mitigate, or re-develop. Read only its truth files, Git state, visible gap markers, and the explicit primary CAM corpus. Do not run tests, mine, write telemetry, or modify the repository.
+Use CAM_Codx to inspect this in-progress repository and recommend continue, mitigate, or re-develop. Read only its truth files, Git state, visible gap markers, and the explicit primary CAM corpus. Do not run tests, mine, write telemetry, or modify the repository.
 ```
 
 ### Mine a bounded set of local repositories

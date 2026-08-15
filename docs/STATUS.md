@@ -3,12 +3,14 @@
 Current feature checkpoint: 2026-08-12. Historical XTtape publication details
 remain below as provenance, not as the current feature inventory.
 
-## Approved Next Architecture
+## Control-Plane Status
 
-- CAM_Codx is the normal control plane for every CAM_CAM capability.
+Use CAM_Codx to state the desired outcome. CAM_Codx is the normal control
+plane for every managed CAM_CAM capability.
+
 - Direct CAM_CAM use remains supported for troubleshooting, recovery, runtime
   development, regression isolation, and expert scripts.
-- One canonical `cam-codx` skill will replace the normal need to choose among
+- One canonical `cam-codx` skill removes the normal need to choose among
   specialized CAM_Codx skills.
 - Six everyday SWE intents are approved: `assess`, `plan`, `build`, `fix`,
   `verify`, and `record`.
@@ -31,8 +33,7 @@ design and implementation plan under `docs/plans/`.
 - The packet/approval manager supports fixed operation packets, single-use
   approvals, digest-only receipts, and separately gated model/self-enhancement
   promotion or rollback.
-- Four Codex skills are installable: setup, routine SWE, Development Brief, and
-  `cam-codx-pull-mine-dir`.
+- One canonical `cam-codx` skill is installable for normal CAM_Codx work.
 - The Development Brief gives early new-project and continue/rescue guidance
   with direct-precedent, transferable-analogy, and new-hypothesis labels.
 - Development Brief recall uses a supplied primary corpus only and is read-only:

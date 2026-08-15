@@ -110,6 +110,19 @@
   across router, pull/mine, and manager tests; `git diff --check` passed.
   Optional pytest-cache writes remain sandbox-blocked under Downloads only.
 
+## 2026-08-15 Task 11 CAM_Codx-first documentation contract (first slice)
+
+- Added documentation-contract tests for README, cheatsheet, program-manager
+  guide, quickstart, and status. Normal-user documentation now starts with
+  `Use CAM_Codx to ...`, names canonical `cam-codx` as the normal skill, and
+  removes legacy specialized-skill invocations from those surfaces.
+- Direct CAM_CAM documentation remains positioned for troubleshooting, runtime
+  development, recovery, regression isolation, or expert use; the contract
+  rejects any claim that `cam chat` is a complete general router.
+- Test-first evidence: the contract initially failed on the old README/four-
+  skill framing. It passes after outcome-first replacement and the legacy-skill
+  inventory scan is empty for the five normal-user documents.
+
 ## 2026-06-21
 
 - Read active `GOAL.md` and implementation plan.

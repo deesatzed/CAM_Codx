@@ -1,9 +1,9 @@
 # Codex Quickstart
 
-> **Current state:** follow the specialized-skill commands in this guide.
-> **Approved target:** setup will install one `cam-codx` skill, and the user
-> will say `Use CAM_Codx to <desired outcome>` for all normal CAM work. The
-> consolidation is approved and planned but not yet implemented.
+Use CAM_Codx to state the outcome you need. The canonical `cam-codx` skill is
+the normal route for CAM work; it selects the correct CAM_CAM capability and
+keeps direct runtime commands for troubleshooting, development, recovery, and
+regression isolation.
 
 ## What You Are Installing
 
@@ -27,12 +27,12 @@ install CAM_CAM
 copy or create claw.db, claw.toml, and .env
 run the CAM_Codx setup wizard
 start Codex in your project
-say: Use cam-codx-setup to verify CAM.
+say: Use CAM_Codx to verify CAM.
 ```
 
 ## What The Skill Adds
 
-The `cam-codx-setup` skill lets Codex verify and use CAM without broad
+The canonical `cam-codx` skill lets Codex verify and use CAM without broad
 filesystem approval. It teaches Codex to:
 
 - find `CAM_Codx` and `CAM_CAM`;
@@ -55,7 +55,7 @@ After setup is verified, Codex can use CAM_Codx/CAM_CAM to:
 For routine software-engineering work, invoke the manager skill explicitly:
 
 ```text
-Use cam-codx-swe to manage this build/update task with CAM recall and evidence gates.
+Use CAM_Codx to manage this build/update task with recall and evidence gates.
 ```
 
 This is not an implicit mining hook. Mining, provider spend, model promotion,
@@ -68,11 +68,11 @@ should shape a new build, or should an existing project continue, be mitigated,
 or be re-developed—use the separate Development Brief skill:
 
 ```text
-Use cam-codx-development-brief to help me start this new project from relevant prior work.
+Use CAM_Codx to help me start this new project from relevant prior work.
 ```
 
 ```text
-Use cam-codx-development-brief to decide whether this in-progress repository should continue, be mitigated, or be re-developed.
+Use CAM_Codx to decide whether this in-progress repository should continue, be mitigated, or be re-developed.
 ```
 
 It labels each recommendation as a direct precedent, transferable analogy, or
@@ -134,10 +134,7 @@ This creates:
 
 ```text
 ~/CAM/scripts/cam-codx
-~/.codex/skills/cam-codx-setup/SKILL.md
-~/.codex/skills/cam-codx-swe/SKILL.md
-~/.codex/skills/cam-codx-development-brief/SKILL.md
-~/.codex/skills/cam-codx-pull-mine-dir/SKILL.md
+~/.codex/skills/cam-codx/SKILL.md
 ```
 
 Test CAM through the wrapper:
@@ -168,7 +165,7 @@ codex
 Inside Codex, say:
 
 ```text
-Use cam-codx-setup to verify CAM.
+Use CAM_Codx to verify CAM.
 ```
 
 After that, ask for a CAM workflow:
@@ -187,7 +184,7 @@ When you are still deciding what to build or whether to rescue a work-in-
 progress repository, start with the Development Brief instead of a build plan:
 
 ```text
-Use cam-codx-development-brief to assess this repository and recommend continue, mitigate, or re-develop.
+Use CAM_Codx to assess this repository and recommend continue, mitigate, or re-develop.
 ```
 
 Codex will use CAM_Codx as the workflow guide and CAM_CAM as the runtime engine,

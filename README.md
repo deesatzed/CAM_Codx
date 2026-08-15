@@ -4,19 +4,21 @@ CAM_Codx is the Codex-native control plane for CAM: it lets a developer manage
 CAM_CAM's repo intelligence, provenance, mining, models, generators, and
 evidence gates from inside the Codex workflow they already use.
 
+Use CAM_Codx to describe the outcome you want: assess a repository, create a
+plan, build or fix a change, verify it, record an outcome, inspect knowledge,
+or prepare a separately approved mining or administration phase.
+
 Start here when you want Codex to consume CAM artifacts, continue from a
 generated `CAM_CODEX_GOAL.md`, or harden a standalone product created by CAM.
 Direct `CAM_CAM` usage is for runtime troubleshooting, development, recovery,
 and regression isolation. CAM_CAM still owns all runtime implementation and
 local databases.
 
-> **Current versus approved target (2026-08-12):** setup currently installs
-> four specialized CAM_Codx skills. The approved next architecture consolidates
-> them into one `cam-codx` skill that manages every CAM_CAM capability. That
-> consolidation is designed and planned but not yet implemented. See the
-> [capability audit](docs/CAM_CAPABILITY_AUDIT_2026-08-12.md),
-> [approved design](docs/plans/2026-08-12-cam-codx-control-plane-design.md),
-> and [implementation plan](docs/plans/2026-08-12-cam-codx-control-plane.md).
+> **Normal workflow:** install the canonical `cam-codx` skill and ask for an
+> outcome. CAM_Codx selects the registry-backed CAM_CAM route, shows its side
+> effects, and prepares bounded approvals when needed. Direct CAM_CAM CLI use
+> remains for runtime troubleshooting, development, recovery, and regression
+> isolation.
 
 The clearest current showpiece is XTtape: a controlled vanilla-vs-CAM planning
 comparison for a live AI news ticker app. It demonstrates that CAM_Codx is most
@@ -90,25 +92,25 @@ After that, start Codex in a target repo and ask for the installed setup or
 routine SWE skill:
 
 ```text
-Use cam-codx-setup to verify CAM.
+Use CAM_Codx to verify the local CAM setup.
 ```
 
 For normal build/update/debug work, use:
 
 ```text
-Use cam-codx-swe to manage this SWE task with CAM recall and evidence gates.
+Use CAM_Codx to manage this SWE task with recall and evidence gates.
 ```
 
 For a focused new-project or continue/rescue decision, use:
 
 ```text
-Use cam-codx-development-brief to start this project from relevant prior work.
+Use CAM_Codx to start this project from relevant prior work.
 ```
 
 For an explicitly authorized bounded directory update and mining cycle, use:
 
 ```text
-Use cam-codx-pull-mine-dir to update and mine this repository directory. Start with --dry-run if I asked for a preview; otherwise use the pinned claw.db, a local hard-cap defaults file, and report the evidence gate and --skip-swap candidate verdict.
+Use CAM_Codx to prepare an explicit update and mining phase for this repository directory. Start with a preview when requested; otherwise require a pinned claw.db, hard cap, receipt, and separate candidate decision.
 ```
 
 Use `--source-root /absolute/path/to/repos` when the default mining directory
@@ -127,9 +129,9 @@ Choose the smallest workflow that fits the need:
 
 | Need | Start with | Default boundary |
 | --- | --- | --- |
-| Shape a new project or decide how to resume an existing one | `cam-codx-development-brief` | Named target plus one explicit primary corpus; no mining, provider calls, edits, or telemetry writes. |
-| Build, update, review, or debug a defined task | `cam-codx-swe` | Read-only CAM recall first; repository-native tests decide whether the change is accepted. |
-| Update and mine one local repository directory | `cam-codx-pull-mine-dir` | Explicit source root (or default), pinned `claw.db`/config, hard cap, receipts, and at most one supervised `--skip-swap` candidate. |
+| Shape a new project or decide how to resume an existing one | `Use CAM_Codx to assess or plan` | Named target plus one explicit primary corpus; no mining, provider calls, edits, or telemetry writes. |
+| Build, update, review, or debug a defined task | `Use CAM_Codx to build, fix, or verify` | Read-only CAM recall first; repository-native tests decide whether the change is accepted. |
+| Update and mine one local repository directory | `Use CAM_Codx to prepare mining` | Explicit source root, pinned `claw.db`/config, hard cap, receipts, and a separate candidate decision. |
 | Compare models or promote/self-enhance CAM | `cam_manager.py` and the program-manager workflow | A separate phase, bounded packet, explicit approval, and evidence receipt. |
 
 For the novice step-by-step flow and use cases, read:
