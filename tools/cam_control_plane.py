@@ -21,6 +21,9 @@ from typing import Any, Callable
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_REGISTRY = ROOT / "agent-packs" / "contract" / "cam_agent_capabilities.json"
+_ADMIN_INTENTS = frozenset(
+    {"knowledge", "models", "self-enhance", "evolution", "doctor", "setup"}
+)
 _ROUTE_FIELDS = {
     "command_path": str,
     "kind": str,
@@ -372,6 +375,49 @@ def plan_request(
             f"approval ({approval}) before any execution packet is prepared."
         ),
     )
+
+
+def prepare_admin_packet(
+    request: ControlPlaneRequest,
+    *,
+    wrapper: Path,
+    state_dir: Path,
+    args: list[str] | None = None,
+    budget_usd: float = 0.0,
+    registry_path: Path = DEFAULT_REGISTRY,
+) -> Path:
+    """Prepare one registry-selected administrative manager packet.
+
+    This is packet construction only: it does not execute CAM. Mining is
+    intentionally excluded because its source, corpus, provider, time, cost,
+    receipt, and delta boundary belongs to ``cam_pull_mine_dir``.
+    """
+    resolved = _resolve_request(request)
+    if resolved.intent not in _ADMIN_INTENTS:
+        raise ControlPlaneError(
+            "Administrative packet preparation requires one of: "
+            + ", ".join(sorted(_ADMIN_INTENTS))
+        )
+    before = _identity_hashes(resolved)
+    route = select_route(
+        _load_registry(registry_path),
+        intent=resolved.intent,
+        request=resolved.request,
+        operation=resolved.operation,
+    )
+    from tools.cam_manager import prepare_packet
+
+    packet_path = prepare_packet(
+        operation=route.command_path,
+        wrapper=wrapper,
+        args=args,
+        workflow_id=resolved.run_id or "cam-codx-admin",
+        budget_usd=budget_usd,
+        state_dir=state_dir,
+    )
+    if _identity_hashes(resolved) != before:
+        raise ControlPlaneError("Administrative packet preparation changed a pinned identity")
+    return packet_path
 
 
 def assessment_start_packet(

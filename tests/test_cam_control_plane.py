@@ -110,6 +110,54 @@ def _database_snapshot(path: Path) -> tuple:
     )
 
 
+@pytest.mark.parametrize(
+    ("intent", "operation"),
+    [
+        ("knowledge", "kb search"),
+        ("models", "models catalog"),
+        ("self-enhance", "self-enhance status"),
+        ("evolution", "evolution status"),
+        ("doctor", "doctor capabilities"),
+        ("setup", "setup"),
+    ],
+)
+def test_prepare_admin_packet_is_registry_bound_and_preserves_pinned_inputs(
+    tmp_path: Path, intent: str, operation: str
+) -> None:
+    from tools.cam_control_plane import prepare_admin_packet
+
+    request = replace(_request(tmp_path, intent=intent), operation=operation)
+    before = {
+        "target": _snapshot(request.target),
+        "database": _database_snapshot(request.runtime.database),
+        "config": _snapshot(request.runtime.config),
+        "profiles": _snapshot(request.runtime.model_profiles),
+    }
+
+    packet_path = prepare_admin_packet(
+        request,
+        wrapper=request.runtime.command,
+        state_dir=tmp_path / "manager-state",
+        registry_path=CONTRACT,
+    )
+    packet = json.loads(packet_path.read_text(encoding="utf-8"))
+
+    assert packet["operation"] == operation
+    assert packet["argv"][: 1 + len(operation.split())] == [
+        str(request.runtime.command),
+        *operation.split(),
+    ]
+    assert packet["workflow_id"] == "swe-run-001"
+    assert packet["scope"]["operation"] == operation
+    assert not request.runtime.command.parent.joinpath("CAM_WAS_INVOKED").exists()
+    assert before == {
+        "target": _snapshot(request.target),
+        "database": _database_snapshot(request.runtime.database),
+        "config": _snapshot(request.runtime.config),
+        "profiles": _snapshot(request.runtime.model_profiles),
+    }
+
+
 @pytest.mark.parametrize("intent", sorted(ALL_INTENTS))
 def test_plan_supports_every_workflow_intent_without_execution(tmp_path: Path, intent: str) -> None:
     from tools.cam_control_plane import plan_request

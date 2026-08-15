@@ -55,6 +55,25 @@
   diff --check` passed. The only warning is the recovery sandbox declining
   optional pytest-cache writes under Downloads.
 
+## 2026-08-15 Task 10 administrative packet routing (first slice)
+
+- Added `prepare_admin_packet` to compose the read-only control-plane route
+  resolver with the existing manager packet constructor for knowledge, models,
+  self-enhancement, evolution, doctor, and setup. It accepts only one of those
+  registry intents, uses the explicit canonical command path, preserves the
+  named run ID as workflow identity, and never invokes CAM.
+- The packet seam deliberately rejects mining. Mining remains bounded by the
+  existing pull/mine coordinator's explicit source, corpus, model, time, cost,
+  receipt, and delta contract until its canonical manager integration is
+  implemented as the next Task 10 slice.
+- Test-first evidence: the new six-family packet test initially failed because
+  the seam did not exist. It now passes with registry-declared `kb search` and
+  `doctor capabilities` routes; the failed shorthand names proved the registry
+  remains the selection authority.
+- Focused verification: `6 passed` for the new packet test; `79 passed` across
+  router and manager tests. Optional pytest-cache writes remain sandbox-blocked
+  under Downloads only.
+
 ## 2026-06-21
 
 - Read active `GOAL.md` and implementation plan.
