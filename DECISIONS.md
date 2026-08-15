@@ -1,5 +1,23 @@
 # Decisions
 
+## 2026-08-15: Bind Pull/Mine Bounds Before Manager Execution
+
+Decision: derive a manager `mine-workspace` packet from the existing pull/mine
+coordinator's validated configuration rather than recreating mining arguments
+in CAM_Codx. The packet must match the resolved CAM command, corpus, config,
+and optional profile identities; carries source, exact model, repository/time/
+cost caps, and the future budget-receipt path; and is prepared but not executed
+by the control plane.
+
+Reason: the coordinator already owns mining-specific safety semantics. Reusing
+its argv builder makes the registry-selected packet approval-bound without
+adding a provider client or a second mining implementation.
+
+Constraint: packet preparation is not mining approval or execution. It does
+not create a budget receipt, change the corpus, select a build, or dispatch a
+candidate. Execution and receipt-to-managed-run linkage require a later bounded
+phase with the corresponding explicit authorization.
+
 ## 2026-08-15: Bind Target-Code Mutation Approval To A Reviewed Managed Plan
 
 Decision: every CAM_Codx manager packet whose registry policy is

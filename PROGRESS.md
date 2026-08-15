@@ -74,6 +74,25 @@
   router and manager tests. Optional pytest-cache writes remain sandbox-blocked
   under Downloads only.
 
+## 2026-08-15 Task 10 mining packet preparation (second slice)
+
+- Added `prepare_mining_packet`, which validates that the pull/mine
+  coordinator configuration matches the pinned control-plane command, corpus,
+  config, and profile identities before it prepares a single manager
+  `mine-workspace` packet. It reuses the coordinator's live argv builder, so
+  source root, exact model, repository cap, time cap, cost cap, and budget
+  receipt path are all approval-bound without duplicating mining logic.
+- This seam is preparation only: it creates no budget receipt, invokes no
+  provider or CAM command, changes no corpus, and does not select or dispatch
+  a build candidate. Execution/receipt linkage remains the next Task 10 batch.
+- Test-first evidence: the mining packet regression initially failed because
+  the seam did not exist. It now passes and proves fixed manager argv, cost and
+  time/repository bounds, future receipt path, no CAM invocation, and unchanged
+  fixture corpus identity.
+- Focused verification: `1 passed` for the new test; `122 passed` across
+  router, pull/mine, and manager tests. Optional pytest-cache writes remain
+  sandbox-blocked under Downloads only.
+
 ## 2026-06-21
 
 - Read active `GOAL.md` and implementation plan.

@@ -158,6 +158,44 @@ def test_prepare_admin_packet_is_registry_bound_and_preserves_pinned_inputs(
     }
 
 
+def test_prepare_mining_packet_binds_coordinator_bounds_without_execution(
+    tmp_path: Path,
+) -> None:
+    from tools.cam_control_plane import prepare_mining_packet
+    from tools.cam_pull_mine_dir import PullMineConfig
+
+    request = _request(tmp_path, intent="mine")
+    config = PullMineConfig(
+        source_root=request.target,
+        cam_command=request.runtime.command,
+        cam_db=request.runtime.database,
+        cam_config=request.runtime.config,
+        profiles=request.runtime.model_profiles,
+        wrapper=request.runtime.command,
+        state_dir=tmp_path / "manager-state",
+        exact_model="fixture/approved-model",
+        max_repos=3,
+        max_minutes=7,
+        max_cost_usd=1.25,
+    )
+    before = _database_snapshot(request.runtime.database)
+
+    mining = prepare_mining_packet(request, config=config, registry_path=CONTRACT)
+    packet = json.loads(mining.packet_path.read_text(encoding="utf-8"))
+
+    assert packet["operation"] == "mine-workspace"
+    assert packet["workflow_id"] == "swe-run-001"
+    assert packet["budget_usd"] == 1.25
+    assert packet["argv"][:3] == [str(request.runtime.command), "mine-workspace", str(request.target)]
+    assert "--max-repos" in packet["argv"] and "3" in packet["argv"]
+    assert "--max-minutes" in packet["argv"] and "7" in packet["argv"]
+    assert "--max-cost-usd" in packet["argv"] and "1.25" in packet["argv"]
+    assert str(mining.budget_receipt_path) in packet["argv"]
+    assert not mining.budget_receipt_path.exists()
+    assert not request.runtime.command.parent.joinpath("CAM_WAS_INVOKED").exists()
+    assert before == _database_snapshot(request.runtime.database)
+
+
 @pytest.mark.parametrize("intent", sorted(ALL_INTENTS))
 def test_plan_supports_every_workflow_intent_without_execution(tmp_path: Path, intent: str) -> None:
     from tools.cam_control_plane import plan_request

@@ -116,6 +116,14 @@ class AssessmentComposition:
     start_packet: ManagedRunStartPacket
 
 
+@dataclass(frozen=True)
+class ManagedMiningPacket:
+    """One approval-bound mining packet and its future CAM budget receipt path."""
+
+    packet_path: Path
+    budget_receipt_path: Path
+
+
 def _load_registry(path: Path) -> dict[str, Any]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
@@ -418,6 +426,60 @@ def prepare_admin_packet(
     if _identity_hashes(resolved) != before:
         raise ControlPlaneError("Administrative packet preparation changed a pinned identity")
     return packet_path
+
+
+def prepare_mining_packet(
+    request: ControlPlaneRequest,
+    *,
+    config: Any,
+    registry_path: Path = DEFAULT_REGISTRY,
+) -> ManagedMiningPacket:
+    """Bind existing pull/mine bounds to one manager packet without execution."""
+    resolved = _resolve_request(request)
+    if resolved.intent != "mine":
+        raise ControlPlaneError("Managed mining packet preparation requires mine intent")
+    if config.wrapper is None:
+        raise ControlPlaneError("Managed mining requires the configured secure wrapper")
+    expected_paths = {
+        "cam_command": resolved.runtime.command,
+        "cam_db": resolved.runtime.database,
+        "cam_config": resolved.runtime.config,
+    }
+    if resolved.runtime.model_profiles is not None:
+        expected_paths["profiles"] = resolved.runtime.model_profiles
+    for field, expected in expected_paths.items():
+        actual = getattr(config, field)
+        if actual is None or Path(actual).expanduser().resolve() != expected:
+            raise ControlPlaneError(f"Mining configuration {field} does not match pinned runtime")
+
+    before = _identity_hashes(resolved)
+    registry = _load_registry(registry_path)
+    route = select_route(
+        registry,
+        intent="mine",
+        request=resolved.request,
+        operation="mine-workspace",
+    )
+    from tools.cam_manager import prepare_packet
+    from tools.cam_pull_mine_dir import _budget_receipt_path, build_live_argv, validate_config
+
+    validate_config(config)
+    budget_receipt_path = _budget_receipt_path(config)
+    live_argv = build_live_argv(config, budget_receipt_path)
+    packet_path = prepare_packet(
+        operation=route.command_path,
+        wrapper=config.wrapper,
+        args=live_argv[2:],
+        workflow_id=resolved.run_id or "cam-codx-mine",
+        budget_usd=config.max_cost_usd,
+        state_dir=config.state_dir,
+    )
+    if _identity_hashes(resolved) != before:
+        raise ControlPlaneError("Mining packet preparation changed a pinned identity")
+    return ManagedMiningPacket(
+        packet_path=packet_path,
+        budget_receipt_path=budget_receipt_path,
+    )
 
 
 def assessment_start_packet(
