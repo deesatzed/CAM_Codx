@@ -482,6 +482,56 @@ def prepare_mining_packet(
     )
 
 
+def mining_receipt_link_packet(
+    request: ControlPlaneRequest,
+    *,
+    receipt_path: Path,
+    source_repositories: list[str],
+    registry_path: Path = DEFAULT_REGISTRY,
+) -> ManagedRunStartPacket:
+    """Build, but do not submit, one receipt-verified managed-run link packet."""
+    resolved = _resolve_request(request)
+    if resolved.intent != "mine":
+        raise ControlPlaneError("Mining receipt linkage requires mine intent")
+    if resolved.run_id is None:
+        raise ControlPlaneError("Mining receipt linkage requires an explicit run_id")
+    receipt = _require_absolute_file(receipt_path, "Mining receipt")
+    sources = [source.strip() for source in source_repositories]
+    if not sources or any(not source for source in sources):
+        raise ControlPlaneError("Mining receipt linkage requires source repository identities")
+    try:
+        receipt_bytes = receipt.read_bytes()
+    except OSError as exc:
+        raise ControlPlaneError(f"Mining receipt could not be read: {receipt}") from exc
+    receipt_sha256 = hashlib.sha256(receipt_bytes).hexdigest()
+    route = select_route(
+        _load_registry(registry_path),
+        intent="record",
+        operation="managed-run",
+    )
+    payload = {
+        "operation": "link-mining-receipt",
+        "run_id": resolved.run_id,
+        "receipt": {
+            "receipt_id": f"mining:{receipt_sha256[:16]}",
+            "receipt_path": str(receipt),
+            "receipt_sha256": receipt_sha256,
+            "source_repositories": sources,
+        },
+    }
+    return ManagedRunStartPacket(
+        argv=(
+            str(resolved.runtime.command),
+            "managed-run",
+            json.dumps(payload, sort_keys=True, separators=(",", ":")),
+            "--config",
+            str(resolved.runtime.config),
+        ),
+        provider_spend=route.provider_spend,
+        mining=False,
+    )
+
+
 def assessment_start_packet(
     request: ControlPlaneRequest, *, registry_path: Path = DEFAULT_REGISTRY
 ) -> ManagedRunStartPacket:

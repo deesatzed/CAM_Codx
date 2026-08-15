@@ -196,6 +196,32 @@ def test_prepare_mining_packet_binds_coordinator_bounds_without_execution(
     assert before == _database_snapshot(request.runtime.database)
 
 
+def test_mining_receipt_link_packet_hashes_one_existing_receipt_for_the_run(
+    tmp_path: Path,
+) -> None:
+    from tools.cam_control_plane import mining_receipt_link_packet
+
+    request = _request(tmp_path, intent="mine")
+    receipt = tmp_path / "mining-result.json"
+    receipt.write_text('{"delta":{"methodologies_added":2}}\n', encoding="utf-8")
+
+    packet = mining_receipt_link_packet(
+        request,
+        receipt_path=receipt,
+        source_repositories=["example/donor@abc123"],
+        registry_path=CONTRACT,
+    )
+    payload = json.loads(packet.argv[2])
+
+    assert packet.argv[:2] == (str(request.runtime.command), "managed-run")
+    assert payload["operation"] == "link-mining-receipt"
+    assert payload["run_id"] == "swe-run-001"
+    assert payload["receipt"]["receipt_path"] == str(receipt)
+    assert payload["receipt"]["receipt_sha256"] == hashlib.sha256(receipt.read_bytes()).hexdigest()
+    assert payload["receipt"]["source_repositories"] == ["example/donor@abc123"]
+    assert packet.argv[-2:] == ("--config", str(request.runtime.config))
+
+
 @pytest.mark.parametrize("intent", sorted(ALL_INTENTS))
 def test_plan_supports_every_workflow_intent_without_execution(tmp_path: Path, intent: str) -> None:
     from tools.cam_control_plane import plan_request

@@ -93,6 +93,23 @@
   router, pull/mine, and manager tests. Optional pytest-cache writes remain
   sandbox-blocked under Downloads only.
 
+## 2026-08-15 Task 10 mining receipt-to-run packet (third slice)
+
+- Added a fixed `managed-run link-mining-receipt` packet builder. It reads one
+  existing receipt buffer, hashes that exact buffer, requires source repository
+  identities and the explicit managed run ID, and targets only the existing
+  CAM_CAM persistence seam with the pinned config.
+- This bridge intentionally does not submit the local-record operation, mine,
+  create a budget receipt, mutate the corpus, or select a build candidate. The
+  receiver validates the same absolute receipt path and SHA-256 before writing
+  its managed-run event.
+- Test-first evidence: the receipt-link regression initially failed because
+  the builder did not exist. It now passes and proves the fixed list-form argv,
+  receipt digest/path, source identity, run identity, and pinned config.
+- Focused verification: `1 passed` for the new link packet test; `123 passed`
+  across router, pull/mine, and manager tests; `git diff --check` passed.
+  Optional pytest-cache writes remain sandbox-blocked under Downloads only.
+
 ## 2026-06-21
 
 - Read active `GOAL.md` and implementation plan.
