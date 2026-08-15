@@ -2776,6 +2776,32 @@
       ]
     },
     {
+      "command_path": "managed-run",
+      "kind": "command",
+      "hidden": true,
+      "command_status": "canonical",
+      "classification": "managed",
+      "cam_codx_route": "record",
+      "risk_class": "local_record_write",
+      "side_effect_class": "local_state_write",
+      "default_mode": "preview",
+      "approval_class": "bounded_phase",
+      "provider_spend": false,
+      "config_change": false,
+      "promotion": false,
+      "artifacts": [
+        "managed_run_report",
+        "outcome_receipt"
+      ],
+      "runtime_source_refs": [
+        "CAM_CAM/src/claw/cli/_monolith.py",
+        "CAM_CAM/src/claw/managed_runs.py"
+      ],
+      "approval_classes": [
+        "bounded_phase"
+      ]
+    },
+    {
       "command_path": "mine",
       "kind": "command",
       "hidden": false,

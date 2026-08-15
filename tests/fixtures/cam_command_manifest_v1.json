@@ -396,6 +396,11 @@
       "path": "learn usage"
     },
     {
+      "hidden": true,
+      "kind": "command",
+      "path": "managed-run"
+    },
+    {
       "hidden": false,
       "kind": "command",
       "path": "mcp"
@@ -699,7 +704,7 @@
   "schema_version": 1,
   "source": {
     "repo": "CAM_CAM",
-    "commit": "5075645dc3a046d1f4500788cbb964c61f19ae40",
-    "manifest_sha256": "657891d41861bbee400c922beecdbfc7d272055b930d91eef8d1d10cfcdb5fb4"
+    "commit": "dc37550ef18fe91a0e8f72acc22b2c278dafc444",
+    "manifest_sha256": "f71dd15854dae850b36002e85a7a2ddca6bd5f59413f385b795352b87c7856c7"
   }
 }

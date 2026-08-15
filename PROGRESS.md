@@ -1,5 +1,25 @@
 # Progress
 
+## 2026-08-15 control-plane crash recovery and Task 8 registry reconciliation
+
+- Recreated the lost temporary worktrees as isolated writable clones under
+  `/Users/o2satz/Downloads/crash814/worktrees`; the SSD checkouts remain
+  untouched.
+- Restored `UPDATED_AUTONOMOUS_GOAL.md` from the persisted session transcript.
+  It is the active continuation contract for Tasks 7-14 and preserves the
+  explicit stop at the Task 14 product-boundary decision.
+- Re-pinned the capability fixture to CAM_CAM commit
+  `dc37550ef18fe91a0e8f72acc22b2c278dafc444`: 140 command paths, 16 hidden
+  paths, and manifest digest
+  `f71dd15854dae850b36002e85a7a2ddca6bd5f59413f385b795352b87c7856c7`.
+- Classified hidden canonical `managed-run` as a CAM_Codx-selectable `record`
+  route with `local_record_write` risk and bounded-phase approval. It is not a
+  competing user-facing alias, provider route, or live CAM mutation.
+- Registry tests passed 25/25; the live validator confirmed both the digest and
+  pinned CAM_CAM revision; generated agent packs are current. The managed
+  sandbox cannot create optional pytest cache files under Downloads, but this
+  did not affect test results.
+
 ## 2026-06-21
 
 - Read active `GOAL.md` and implementation plan.

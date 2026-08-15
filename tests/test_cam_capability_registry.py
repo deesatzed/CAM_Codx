@@ -165,11 +165,22 @@ def test_every_command_route_has_complete_policy_and_runtime_shape() -> None:
         assert isinstance(route["runtime_source_refs"], list) and route["runtime_source_refs"]
         route_paths.append(_route_path(route))
 
-    assert len(route_paths) == 139
+    assert len(route_paths) == 140
     assert len(route_paths) == len(set(route_paths))
     assert Counter(route["classification"] for route in contract["command_routes"])[
         "hidden_compatibility"
     ] == 11
+
+    managed_run = next(
+        route for route in contract["command_routes"] if route["command_path"] == "managed-run"
+    )
+    assert managed_run["kind"] == "command"
+    assert managed_run["hidden"] is True
+    assert managed_run["command_status"] == "canonical"
+    assert managed_run["classification"] == "managed"
+    assert managed_run["cam_codx_route"] == "record"
+    assert managed_run["risk_class"] == "local_record_write"
+    assert managed_run["approval_class"] == "bounded_phase"
 
 
 def test_hidden_aliases_and_hidden_canonical_commands_are_distinct() -> None:
