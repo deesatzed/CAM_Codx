@@ -69,6 +69,36 @@ def test_prepare_packet_freezes_allowlisted_argv_and_secure_state(tmp_path: Path
     assert packet_path.stat().st_mode & 0o777 == 0o600
 
 
+def test_target_mutation_packet_requires_and_binds_reviewed_plan_identity(
+    tmp_path: Path,
+) -> None:
+    wrapper, _output = _fake_wrapper(tmp_path)
+    state = tmp_path / "state"
+
+    with pytest.raises(ManagerError, match="reviewed plan identity"):
+        prepare_packet(
+            operation="create",
+            wrapper=wrapper,
+            target_repo=tmp_path,
+            state_dir=state,
+        )
+
+    packet_path = prepare_packet(
+        operation="create",
+        wrapper=wrapper,
+        target_repo=tmp_path,
+        managed_plan_id="plan-reviewed-1",
+        managed_plan_sha256="a" * 64,
+        state_dir=state,
+    )
+    packet = json.loads(packet_path.read_text(encoding="utf-8"))
+
+    assert packet["managed_plan_id"] == "plan-reviewed-1"
+    assert packet["managed_plan_sha256"] == "a" * 64
+    assert packet["scope"]["managed_plan_id"] == "plan-reviewed-1"
+    assert packet["scope"]["managed_plan_sha256"] == "a" * 64
+
+
 def test_mutating_packet_requires_matching_single_use_approval(tmp_path: Path, monkeypatch) -> None:
     wrapper, output = _fake_wrapper(tmp_path)
     state = tmp_path / "state"
@@ -276,10 +306,20 @@ def test_packets_preserve_each_contract_policy_class(
 ) -> None:
     wrapper, _output = _fake_wrapper(tmp_path)
 
+    mutation_fields = (
+        {
+            "target_repo": tmp_path,
+            "managed_plan_id": "plan-policy-test",
+            "managed_plan_sha256": "b" * 64,
+        }
+        if risk_class == "target_code_mutation"
+        else {}
+    )
     packet_path = prepare_packet(
         operation=operation,
         wrapper=wrapper,
         state_dir=tmp_path / "state",
+        **mutation_fields,
     )
     packet = json.loads(packet_path.read_text(encoding="utf-8"))
 

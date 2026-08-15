@@ -39,6 +39,22 @@
   `test_development_brief.py`; `git diff --check` passed. Optional pytest-cache
   writes remain sandbox-blocked under Downloads only.
 
+## 2026-08-15 Task 9 target-mutation plan authorization
+
+- Manager packets for registry policy `target_code_mutation` now require an
+  existing target repository, reviewed managed-plan ID, and lowercase
+  64-character plan SHA-256. The target and plan identity are inside the
+  content-addressed packet scope, so an issued single-use approval cannot be
+  reused for another plan or target.
+- Test-first evidence: the new packet test initially failed because `create`
+  accepted no plan identity; it passes after the minimal validation and scope
+  binding change. Existing `validate` policy coverage now supplies an explicit
+  target and plan identity.
+- Focused verification: `37 passed` in `tests/test_cam_manager.py`; `88
+  passed` across the manager, control-plane, and Development Brief tests; `git
+  diff --check` passed. The only warning is the recovery sandbox declining
+  optional pytest-cache writes under Downloads.
+
 ## 2026-06-21
 
 - Read active `GOAL.md` and implementation plan.

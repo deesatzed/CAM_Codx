@@ -1,5 +1,21 @@
 # Decisions
 
+## 2026-08-15: Bind Target-Code Mutation Approval To A Reviewed Managed Plan
+
+Decision: every CAM_Codx manager packet whose registry policy is
+`target_code_mutation` must name an existing target directory and carry a
+non-empty reviewed managed-plan ID plus a lowercase 64-character plan SHA-256.
+Both values are included in the packet scope digest that is bound to its
+single-use approval.
+
+Reason: phase approval must authorize one exact planned mutation, not grant a
+portable mutation right across reviewed plans or target repositories.
+
+Constraint: this binds manager authorization only; it does not execute a CAM
+command, alter a target, or turn a plan into verification evidence. A later
+verification receipt remains required before a positive outcome can be
+recorded.
+
 ## 2026-06-21: Keep Hub-And-Spoke Repo Ownership
 
 Decision: keep CAM_Codx, CAM_CAM, generated products, and adapter surfaces as

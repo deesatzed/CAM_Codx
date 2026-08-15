@@ -336,6 +336,8 @@ def prepare_packet(
     args: list[str] | None = None,
     workflow_id: str = "default",
     target_repo: Path | None = None,
+    managed_plan_id: str | None = None,
+    managed_plan_sha256: str | None = None,
     budget_usd: float = 0.0,
     state_dir: Path,
     contract_path: Path = DEFAULT_CONTRACT,
@@ -358,6 +360,21 @@ def prepare_packet(
         target_repo = target_repo.expanduser().resolve()
         if not target_repo.is_dir():
             raise ManagerError(f"Target repository is not a directory: {target_repo}")
+    if policy.risk_class == "target_code_mutation":
+        if target_repo is None:
+            raise ManagerError("Target-code mutation requires a target repository")
+        if not isinstance(managed_plan_id, str) or not managed_plan_id.strip():
+            raise ManagerError("Target-code mutation requires a reviewed plan identity")
+        if not (
+            isinstance(managed_plan_sha256, str)
+            and len(managed_plan_sha256) == 64
+            and all(character in "0123456789abcdef" for character in managed_plan_sha256)
+        ):
+            raise ManagerError(
+                "Target-code mutation requires a 64-character reviewed plan digest"
+            )
+    elif managed_plan_id is not None or managed_plan_sha256 is not None:
+        raise ManagerError("Reviewed plan identity is only valid for target-code mutation")
     extra_args = _normalise_args(args, None)
     argv = [str(wrapper), *policy.argv_prefix, *extra_args]
     phase = policy.phase
@@ -371,6 +388,8 @@ def prepare_packet(
         "wrapper_sha256": wrapper_sha256,
         "argv": argv,
         "target_repo": str(target_repo) if target_repo else None,
+        "managed_plan_id": managed_plan_id,
+        "managed_plan_sha256": managed_plan_sha256,
         "budget_usd": round(float(budget_usd), 12),
         "contract_path": str(resolved_contract),
         "contract_sha256": contract_sha256,
@@ -390,6 +409,8 @@ def prepare_packet(
         "wrapper_sha256": wrapper_sha256,
         "argv": argv,
         "target_repo": str(target_repo) if target_repo else None,
+        "managed_plan_id": managed_plan_id,
+        "managed_plan_sha256": managed_plan_sha256,
         "budget_usd": round(float(budget_usd), 12),
         "contract_path": str(resolved_contract),
         "contract_sha256": contract_sha256,
