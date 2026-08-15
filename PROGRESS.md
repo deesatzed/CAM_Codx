@@ -20,6 +20,25 @@
   sandbox cannot create optional pytest cache files under Downloads, but this
   did not affect test results.
 
+## 2026-08-15 Task 8 assess/plan managed-run composition
+
+- Added a fixed list-form `managed-run start` packet for explicit `assess` or
+  `plan` requests with a named run ID. Packet construction hashes the target
+  identity into the reviewed plan, pins the configured CAM runtime paths, and
+  performs no CAM invocation, mining, provider call, or target/corpus/profile/
+  config mutation.
+- The packet submission boundary accepts only one fixed tuple argv and requires
+  a zero-exit JSON-object receipt; it is dependency-injected for fixture proof
+  and does not add a CAM runtime implementation to CAM_Codx.
+- `compose_assessment` now invokes the existing primary-only Development Brief
+  builder and target inspector before it creates the bounded managed-run start
+  packet. Direct precedent, transferable analogy, and new-hypothesis labels
+  remain owned by the Development Brief output rather than collapsed by the
+  router.
+- Focused verification: `51 passed` across `test_cam_control_plane.py` and
+  `test_development_brief.py`; `git diff --check` passed. Optional pytest-cache
+  writes remain sandbox-blocked under Downloads only.
+
 ## 2026-06-21
 
 - Read active `GOAL.md` and implementation plan.

@@ -16,7 +16,7 @@ import os
 from pathlib import Path
 import sys
 import tomllib
-from typing import Any
+from typing import Any, Callable
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -94,6 +94,23 @@ class ControlPlaneResult:
     operation_executed: bool
     identity_hashes: dict[str, str]
     next_action: str
+
+
+@dataclass(frozen=True)
+class ManagedRunStartPacket:
+    """Fixed persistence-only packet for an assess/plan run start."""
+
+    argv: tuple[str, ...]
+    provider_spend: bool
+    mining: bool
+
+
+@dataclass(frozen=True)
+class AssessmentComposition:
+    """Read-only Development Brief plus its bounded managed-run start packet."""
+
+    brief: Any
+    start_packet: ManagedRunStartPacket
 
 
 def _load_registry(path: Path) -> dict[str, Any]:
@@ -354,6 +371,100 @@ def plan_request(
             f"Review route {route.command_path!r} and issue the required "
             f"approval ({approval}) before any execution packet is prepared."
         ),
+    )
+
+
+def assessment_start_packet(
+    request: ControlPlaneRequest, *, registry_path: Path = DEFAULT_REGISTRY
+) -> ManagedRunStartPacket:
+    """Build, but do not execute, the local managed-run start packet.
+
+    The packet is deliberately separate from read-only route planning: callers
+    must choose when to submit this bounded local-record phase.
+    """
+    resolved = _resolve_request(request)
+    if resolved.intent not in {"assess", "plan"}:
+        raise ControlPlaneError("managed assessment starts require assess or plan intent")
+    if resolved.run_id is None:
+        raise ControlPlaneError("managed assessment start requires an explicit run_id")
+    before = _identity_hashes(resolved)
+    route = select_route(
+        _load_registry(registry_path),
+        intent="record",
+        operation="managed-run",
+    )
+    plan = {
+        "id": f"plan:{resolved.run_id}",
+        "task_text": resolved.request,
+        "workspace_dir": str(resolved.target),
+        "task_archetype": "cam_codx_assessment",
+        "status": "reviewed",
+        "summary": {"evidence_items": 0},
+        "approved_slot_ids": [],
+        "plan_json": {"target_revision": f"sha256:{before['target']}"},
+    }
+    payload = {"operation": "start", "run_id": resolved.run_id, "plan": plan}
+    argv = (
+        str(resolved.runtime.command),
+        "managed-run",
+        json.dumps(payload, sort_keys=True, separators=(",", ":")),
+        "--config",
+        str(resolved.runtime.config),
+    )
+    if _identity_hashes(resolved) != before:
+        raise ControlPlaneError("Managed assessment packet changed a pinned identity")
+    return ManagedRunStartPacket(
+        argv=argv,
+        provider_spend=route.provider_spend,
+        mining=route.cam_codx_route == "mine",
+    )
+
+
+def submit_managed_run_packet(
+    packet: ManagedRunStartPacket,
+    *,
+    runner: Callable[[tuple[str, ...]], tuple[int, str, str]],
+) -> dict[str, Any]:
+    """Submit one fixed persistence packet and require a JSON success receipt."""
+    return_code, stdout, stderr = runner(packet.argv)
+    if return_code != 0:
+        raise ControlPlaneError(
+            "managed-run packet failed: " + (stderr.strip() or stdout.strip() or str(return_code))
+        )
+    try:
+        payload = json.loads(stdout)
+    except json.JSONDecodeError as exc:
+        raise ControlPlaneError("managed-run packet did not return JSON") from exc
+    if not isinstance(payload, dict):
+        raise ControlPlaneError("managed-run packet did not return one JSON object")
+    return payload
+
+
+def compose_assessment(
+    request: ControlPlaneRequest,
+    *,
+    registry_path: Path = DEFAULT_REGISTRY,
+    brief_builder: Callable[..., Any] | None = None,
+) -> AssessmentComposition:
+    """Compose primary-only recall and target inspection before persistence starts."""
+    resolved = _resolve_request(request)
+    if resolved.intent not in {"assess", "plan"}:
+        raise ControlPlaneError("assessment composition requires assess or plan intent")
+    if brief_builder is None:
+        from tools.development_brief import BriefRequest, build_development_brief
+
+        brief_builder = build_development_brief
+    else:
+        from tools.development_brief import BriefRequest
+    brief = brief_builder(
+        request=BriefRequest(mode="new", task_text=resolved.request),
+        cam_command=resolved.runtime.command,
+        cam_database=resolved.runtime.database,
+        target_path=resolved.target,
+    )
+    return AssessmentComposition(
+        brief=brief,
+        start_packet=assessment_start_packet(resolved, registry_path=registry_path),
     )
 
 

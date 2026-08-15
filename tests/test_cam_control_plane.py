@@ -344,6 +344,84 @@ def test_optional_run_and_receipt_are_optional(tmp_path: Path) -> None:
     assert result.mining_receipt is None
 
 
+def test_assessment_start_packet_is_fixed_list_form_and_preserves_read_only_inputs(
+    tmp_path: Path,
+) -> None:
+    from tools.cam_control_plane import assessment_start_packet
+
+    request = _request(tmp_path)
+    before = {
+        "target": _snapshot(request.target),
+        "database": _database_snapshot(request.runtime.database),
+        "config": _snapshot(request.runtime.config),
+        "model_profiles": _snapshot(request.runtime.model_profiles),
+    }
+
+    packet = assessment_start_packet(request, registry_path=CONTRACT)
+
+    after = {
+        "target": _snapshot(request.target),
+        "database": _database_snapshot(request.runtime.database),
+        "config": _snapshot(request.runtime.config),
+        "model_profiles": _snapshot(request.runtime.model_profiles),
+    }
+    assert packet.argv[:2] == (str(request.runtime.command.resolve()), "managed-run")
+    assert packet.argv[-2:] == ("--config", str(request.runtime.config.resolve()))
+    payload = json.loads(packet.argv[2])
+    assert payload["operation"] == "start"
+    assert payload["run_id"] == request.run_id
+    assert payload["plan"]["workspace_dir"] == str(request.target.resolve())
+    assert payload["plan"]["plan_json"]["target_revision"]
+    assert packet.provider_spend is False
+    assert packet.mining is False
+    assert before == after
+
+
+def test_submit_managed_run_packet_uses_only_the_fixed_packet(tmp_path: Path) -> None:
+    from tools.cam_control_plane import assessment_start_packet, submit_managed_run_packet
+
+    packet = assessment_start_packet(_request(tmp_path), registry_path=CONTRACT)
+    calls: list[tuple[str, ...]] = []
+
+    def runner(argv: tuple[str, ...]) -> tuple[int, str, str]:
+        calls.append(argv)
+        return 0, '{"run_id":"swe-run-001","status":"planning"}\n', ""
+
+    result = submit_managed_run_packet(packet, runner=runner)
+
+    assert calls == [packet.argv]
+    assert result == {"run_id": "swe-run-001", "status": "planning"}
+
+
+def test_assess_composes_the_primary_only_brief_before_managed_run_start(
+    tmp_path: Path,
+) -> None:
+    from tools.cam_control_plane import compose_assessment
+
+    request = _request(tmp_path)
+    calls: list[dict[str, object]] = []
+
+    def brief_builder(**kwargs):
+        calls.append(kwargs)
+        return {"labels": ["direct_precedent", "transferable_analogy", "new_hypothesis"]}
+
+    composition = compose_assessment(
+        request,
+        registry_path=CONTRACT,
+        brief_builder=brief_builder,
+    )
+
+    assert composition.brief["labels"] == [
+        "direct_precedent",
+        "transferable_analogy",
+        "new_hypothesis",
+    ]
+    assert calls[0]["cam_command"] == request.runtime.command.resolve()
+    assert calls[0]["cam_database"] == request.runtime.database.resolve()
+    assert calls[0]["target_path"] == request.target.resolve()
+    assert composition.start_packet.argv[1] == "managed-run"
+
+
 def _cli_args(fixture: dict[str, Path]) -> list[str]:
     return [
         sys.executable,
