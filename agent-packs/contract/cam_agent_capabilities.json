@@ -3016,6 +3016,32 @@
       ]
     },
     {
+      "command_path": "models benchmark compare",
+      "kind": "command",
+      "hidden": false,
+      "command_status": "canonical",
+      "classification": "managed",
+      "cam_codx_route": "models",
+      "risk_class": "read_only",
+      "side_effect_class": "none",
+      "default_mode": "read_only",
+      "approval_class": "none",
+      "provider_spend": false,
+      "config_change": false,
+      "promotion": false,
+      "artifacts": [
+        "model_comparison_verdict"
+      ],
+      "runtime_source_refs": [
+        "CAM_CAM/src/claw/cli/models.py",
+        "CAM_CAM/src/claw/models/comparison.py",
+        "CAM_CAM/src/claw/cli/capability_manifest.py"
+      ],
+      "approval_classes": [
+        "none"
+      ]
+    },
+    {
       "command_path": "models benchmark fixtures",
       "kind": "command",
       "hidden": false,

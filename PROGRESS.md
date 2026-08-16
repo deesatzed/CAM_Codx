@@ -702,3 +702,18 @@
   update. Focused setup/skill verification is `27 passed`; the selected Task 6
   compatibility surface is `121 passed`, with wizard help and `git diff
   --check` green. All tests used temporary Codex homes.
+
+## 2026-08-16 Read-only model-comparison packet
+
+- Registered CAM_CAM's new canonical `models benchmark compare` command from
+  runtime commit `5a9b8098b4fbb72532a4c719c85b16254bbb3db7`. The pinned
+  manifest now has `141` paths and digest
+  `daa8e3d6ae946d55f71831468fc204b0d696758e15e515a4fb8b397305f06123`.
+- The `benchmark-compare` manager alias constructs fixed list-form argv for
+  the existing three-stage comparison service. It is `read_only`, has no
+  approval class, and cannot spend, promote, select, or edit configuration.
+- Test-first evidence: the packet test initially failed because the alias was
+  unsupported. After registry, fixture, and generated-pack updates,
+  `75 passed` across manager, registry, and agent-pack tests; the live
+  CAM_CAM manifest and exact pinned revision validated successfully. Optional
+  pytest-cache writes remain sandbox-blocked in the recovery worktree.

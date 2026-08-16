@@ -40,6 +40,7 @@ LEGACY_OPERATION_ALIASES: dict[str, str] = {
     "models-current": "models current",
     "models-catalog": "models catalog",
     "benchmark-plan": "models benchmark plan",
+    "benchmark-compare": "models benchmark compare",
     "benchmark-run": "models benchmark run",
     "benchmark-report": "models benchmark report",
     "benchmark-advance": "models benchmark advance",

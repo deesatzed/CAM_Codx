@@ -167,6 +167,37 @@ def test_read_only_packet_runs_without_approval(tmp_path: Path, monkeypatch) -> 
     ]
 
 
+def test_model_comparison_packet_is_read_only_and_uses_fixed_cli_prefix(
+    tmp_path: Path, monkeypatch
+) -> None:
+    wrapper, output = _fake_wrapper(tmp_path)
+    state = tmp_path / "state"
+    packet_path = prepare_packet(
+        operation="benchmark-compare",
+        wrapper=wrapper,
+        args=[
+            "--baseline-model", "z-ai/glm-5.2",
+            "--candidate-model", "openai/gpt-5.6-luna",
+            "--first-round-report", "first.json",
+            "--heldout-report", "heldout.json",
+            "--repeat-report", "repeat.json",
+        ],
+        state_dir=state,
+    )
+
+    packet = json.loads(packet_path.read_text(encoding="utf-8"))
+    assert packet["operation"] == "models benchmark compare"
+    assert packet["requires_approval"] is False
+    assert packet["operation_policy"]["risk_class"] == "read_only"
+    monkeypatch.setenv("CAM_MANAGER_TEST_OUTPUT", str(output))
+    _receipt, returncode = execute_packet(packet_path, state_dir=state, wrapper=wrapper)
+
+    assert returncode == 0
+    assert json.loads(output.read_text(encoding="utf-8"))[:3] == [
+        "models", "benchmark", "compare"
+    ]
+
+
 def test_changed_packet_scope_cannot_use_old_approval(tmp_path: Path) -> None:
     wrapper, _output = _fake_wrapper(tmp_path)
     state = tmp_path / "state"

@@ -165,7 +165,7 @@ def test_every_command_route_has_complete_policy_and_runtime_shape() -> None:
         assert isinstance(route["runtime_source_refs"], list) and route["runtime_source_refs"]
         route_paths.append(_route_path(route))
 
-    assert len(route_paths) == 140
+    assert len(route_paths) == 141
     assert len(route_paths) == len(set(route_paths))
     assert Counter(route["classification"] for route in contract["command_routes"])[
         "hidden_compatibility"
@@ -283,6 +283,8 @@ def test_known_runtime_boundaries_have_conservative_policy() -> None:
 
     assert routes["dashboard"]["config_change"]
     assert routes["models catalog"]["risk_class"] == "external_network_read"
+    assert routes["models benchmark compare"]["risk_class"] == "read_only"
+    assert routes["models benchmark compare"]["approval_classes"] == ["none"]
     assert routes["premine"]["side_effect_class"] == "external_or_filesystem_write"
     assert routes["validate"]["side_effect_class"] == "validation_command_execution"
     assert routes["evolution champion-db"]["promotion"]

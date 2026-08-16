@@ -448,6 +448,11 @@
     {
       "hidden": false,
       "kind": "command",
+      "path": "models benchmark compare"
+    },
+    {
+      "hidden": false,
+      "kind": "command",
       "path": "models benchmark fixtures"
     },
     {
@@ -704,7 +709,7 @@
   "schema_version": 1,
   "source": {
     "repo": "CAM_CAM",
-    "commit": "dc37550ef18fe91a0e8f72acc22b2c278dafc444",
-    "manifest_sha256": "f71dd15854dae850b36002e85a7a2ddca6bd5f59413f385b795352b87c7856c7"
+    "commit": "5a9b8098b4fbb72532a4c719c85b16254bbb3db7",
+    "manifest_sha256": "daa8e3d6ae946d55f71831468fc204b0d696758e15e515a4fb8b397305f06123"
   }
 }

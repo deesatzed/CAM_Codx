@@ -260,3 +260,19 @@ split-brain risk.
 
 Constraint: earlier paths remain historical evidence. Active docs, setup, and
 preflight must use resolved current paths and fail closed on ambiguity.
+
+## 2026-08-16: Model-comparison verdict is read-only evidence
+
+Decision: register `models benchmark compare` as a managed, read-only CAM_CAM
+route and expose it through the `benchmark-compare` CAM_Codx manager alias.
+It accepts completed first-round, heldout, and repeat reports and emits a
+non-promoting baseline verdict.
+
+Reason: users need a clear answer about whether a candidate helped mining
+before considering any profile change. Reusing the evidence-only CAM_CAM
+comparison service avoids duplicating tournament or selection logic in
+CAM_Codx.
+
+Constraint: a `better` verdict never edits a model profile, selects a live
+model, spends provider funds, or authorizes a benchmark run. Each of those
+actions remains a separate scoped operation and approval.

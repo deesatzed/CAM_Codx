@@ -71,6 +71,22 @@ python tools/cam_manager.py prepare models-current \
   --state-dir ~/CAM/local_state/CAM_Codx/manager
 ```
 
+To assess an already-completed mining-model tournament, ask CAM_Codx to
+compare the candidate with the existing mining baseline. It prepares a
+read-only packet from the three stage reports; the resulting verdict is
+evidence, not a model/profile change:
+
+```bash
+python tools/cam_manager.py prepare benchmark-compare \
+  --wrapper ~/CAM/scripts/cam-codx \
+  --arg=--baseline-model --arg=z-ai/glm-5.2 \
+  --arg=--candidate-model --arg=openai/gpt-5.6-luna \
+  --arg=--first-round-report --arg=/absolute/first-round.json \
+  --arg=--heldout-report --arg=/absolute/heldout.json \
+  --arg=--repeat-report --arg=/absolute/repeat.json \
+  --state-dir ~/CAM/local_state/CAM_Codx/manager
+```
+
 Prepare a bounded self-enhancement attempt only after the user explicitly asks
 CAM to improve itself:
 
