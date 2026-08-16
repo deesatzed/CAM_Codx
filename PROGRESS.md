@@ -150,6 +150,22 @@
   is a dependency/API compatibility baseline outside the control-plane diff;
   it was not repaired or relabeled as a release pass.
 
+## 2026-08-16 Task 12 baseline remediation
+
+- Corrected the stale evolution allowlist from retired
+  `moonshotai/kimi-k2.7-code` to the intentionally configured
+  `moonshotai/kimi-k3`; the active `claw.toml` profile already uses K3 for the
+  `codex` agent and fallback chain.
+- Updated LanceDB import to enumerate tables with `list_tables().tables` and
+  convert via `table.to_arrow().to_pandas()`, avoiding the installed LanceDB
+  0.33 `to_pandas()` path that delegates to a removed `LanceDataset` method.
+- Red evidence was the two exact Task 12 failures. Green verification:
+  `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python -m pytest -q
+  tests/test_serial_evolution.py tests/test_cag_convert.py` returned
+  `103 passed`. The only remaining warning was sandbox-blocked optional pytest
+  cache creation; no runtime database, live profile, provider, or target was
+  changed.
+
 ## 2026-06-21
 
 - Read active `GOAL.md` and implementation plan.
