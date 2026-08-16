@@ -142,6 +142,13 @@
   but `TestApprovedModelConfig` excludes that ID from `APPROVED_MODEL_IDS`.
   This is an unrelated baseline policy conflict, not a passed release gate and
   not changed here; no model/config file was modified.
+- CAM_CAM full suite was additionally isolated with `pytest -x`: `469 passed,
+  6 skipped, 1 failed` before stopping in
+  `tests/test_cag_convert.py::TestReadLanceDB::test_read_lancedb_table`.
+  `claw.memory.rag_adapter.read_lancedb` calls the installed LanceDB table
+  `to_pandas()` path, whose underlying `LanceDataset` lacks that method. This
+  is a dependency/API compatibility baseline outside the control-plane diff;
+  it was not repaired or relabeled as a release pass.
 
 ## 2026-06-21
 
