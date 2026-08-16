@@ -162,9 +162,17 @@
 - Red evidence was the two exact Task 12 failures. Green verification:
   `PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=src python -m pytest -q
   tests/test_serial_evolution.py tests/test_cag_convert.py` returned
-  `103 passed`. The only remaining warning was sandbox-blocked optional pytest
+  `103 passed`; the original CAM_CAM focused release gate then returned
+  `239 passed`. The only remaining warning was sandbox-blocked optional pytest
   cache creation; no runtime database, live profile, provider, or target was
   changed.
+- A fresh CAM_CAM full-suite probe reached `876 passed, 11 skipped` before the
+  next failure: `tests/test_create_benchmark_spec.py` expects monkeypatching
+  `claw.cli.ROOT_DIR` to redirect `_write_create_spec`, but the implementation
+  retains its root path from the monolith module and attempts to create
+  `CAM_CAM/data/create_specs`. The recovery sandbox correctly denies that
+  write. This is a distinct test-isolation/environment issue, not a regression
+  from the Kimi or LanceDB repairs; it remains the Task 12 full-suite blocker.
 
 ## 2026-06-21
 
