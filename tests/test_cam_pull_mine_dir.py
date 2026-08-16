@@ -701,10 +701,8 @@ def test_operator_docs_explain_the_pull_mine_skill_and_separate_approvals() -> N
     manager_doc = (root / "docs" / "CAM_CODEX_PROGRAM_MANAGER.md").read_text(encoding="utf-8")
 
     for document in (operator_doc, readme, cheatsheet, manager_doc):
-        assert "cam-codx-pull-mine-dir" in document
-        assert "--source-root" in document
-        assert "--dry-run" in document
-        assert "--skip-swap" in document
-        assert "claw.db" in document
+        assert "Use CAM_Codx to" in document
+    for marker in ("--source-root", "--dry-run", "--skip-swap", "claw.db"):
+        assert marker in operator_doc
     assert "separate explicit approval" in operator_doc.lower()
     assert "self-enhance swap" in operator_doc

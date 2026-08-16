@@ -1,9 +1,9 @@
 # CAM Pull Mine Directory
 
-`cam-codx-pull-mine-dir` is the explicit CAM_Codx workflow for updating an
-approved directory of local repositories, mining one pinned CAM corpus, and
-deciding whether the results warrant a single supervised no-swap candidate.
-It is not part of routine SWE work or the read-only Development Brief.
+Use CAM_Codx to prepare an explicit pull/mine phase for an approved directory
+of local repositories, one pinned CAM corpus, and a separately reviewed
+no-swap candidate decision. It is not part of routine SWE work or read-only
+assessment.
 
 ## What an invocation authorizes
 

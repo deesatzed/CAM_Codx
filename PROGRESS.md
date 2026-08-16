@@ -123,6 +123,26 @@
   skill framing. It passes after outcome-first replacement and the legacy-skill
   inventory scan is empty for the five normal-user documents.
 
+## 2026-08-16 Task 12 focused release gates (in progress)
+
+- CAM_Codx focused gate passed: `190 passed` across capability registry,
+  control-plane, manager, canonical skill, setup wizard, Development Brief,
+  and pull/mine tests. Generated packs are current, skill frontmatter is valid,
+  and `git diff --check` passed. The recovery sandbox only blocked optional
+  pytest-cache writes.
+- The pull/mine documentation regression was repaired: its test now requires
+  canonical `Use CAM_Codx to ...` language on overview surfaces and reserves
+  detailed `--source-root`, `--dry-run`, `--skip-swap`, and `claw.db` assertions
+  for the dedicated operator guide.
+- CAM_CAM focused gate used the actual `tests/test_application_packet.py` path.
+  The planned `tests/test_self_enhance.py` does not exist; available
+  self-enhancement reconstruction coverage is `tests/test_reconstruct.py`.
+  The equivalent available gate produced `238 passed, 1 failed`: clean CAM_CAM
+  commit `dc37550` has intentional `moonshotai/kimi-k3` entries in `claw.toml`,
+  but `TestApprovedModelConfig` excludes that ID from `APPROVED_MODEL_IDS`.
+  This is an unrelated baseline policy conflict, not a passed release gate and
+  not changed here; no model/config file was modified.
+
 ## 2026-06-21
 
 - Read active `GOAL.md` and implementation plan.
