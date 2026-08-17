@@ -6,7 +6,7 @@
   capability registry as a managed `knowledge` route with read-only/no-
   approval policy and graph-query report artifact.
 - Re-pinned the generated CAM_CAM manifest fixture to feature commit
-  `3503ed3fba491b0bec1ef8b1f1c0d21fe4546cc7` (`142` paths; digest
+  `6801ab008b6b239588adacbeb4eb77c988183533` (`142` paths; digest
   `8bb56420ae57d29074ec83431f4fdf2f13f644fcaecce52e9767c99431e999fb0`).
 - Added a fixed-packet test proving list-form argv and no approval, plus
   outcome-facing route documentation. The live validator reports `142` paths
