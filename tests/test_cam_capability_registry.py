@@ -165,7 +165,7 @@ def test_every_command_route_has_complete_policy_and_runtime_shape() -> None:
         assert isinstance(route["runtime_source_refs"], list) and route["runtime_source_refs"]
         route_paths.append(_route_path(route))
 
-    assert len(route_paths) == 141
+    assert len(route_paths) == 142
     assert len(route_paths) == len(set(route_paths))
     assert Counter(route["classification"] for route in contract["command_routes"])[
         "hidden_compatibility"

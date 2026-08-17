@@ -1,5 +1,22 @@
 # Decisions
 
+## 2026-08-17: Route sparse graph context through one CAM_Codx packet
+
+Decision: register CAM_CAM's hidden `knowledge-graph-query` as one canonical,
+managed, read-only CAM_Codx operation under the knowledge route. The packet
+uses fixed list-form argv and carries an existing database, immutable snapshot,
+and canonical seed as caller-supplied bounded inputs. It requires no approval.
+
+Reason: CAM_Codx should present graph context as an outcome—`Use CAM_Codx to
+assess the impact of ...`—while direct CAM_CAM remains a troubleshooting
+surface. A separate provider, graph database, or duplicated traversal in
+CAM_Codx would split runtime truth.
+
+Safety: the route cannot create snapshots, scan sources, call providers, load
+models, mutate targets, or change configuration. The CAM_CAM query enforces
+two-hop/size limits, receipt provenance, association exclusion, and stale
+revision rejection.
+
 ## 2026-08-15: Bind Pull/Mine Bounds Before Manager Execution
 
 Decision: derive a manager `mine-workspace` packet from the existing pull/mine

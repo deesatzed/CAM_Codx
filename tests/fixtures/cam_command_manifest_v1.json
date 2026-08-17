@@ -346,6 +346,11 @@
       "path": "keycheck"
     },
     {
+      "hidden": true,
+      "kind": "command",
+      "path": "knowledge-graph-query"
+    },
+    {
       "hidden": false,
       "kind": "group",
       "path": "learn"
@@ -709,7 +714,7 @@
   "schema_version": 1,
   "source": {
     "repo": "CAM_CAM",
-    "commit": "5a9b8098b4fbb72532a4c719c85b16254bbb3db7",
-    "manifest_sha256": "daa8e3d6ae946d55f71831468fc204b0d696758e15e515a4fb8b397305f06123"
+    "commit": "21d624864eef051261fd7f97a84fc9de061b9e77",
+    "manifest_sha256": "8bb56420ae57d29074ec8341f4fdf2f13f644fcaecce52e9767c99431e999fb0"
   }
 }

@@ -1,5 +1,20 @@
 # Progress
 
+## 2026-08-17 Sparse evidence graph: CAM_Codx route
+
+- Added the hidden canonical `knowledge-graph-query` CAM_CAM path to the
+  capability registry as a managed `knowledge` route with read-only/no-
+  approval policy and graph-query report artifact.
+- Re-pinned the generated CAM_CAM manifest fixture to feature commit
+  `21d624864eef051261fd7f97a84fc9de061b9e77` (`142` paths; digest
+  `8bb56420ae57d29074ec83431f4fdf2f13f644fcaecce52e9767c99431e999fb0`).
+- Added a fixed-packet test proving list-form argv and no approval, plus
+  outcome-facing route documentation. The live validator reports `142` paths
+  with the registry and feature checkout aligned.
+- Generated host packs are current. One documentation-contract test remains
+  environment-blocked because this clone has no sibling `/private/tmp/CAM_CAM`
+  checkout; this is a missing test fixture path, not a route failure.
+
 ## 2026-08-15 control-plane crash recovery and Task 8 registry reconciliation
 
 - Recreated the lost temporary worktrees as isolated writable clones under
