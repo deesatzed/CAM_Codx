@@ -6,14 +6,26 @@
   capability registry as a managed `knowledge` route with read-only/no-
   approval policy and graph-query report artifact.
 - Re-pinned the generated CAM_CAM manifest fixture to feature commit
-  `21d624864eef051261fd7f97a84fc9de061b9e77` (`142` paths; digest
+  `923ea57570b45a5f8d605dddf23f10455eca3cde` (`142` paths; digest
   `8bb56420ae57d29074ec83431f4fdf2f13f644fcaecce52e9767c99431e999fb0`).
 - Added a fixed-packet test proving list-form argv and no approval, plus
   outcome-facing route documentation. The live validator reports `142` paths
   with the registry and feature checkout aligned.
-- Generated host packs are current. One documentation-contract test remains
-  environment-blocked because this clone has no sibling `/private/tmp/CAM_CAM`
-  checkout; this is a missing test fixture path, not a route failure.
+- Generated host packs are current. The initial clone-only run exposed missing
+  sibling-checkout paths; the release gate was rerun with a bounded temporary
+  sibling link to the verified CAM_CAM checkout.
+
+## 2026-08-17 CAM_Codx full-suite release gate
+
+- After the CAM_CAM fixture-collection repair, the pinned manifest source was
+  advanced to `923ea57570b45a5f8d605dddf23f10455eca3cde`; manifest content and
+  digest remain `142` paths / `8bb56420ae57d29074ec8341f4fdf2f13f644fcaecce52e9767c99431e999fb0`.
+- Exact validator: `Capability registry valid: 142 paths; hidden_compatibility=11,
+  managed=129, troubleshooting_only=2`.
+- Full CAM_Codx suite with the bounded sibling checkout passed `208 passed`.
+  The earlier `203 passed, 3 skipped, 2 failed` clone-only result was caused
+  solely by missing sibling CAM_CAM fixture paths and is superseded by this
+  complete gate.
 
 ## 2026-08-15 control-plane crash recovery and Task 8 registry reconciliation
 
