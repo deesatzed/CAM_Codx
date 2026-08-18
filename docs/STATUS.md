@@ -1,6 +1,6 @@
 # Status
 
-Current feature checkpoint: 2026-08-12. Historical XTtape publication details
+Current feature checkpoint: 2026-08-18. Historical XTtape publication details
 remain below as provenance, not as the current feature inventory.
 
 ## Control-Plane Status
@@ -16,9 +16,14 @@ plane for every managed CAM_CAM capability.
   `verify`, and `record`.
 - One source-to-outcome SWE Run will use existing CAM-SEQ storage rather than a
   second reuse database.
-- The design and TDD implementation plan exist, but the canonical skill,
-  registry expansion, router, migration, and real MatrAIx/SESA proof are not
-  implemented yet.
+- Tasks 1-13 are implemented and release-audited in the recovered CAM_Codx and
+  CAM_CAM worktrees. The canonical skill, 142-path registry, outcome router,
+  managed-run seam, setup migration, graph route, release gates, and Task 13
+  fixture chain are current; see
+  `reports/2026-08-18-task-10-13-release-audit.md`.
+- A real MatrAIx/SESA slice is not claimed. Its target, source revisions,
+  licensing, privacy boundary, provider policy, and landing scope are the
+  separate discovery/approval work in `../GOAL_TASK_14_MATRAIX_SESA.md`.
 
 See `CAM_CAPABILITY_AUDIT_2026-08-12.md` and the 2026-08-12 control-plane
 design and implementation plan under `docs/plans/`.
@@ -68,15 +73,20 @@ design and implementation plan under `docs/plans/`.
 - The XTtape comparison published a final merged build brain and app
   implementation plan, but no XTtape runtime app code.
 
-## Pushed To GitHub
+## Publication Status
 
-Verified at `origin/main` on 2026-06-26 after the XTtape showpiece commit.
+The control-plane feature and `main` refs were published from the recovered
+worktrees on 2026-08-18. The exact execution heads and test receipts are
+recorded in `reports/2026-08-18-task-10-13-release-audit.md`; verify the live
+remote refs with:
 
-- CAM_Codx includes the XTtape showpiece results and public documentation
-  framing. Verify the exact pushed head with `git rev-parse HEAD` and
-  `git ls-remote origin refs/heads/main`.
-- CAM_CAM through `9a9d71a chore: remove stale public cleanup artifacts`.
-- MoriahCareFrame had no changes to push and remains at `a82e42c`.
+```bash
+git rev-parse HEAD
+git ls-remote origin refs/heads/main refs/heads/feat/cam-codx-control-plane
+```
+
+The older XTtape publication details that follow are historical and are not a
+claim about the current control-plane head.
 
 ## Verification Status
 

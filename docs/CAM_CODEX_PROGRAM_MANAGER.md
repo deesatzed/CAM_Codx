@@ -22,11 +22,16 @@ python tools/cam_setup_wizard.py \
   --non-interactive
 ```
 
-This installs all four Codex skills:
+This installs the canonical `cam-codx` skill only:
 
 ```text
 ~/.codex/skills/cam-codx/SKILL.md
 ```
+
+Older specialized skill directories may remain on a machine from an earlier
+installation; they are compatibility history, not competing normal UX. The
+current Tasks 1-13 release audit and the separate Task 14 contract are linked
+from `GOAL.md`.
 
 Ask Codex: `Use CAM_Codx to build, update, review, or debug this task.` It
 starts with repository truth and CAM read-only recall; it does not mine, spend,

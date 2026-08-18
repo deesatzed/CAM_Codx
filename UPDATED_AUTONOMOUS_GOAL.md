@@ -1,5 +1,10 @@
 # Updated Autonomous Goal: Finish The CAM_Codx Control Plane
 
+> Status: SUPERSEDED on 2026-08-18. Tasks 7-13 are complete and published;
+> this file remains historical recovery provenance. Task 14 is now governed by
+> `GOAL_TASK_14_MATRAIX_SESA.md`. Do not use the old `/private/tmp` paths below
+> as active checkout instructions.
+
 This is the continuation contract for the unfinished work in
 `docs/plans/2026-08-12-cam-codx-control-plane.md`. It does not erase the
 approved design or completed Tasks 1-6. It changes the execution policy so

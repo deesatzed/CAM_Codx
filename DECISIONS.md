@@ -1,5 +1,23 @@
 # Decisions
 
+## 2026-08-18: Keep MatrAIx/SESA as a separate product-boundary goal
+
+Decision: complete the CAM_Codx/CAM_CAM documentation synchronization, then
+govern the MatrAIx/SESA vertical slice with a discovery-first
+`GOAL_TASK_14_MATRAIX_SESA.md`. Do not infer its target checkout, source
+revisions, license rights, privacy rules, provider policy, or writable paths
+from the component names or historical documents.
+
+Reason: Tasks 1-13 prove the control plane and fixture source-to-outcome chain,
+but they do not prove a real product slice. Mixing an unresolved target into
+the completed control-plane goal would turn a missing product decision into an
+implementation assumption.
+
+Safety: read-only local discovery and contract editing may continue without
+product approval. Provider calls, paid mining, live import, target mutation,
+model/profile changes, deployment, and destructive actions remain separate
+explicit approvals. Fixture evidence must remain labeled as fixture proof.
+
 ## 2026-08-17: Route sparse graph context through one CAM_Codx packet
 
 Decision: register CAM_CAM's hidden `knowledge-graph-query` as one canonical,

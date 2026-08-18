@@ -5,6 +5,12 @@
 **CAM_Codx head:** `cf035c8` at audit start  
 **Status:** Current-state audit plus approved target classification
 
+> Historical snapshot dated 2026-08-12. Tasks 1-13 subsequently implemented
+> and release-audited the approved control plane; the old approved-target gap
+> statements below are retained as audit provenance. See
+> `docs/reports/2026-08-18-task-10-13-release-audit.md` and
+> `GOAL_TASK_14_MATRAIX_SESA.md` for current status and successor scope.
+
 ## Conclusion
 
 CAM does not need another collection of commands. It needs CAM_Codx to manage

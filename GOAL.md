@@ -52,8 +52,10 @@ ambiguous runtime or database identity.
    documented for troubleshooting and runtime development.
 9. Active README, quickstart, cheatsheet, manager guide, setup report, and
    troubleshooting docs agree with the implemented state.
-10. A real MatrAIx-Persona-8B plus SESA vertical slice proves the mine-to-build
-    chain after the control-plane implementation passes its own gates.
+10. A separately governed Task 14 contract defines, and only after its product
+    boundary is accepted executes, a bounded MatrAIx/SESA vertical slice that
+    proves the mine-to-build chain. The slice is not part of the completed
+    Tasks 1-13 control-plane proof; see `GOAL_TASK_14_MATRAIX_SESA.md`.
 
 ## Proof Gates
 
@@ -102,5 +104,10 @@ runtime.
 
 ## Completion State
 
-This goal is active. The design is approved; the implementation plan and code
-changes remain to be completed and verified.
+Tasks 1-13 are implemented, release-audited, committed, and published on the
+recovered feature/main refs. Their current evidence is
+`docs/reports/2026-08-18-task-10-13-release-audit.md`. Task 14 is a separate
+successor boundary: its target checkout, source revisions, licensing, privacy
+rules, provider policy, and product scope must be fixed in
+`GOAL_TASK_14_MATRAIX_SESA.md` before any target-repository work or paid/live
+operation begins.

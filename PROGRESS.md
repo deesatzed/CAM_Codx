@@ -767,3 +767,22 @@
   feature branches and both `main` refs are pushed and clean. Next action is
   the required requirement-by-requirement completion audit; Task 14 remains
   outside this goal.
+
+## 2026-08-18 Documentation synchronization and Task 14 contract
+
+- Synchronized active CAM_Codx status, goal, implementation, manager, audit,
+  publication, and continuation surfaces with the Tasks 1-13 release audit.
+  Historical 2026-08-12 capability statements and crash-recovery paths now
+  carry explicit historical/superseded notices instead of being rewritten.
+- Added `GOAL_TASK_14_MATRAIX_SESA.md` as a discovery-first successor contract.
+  It does not invent a MatrAIx/SESA target path or authorize live import,
+  provider spend, target mutation, model promotion, or deployment. One
+  meaningful product-boundary checkpoint is required before those phases.
+- Documentation gate: CAM_Codx documentation/skill/pack tests `22 passed`,
+  generated packs `--check` passed, CAM_CAM graph/import gate `22 passed`,
+  Task 14 required-section/whitespace validation passed, and both
+  `git diff --check` checks passed.
+- Assumption: the exact MatrAIx/SESA checkout, immutable revisions, ownership,
+  license, privacy boundary, provider policy, and landing scope are not
+  present in the recovered worktrees; Task 14 remains at discovery until those
+  fields are resolved.

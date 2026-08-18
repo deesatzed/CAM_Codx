@@ -6,15 +6,18 @@ This report is the current evidence audit for
 `GOAL_TASK_10_11_12_13.md`. It covers the recovered isolated worktrees, not
 the historical `/Volumes/WS4TB/...` checkouts named by older documents.
 
-## Repository and ref identity
+## Repository and ref identity at audit execution
 
 | Repository | Checkout | Feature and `main` head |
 |---|---|---|
 | CAM_Codx | `/Users/o2satz/Downloads/crash814/worktrees/CAM_Codx` | `2eabca81108623da34ce484af4d12967486b9ac9` |
 | CAM_CAM | `/Users/o2satz/Downloads/crash814/worktrees/CAM_CAM` | `e5693a30ef5b535309b71bd6cc7214cb2a578e8f` |
 
-Both feature branches and both `main` branches point at the listed heads. Both
-worktrees are clean and `git diff --check` passes.
+The table records the exact execution refs used for the audit. The CAM_Codx
+report was published in the subsequent `5a82122` documentation commit; later
+documentation synchronization may advance the refs without changing the
+test receipts below. Both worktrees were clean and `git diff --check` passed at
+audit time.
 
 ## Requirement evidence
 

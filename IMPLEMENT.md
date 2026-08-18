@@ -8,6 +8,10 @@ The approved design is:
 
 `docs/plans/2026-08-12-cam-codx-control-plane-design.md`
 
+Current state: Tasks 1-13 are implemented and release-audited. The control-
+plane plan below is retained as execution history; the next active
+implementation contract is `GOAL_TASK_14_MATRAIX_SESA.md`.
+
 The earlier pull/mine methodology record below remains historical evidence for
 the already implemented coordinator; it is not the active whole-project plan.
 
