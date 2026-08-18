@@ -22,10 +22,11 @@ Current verified starting point:
 - The Task 13 result is fixture proof, not live-product accuracy or acceptance.
 - The CAM_CAM live-import adapter is implemented and fixture-gated, but no live
   import has been run against the canonical corpus or a product database.
-- The exact MatrAIx/SESA repository checkout, source revision(s), target
-  mutation path, license rights, privacy boundary, and provider policy are not
-  resolved in the current worktrees. Do not infer them from a repository name,
-  an old prompt, or a retrieval hit.
+- The exact source checkouts and revisions are now resolved in the pinned
+  source-pool preflight, but the target mutation path, SESA root license/right
+  to adapt, privacy boundary, and provider policy still require explicit
+  resolution. See `docs/reports/2026-08-18-task14-source-preflight.md`. Do not
+  infer rights from a repository name, an old prompt, or a retrieval hit.
 
 /goal
 

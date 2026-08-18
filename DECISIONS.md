@@ -18,6 +18,21 @@ product approval. Provider calls, paid mining, live import, target mutation,
 model/profile changes, deployment, and destructive actions remain separate
 explicit approvals. Fixture evidence must remain labeled as fixture proof.
 
+## 2026-08-18: Consolidate CAM roots without swapping runtime state
+
+Decision: use `/Volumes/WS4TB/waswiki/CAM_Codx` and
+`/Volumes/WS4TB/waswiki/CAM_CAM` as the single canonical code checkouts, and
+keep the existing CAM_CAM `claw.db`, `claw.toml`, and mode-0600 `.env` as the
+single runtime state set. Fast-forward code from the pushed recovery heads;
+do not copy or replace state files.
+
+Reason: the recovery worktrees contain the verified code but no second
+database/secrets set. Fast-forwarding clean canonical checkouts preserves the
+existing corpus and configuration while eliminating runtime ambiguity.
+
+Constraint: the Downloads worktrees remain recoverable references. Any future
+state migration requires a separate explicit plan and backup/rollback proof.
+
 ## 2026-08-17: Route sparse graph context through one CAM_Codx packet
 
 Decision: register CAM_CAM's hidden `knowledge-graph-query` as one canonical,

@@ -786,3 +786,22 @@
   license, privacy boundary, provider policy, and landing scope are not
   present in the recovered worktrees; Task 14 remains at discovery until those
   fields are resolved.
+
+## 2026-08-18 Task 14 source preflight and canonical-root consolidation
+
+- Fast-forwarded the original `/Volumes/WS4TB/waswiki/CAM_Codx` and
+  `/Volumes/WS4TB/waswiki/CAM_CAM` `main` checkouts to the published recovery
+  heads, then pushed both `main` and feature refs. The Downloads worktrees are
+  now recovery references only.
+- Preserved the one existing CAM state set at
+  `/Volumes/WS4TB/waswiki/CAM_CAM/{claw.db,claw.toml,.env}`. The database,
+  config, and secrets file were not copied, swapped, or modified.
+- Resolved source identities: MatrAIx-Persona-8B at
+  `3202a0bf6134776735c4ab4d50de79be8c6a5e8b` with an MIT root license; SESA at
+  `74de5d77a19774cfba53d6950d47633a2d632430` with no root license and mixed
+  nested third-party notices. The evidence is in
+  `docs/reports/2026-08-18-task14-source-preflight.md`.
+- No project code, provider, model, dataset, CAM database, `.env`, or live
+  configuration was executed or changed. SESA adaptation/redistribution
+  remains blocked until its rights boundary is established; read-only
+  assessment remains allowed.
