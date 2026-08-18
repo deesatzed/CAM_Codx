@@ -134,9 +134,10 @@ SCOPE:
 - The exact MatrAIx/SESA target repository is read-only discovery scope until
   the product-boundary checkpoint is accepted; after acceptance, only the
   named target paths and smallest useful slice are writable.
-- The recovered worktrees are the default implementation roots:
-  `/Users/o2satz/Downloads/crash814/worktrees/CAM_Codx` and
-  `/Users/o2satz/Downloads/crash814/worktrees/CAM_CAM`.
+- The canonical implementation roots after consolidation are:
+  `/Volumes/WS4TB/waswiki/CAM_Codx` and `/Volumes/WS4TB/waswiki/CAM_CAM`.
+  The Downloads worktrees remain recovery references and must not be treated
+  as a second runtime or state location.
 - Read and reference `GOAL.md`, `IMPLEMENT.md`, `DECISIONS.md`, `PROGRESS.md`,
   `GOAL_KG.md`, `GOAL_LIVE_IMPORT.md`, the Tasks 10-13 release audit, and the
   target's own truth files once its exact checkout is authorized.
