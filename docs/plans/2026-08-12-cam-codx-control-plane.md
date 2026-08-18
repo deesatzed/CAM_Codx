@@ -303,7 +303,7 @@ git diff --check
 
 ```bash
 cd /Volumes/WS4TB/waswiki/CAM_CAM
-PYTHONPATH=src python -m pytest -q tests/test_cli_capability_manifest.py tests/test_cli_ux.py tests/test_managed_runs.py tests/test_camseq_foundation.py tests/planning/test_application_packet.py tests/test_read_only_brief_query.py tests/test_models_cli.py tests/test_self_enhance.py tests/test_serial_evolution.py
+PYTHONPATH=src python -m pytest -q tests/test_cli_capability_manifest.py tests/test_cli_ux.py tests/test_managed_runs.py tests/test_camseq_foundation.py tests/test_application_packet.py tests/test_read_only_brief_query.py tests/test_models_cli.py tests/test_self_enhance.py tests/test_serial_evolution.py
 git diff --check
 ```
 

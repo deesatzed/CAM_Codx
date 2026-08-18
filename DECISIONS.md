@@ -17,6 +17,20 @@ models, mutate targets, or change configuration. The CAM_CAM query enforces
 two-hop/size limits, receipt provenance, association exclusion, and stale
 revision rejection.
 
+## 2026-08-18: Keep the Task 12 stale-path correction in the active plan
+
+Decision: update the active control-plane implementation plan to reference
+`tests/test_application_packet.py`, the actual CAM_CAM checkout path. Retain
+the old `tests/planning/...` spelling only in the continuation contract's
+description of what was corrected.
+
+Reason: a release gate is not durable if its source-of-truth plan still points
+at a nonexistent test. The current full-suite receipt and focused commands now
+agree with the checked-out repository.
+
+Safety: this is a documentation-only correction. No runtime, database,
+configuration, provider, model profile, or target repository was changed.
+
 ## 2026-08-15: Bind Pull/Mine Bounds Before Manager Execution
 
 Decision: derive a manager `mine-workspace` packet from the existing pull/mine

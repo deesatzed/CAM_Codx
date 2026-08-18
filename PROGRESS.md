@@ -744,3 +744,26 @@
   `75 passed` across manager, registry, and agent-pack tests; the live
   CAM_CAM manifest and exact pinned revision validated successfully. Optional
   pytest-cache writes remain sandbox-blocked in the recovery worktree.
+
+## 2026-08-18 Tasks 10-13 release audit
+
+- Corrected the active control-plane plan to invoke the real CAM_CAM test path
+  `tests/test_application_packet.py`; the stale `tests/planning/...` path now
+  appears only in the historical continuation contract's explanation.
+- Current CAM_Codx focused Task 10-13 gate passed `179` tests. Generated packs,
+  skill frontmatter, the official skill validator, and `git diff --check`
+  passed. CAM_Codx's current full suite passed `208` tests.
+- Ran a temporary Codex-home proof against the current templates: the only
+  newly installed skill was `cam-codx`. A fixture `assess` plan returned
+  `operation_executed=false`, and target/database/config/model-profile identity
+  hashes were unchanged (`identity_unchanged=true`). No CAM command, provider,
+  corpus write, target mutation, or profile/config change occurred.
+- CAM_CAM's current full suite completed with `4457 passed, 22 skipped,
+  9 failed`. The nine failures remain the documented recovery-checkout
+  artifact-write permission failures (seven) and inaccessible real-ganglia
+  databases (two); the CAM_CAM graph/adapter gate remains green at `22 passed`.
+- Cross-repository registry validation reports `142 paths` with `11` hidden
+  compatibility, `129` managed, and `2` troubleshooting-only routes. Both
+  feature branches and both `main` refs are pushed and clean. Next action is
+  the required requirement-by-requirement completion audit; Task 14 remains
+  outside this goal.
