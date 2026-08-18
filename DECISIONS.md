@@ -33,6 +33,23 @@ existing corpus and configuration while eliminating runtime ambiguity.
 Constraint: the Downloads worktrees remain recoverable references. Any future
 state migration requires a separate explicit plan and backup/rollback proof.
 
+## 2026-08-18: Test Task 14 through read-only CAM_Codx proof first
+
+Decision: exercise the MatrAIx/SESA concept through CAM_Codx `assess` and
+`cam_control_plane.py plan` before creating a candidate ledger, landing code,
+or running a provider/model. The first proof uses the canonical CAM runtime in
+read-only mode and a stable SWE Run ID.
+
+Reason: both source checkouts lack CAM-native truth artifacts and the primary
+corpus returned no matching evidence. The safety/orchestration path can still
+be proven, but useful mine-to-build evidence must not be invented from an empty
+or weak result.
+
+Safety: no source code, prompts, tests, datasets, model artifacts, database,
+configuration, or environment secrets were copied or changed. SESA root-code
+reuse remains unresolved; the next implementation, if authorized, must be an
+independent clean-room adapter using temporary state.
+
 ## 2026-08-17: Route sparse graph context through one CAM_Codx packet
 
 Decision: register CAM_CAM's hidden `knowledge-graph-query` as one canonical,

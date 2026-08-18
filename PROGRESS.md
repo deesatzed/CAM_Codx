@@ -782,10 +782,11 @@
   generated packs `--check` passed, CAM_CAM graph/import gate `22 passed`,
   Task 14 required-section/whitespace validation passed, and both
   `git diff --check` checks passed.
-- Assumption: the exact MatrAIx/SESA checkout, immutable revisions, ownership,
-  license, privacy boundary, provider policy, and landing scope are not
-  present in the recovered worktrees; Task 14 remains at discovery until those
-  fields are resolved.
+- Historical assumption at the documentation-sync checkpoint: the exact
+  MatrAIx/SESA checkout, immutable revisions, ownership, license, privacy
+  boundary, provider policy, and landing scope were not yet resolved. The
+  subsequent source preflight resolves the paths/revisions and retains the
+  remaining rights and product-boundary limitations below.
 
 ## 2026-08-18 Task 14 source preflight and canonical-root consolidation
 
@@ -805,3 +806,21 @@
   configuration was executed or changed. SESA adaptation/redistribution
   remains blocked until its rights boundary is established; read-only
   assessment remains allowed.
+
+## 2026-08-18 Task 14 CAM/CAM_Codx proof scenario
+
+- Created `docs/plans/2026-08-18-task14-cam-proof-scenario.md` and ran its
+  read-only phases against the pinned MatrAIx and SESA sources.
+- Both session preflights were clean with one expected warning: the canonical
+  CAM directory cannot create WAL sidecars. Both Development Briefs completed
+  without mutation; MatrAIx had no repository truth/evidence, while SESA had
+  no truth files and visible `NotImplemented` markers.
+- Both CAM_Codx plans resolved to `assess -> brief-query`, read-only, no writes,
+  no mining/provider spend, no approval, and `operation_executed=false`.
+  Explicit CAM primary-only brief queries returned `results: []`.
+- A malformed DB/config identity was rejected fail-closed; the corrected SESA
+  plan passed. Runtime config/database hashes remained unchanged, and no
+  target, database, config, provider, model, dataset, or source code changed.
+- Reported verdict: safety/orchestration proof passes; useful mine-to-build and
+  product proof remains unproven. Next action is the independent candidate
+  ledger and clean-room landing map.
