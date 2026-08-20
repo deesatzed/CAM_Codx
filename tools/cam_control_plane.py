@@ -9,7 +9,7 @@ operation; later control-plane phases consume its typed plan.
 from __future__ import annotations
 
 import argparse
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 import hashlib
 import json
 import os
@@ -114,6 +114,39 @@ class AssessmentComposition:
 
     brief: Any
     start_packet: ManagedRunStartPacket
+
+
+def _attach_runtime_sufficiency(brief: Any) -> Any:
+    """Attach a validated CAM runtime verdict without consulting a ledger."""
+
+    from tools.development_brief import (
+        BriefValidationError,
+        DevelopmentBrief,
+        derive_runtime_sufficiency,
+        validate_sufficiency_payload,
+    )
+
+    try:
+        if isinstance(brief, dict):
+            payload = dict(brief)
+            raw = payload.get("sufficiency")
+            assessment = (
+                derive_runtime_sufficiency(())
+                if raw is None
+                else validate_sufficiency_payload(raw)
+            )
+            payload["sufficiency"] = assessment.to_payload()
+            return payload
+        if isinstance(brief, DevelopmentBrief):
+            assessment = (
+                derive_runtime_sufficiency(brief.evidence_items)
+                if brief.sufficiency is None
+                else validate_sufficiency_payload(brief.sufficiency)
+            )
+            return replace(brief, sufficiency=assessment)
+    except BriefValidationError as exc:
+        raise ControlPlaneError(f"invalid CAM runtime sufficiency: {exc}") from exc
+    raise ControlPlaneError("CAM Development Brief has no supported runtime sufficiency shape")
 
 
 @dataclass(frozen=True)
@@ -620,6 +653,7 @@ def compose_assessment(
         cam_database=resolved.runtime.database,
         target_path=resolved.target,
     )
+    brief = _attach_runtime_sufficiency(brief)
     return AssessmentComposition(
         brief=brief,
         start_packet=assessment_start_packet(resolved, registry_path=registry_path),

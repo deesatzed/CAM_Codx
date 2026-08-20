@@ -534,6 +534,50 @@ def test_assess_composes_the_primary_only_brief_before_managed_run_start(
     assert composition.start_packet.argv[1] == "managed-run"
 
 
+def test_assess_composition_adds_runtime_abstention_when_brief_has_no_verdict(
+    tmp_path: Path,
+) -> None:
+    from tools.cam_control_plane import compose_assessment
+
+    composition = compose_assessment(
+        _request(tmp_path),
+        registry_path=CONTRACT,
+        brief_builder=lambda **kwargs: {"labels": ["direct_precedent"]},
+    )
+
+    assert composition.brief["sufficiency"]["verdict"] == "insufficient"
+    assert composition.brief["sufficiency"]["origin"] == "cam_runtime"
+    assert composition.brief["sufficiency"]["missing_obligations"]
+    assert composition.brief["sufficiency"]["proof_requirements"]
+
+
+def test_assess_composition_rejects_human_preregistration_as_runtime_output(
+    tmp_path: Path,
+) -> None:
+    from tools.cam_control_plane import ControlPlaneError, compose_assessment
+
+    with pytest.raises(ControlPlaneError, match="cam_runtime"):
+        compose_assessment(
+            _request(tmp_path),
+            registry_path=CONTRACT,
+            brief_builder=lambda **kwargs: {
+                "sufficiency": {
+                    "verdict": "sufficient",
+                    "direct_evidence": ["human-ledger-label"],
+                    "analogies": [],
+                    "missing_obligations": [],
+                    "conflicts": [],
+                    "stale_sources": [],
+                    "confidence": "high",
+                    "limitations": [],
+                    "recommended_route": "build",
+                    "proof_requirements": ["run tests"],
+                    "origin": "human_preregistration",
+                }
+            },
+        )
+
+
 def _cli_args(fixture: dict[str, Path]) -> list[str]:
     return [
         sys.executable,

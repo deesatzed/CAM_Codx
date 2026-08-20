@@ -35,6 +35,16 @@ class Confidence(str, Enum):
     HIGH = "high"
 
 
+class SufficiencyVerdict(str, Enum):
+    """Fail-closed runtime assessment of whether evidence can support a task."""
+
+    SUFFICIENT = "sufficient"
+    PARTIALLY_SUFFICIENT = "partially_sufficient"
+    INSUFFICIENT = "insufficient"
+    STALE = "stale"
+    CONFLICTED = "conflicted"
+
+
 _EVIDENCE_LABELS = {
     EvidenceClass.DIRECT_PRECEDENT: "Direct precedent",
     EvidenceClass.TRANSFERABLE_ANALOGY: "Transferable analogy",
@@ -99,6 +109,172 @@ class EvidenceItem:
             "limitation",
         ):
             object.__setattr__(self, field_name, _required_text(getattr(self, field_name), field_name))
+
+
+@dataclass(frozen=True)
+class SufficiencyAssessment:
+    """Structured CAM-generated sufficiency and abstention result.
+
+    ``origin`` is intentionally mandatory in the contract.  A human
+    preregistration or benchmark ledger is not a runtime CAM verdict and is
+    rejected rather than silently promoted into one.
+    """
+
+    verdict: SufficiencyVerdict
+    direct_evidence: tuple[str, ...]
+    analogies: tuple[str, ...]
+    missing_obligations: tuple[str, ...]
+    conflicts: tuple[str, ...]
+    stale_sources: tuple[str, ...]
+    confidence: Confidence
+    limitations: tuple[str, ...]
+    recommended_route: str
+    proof_requirements: tuple[str, ...]
+    origin: str = "cam_runtime"
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.verdict, SufficiencyVerdict):
+            raise BriefValidationError("sufficiency verdict must be a known SufficiencyVerdict")
+        if not isinstance(self.confidence, Confidence):
+            raise BriefValidationError("sufficiency confidence must be a known Confidence")
+        if self.origin != "cam_runtime":
+            raise BriefValidationError("sufficiency origin must be cam_runtime")
+        for field_name in (
+            "direct_evidence",
+            "analogies",
+            "missing_obligations",
+            "conflicts",
+            "stale_sources",
+            "limitations",
+            "proof_requirements",
+        ):
+            values = getattr(self, field_name)
+            if not isinstance(values, (tuple, list)):
+                raise BriefValidationError(f"sufficiency {field_name} must be a list")
+            cleaned = tuple(_required_text(item, f"sufficiency {field_name} item") for item in values)
+            object.__setattr__(self, field_name, cleaned)
+        object.__setattr__(
+            self,
+            "recommended_route",
+            _required_text(self.recommended_route, "sufficiency recommended_route"),
+        )
+        if not self.proof_requirements:
+            raise BriefValidationError("sufficiency requires proof requirements")
+        if self.verdict is SufficiencyVerdict.SUFFICIENT:
+            if self.missing_obligations:
+                raise BriefValidationError("sufficient verdict cannot omit missing obligations")
+            if self.stale_sources:
+                raise BriefValidationError("sufficient verdict cannot contain stale sources")
+            if self.conflicts:
+                raise BriefValidationError("sufficient verdict cannot contain conflicts")
+        if self.verdict is SufficiencyVerdict.STALE and not self.stale_sources:
+            raise BriefValidationError("stale verdict requires stale sources")
+        if self.verdict is SufficiencyVerdict.CONFLICTED and not self.conflicts:
+            raise BriefValidationError("conflicted verdict requires conflicts")
+
+    def to_payload(self) -> dict[str, object]:
+        """Return the stable JSON-shaped representation used by composition."""
+
+        return {
+            "verdict": self.verdict.value,
+            "direct_evidence": list(self.direct_evidence),
+            "analogies": list(self.analogies),
+            "missing_obligations": list(self.missing_obligations),
+            "conflicts": list(self.conflicts),
+            "stale_sources": list(self.stale_sources),
+            "confidence": self.confidence.value,
+            "limitations": list(self.limitations),
+            "recommended_route": self.recommended_route,
+            "proof_requirements": list(self.proof_requirements),
+            "origin": self.origin,
+        }
+
+
+def validate_sufficiency_payload(payload: object) -> SufficiencyAssessment:
+    """Validate one runtime sufficiency payload without consulting a ledger."""
+
+    if isinstance(payload, SufficiencyAssessment):
+        return payload
+    if not isinstance(payload, dict):
+        raise BriefValidationError("runtime sufficiency must be one JSON object")
+    required = {
+        "verdict",
+        "direct_evidence",
+        "analogies",
+        "missing_obligations",
+        "conflicts",
+        "stale_sources",
+        "confidence",
+        "limitations",
+        "recommended_route",
+        "proof_requirements",
+        "origin",
+    }
+    missing = sorted(required.difference(payload))
+    if missing:
+        raise BriefValidationError("runtime sufficiency is missing fields: " + ", ".join(missing))
+    try:
+        verdict = SufficiencyVerdict(payload["verdict"])
+        confidence = Confidence(payload["confidence"])
+    except (TypeError, ValueError) as exc:
+        raise BriefValidationError("runtime sufficiency verdict or confidence is invalid") from exc
+    return SufficiencyAssessment(
+        verdict=verdict,
+        direct_evidence=payload["direct_evidence"],
+        analogies=payload["analogies"],
+        missing_obligations=payload["missing_obligations"],
+        conflicts=payload["conflicts"],
+        stale_sources=payload["stale_sources"],
+        confidence=confidence,
+        limitations=payload["limitations"],
+        recommended_route=payload["recommended_route"],
+        proof_requirements=payload["proof_requirements"],
+        origin=payload["origin"],
+    )
+
+
+def derive_runtime_sufficiency(evidence_items: tuple[EvidenceItem, ...]) -> SufficiencyAssessment:
+    """Derive a conservative runtime result from the already retrieved brief."""
+
+    if not isinstance(evidence_items, (tuple, list)):
+        raise BriefValidationError("runtime evidence must be a sequence")
+    if any(not isinstance(item, EvidenceItem) for item in evidence_items):
+        raise BriefValidationError("runtime evidence must contain EvidenceItem values")
+    direct = tuple(
+        item.source_id
+        for item in evidence_items
+        if item.evidence_class is EvidenceClass.DIRECT_PRECEDENT
+    )
+    analogies = tuple(
+        item.source_id
+        for item in evidence_items
+        if item.evidence_class is EvidenceClass.TRANSFERABLE_ANALOGY
+    )
+    if not evidence_items:
+        return SufficiencyAssessment(
+            verdict=SufficiencyVerdict.INSUFFICIENT,
+            direct_evidence=(),
+            analogies=(),
+            missing_obligations=("primary corpus evidence",),
+            conflicts=(),
+            stale_sources=(),
+            confidence=Confidence.LOW,
+            limitations=("CAM returned no labelled evidence for this task.",),
+            recommended_route="inspect_named_sources",
+            proof_requirements=("Provide a named source or run a bounded mining phase before implementation.",),
+        )
+    return SufficiencyAssessment(
+        verdict=SufficiencyVerdict.PARTIALLY_SUFFICIENT,
+        direct_evidence=direct,
+        analogies=analogies,
+        missing_obligations=("target-specific verification",),
+        conflicts=(),
+        stale_sources=(),
+        confidence=Confidence.MEDIUM if direct else Confidence.LOW,
+        limitations=("Retrieved evidence is not proof that the target will satisfy its obligations.",),
+        recommended_route="inspect_named_sources",
+        proof_requirements=("Inspect the cited source and run target-specific tests.",),
+    )
 
 
 @dataclass(frozen=True)
@@ -177,12 +353,15 @@ class DevelopmentBrief:
     recommended_next_step: NextStep
     optional_next_steps: tuple[NextStep, ...]
     limitations: tuple[str, ...]
+    sufficiency: SufficiencyAssessment | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.request, BriefRequest):
             raise BriefValidationError("request must be a BriefRequest")
         if not isinstance(self.recommended_next_step, NextStep):
             raise BriefValidationError("recommended_next_step must be a NextStep")
+        if self.sufficiency is not None and not isinstance(self.sufficiency, SufficiencyAssessment):
+            raise BriefValidationError("sufficiency must be a SufficiencyAssessment")
         object.__setattr__(self, "recommendation", _required_text(self.recommendation, "recommendation"))
         for item in self.target_evidence:
             if not isinstance(item, TargetEvidence):
@@ -705,6 +884,7 @@ def build_development_brief(
             recommended_next_step=advice.recommended_next_step,
             optional_next_steps=optional_next_steps,
             limitations=tuple(limitations),
+            sufficiency=derive_runtime_sufficiency(evidence_items),
         )
 
     if evidence_items:
@@ -728,6 +908,7 @@ def build_development_brief(
         recommended_next_step=next_step,
         optional_next_steps=optional_next_steps,
         limitations=tuple(limitations),
+        sufficiency=derive_runtime_sufficiency(evidence_items),
     )
 
 
@@ -792,6 +973,27 @@ def render_markdown(brief: DevelopmentBrief) -> str:
             )
     else:
         lines.append("- No CAM evidence retrieved.")
+
+    if brief.sufficiency is not None:
+        sufficiency = brief.sufficiency
+        lines.extend(
+            [
+                "",
+                "## Sufficiency",
+                f"- Verdict: `{sufficiency.verdict.value}`",
+                f"- Confidence: {sufficiency.confidence.value}",
+                f"- Recommended route: `{sufficiency.recommended_route}`",
+                f"- Direct evidence: {', '.join(sufficiency.direct_evidence) or 'none'}",
+                f"- Analogies: {', '.join(sufficiency.analogies) or 'none'}",
+                f"- Missing obligations: {', '.join(sufficiency.missing_obligations) or 'none'}",
+                f"- Conflicts: {', '.join(sufficiency.conflicts) or 'none'}",
+                f"- Stale sources: {', '.join(sufficiency.stale_sources) or 'none'}",
+                "- Limitations:",
+            ]
+        )
+        lines.extend(f"  - {item}" for item in sufficiency.limitations)
+        lines.append("- Proof requirements:")
+        lines.extend(f"  - {item}" for item in sufficiency.proof_requirements)
 
     lines.extend(
         [
