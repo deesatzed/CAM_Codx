@@ -116,6 +116,99 @@ class AssessmentComposition:
     start_packet: ManagedRunStartPacket
 
 
+def build_outcome_memory_assessment(report: dict[str, Any]) -> dict[str, Any]:
+    """Present managed-run memory without promoting failures or hypotheses."""
+
+    if not isinstance(report, dict) or report.get("schema_version") != 1:
+        raise ControlPlaneError("managed outcome report must use schema version 1")
+    run_id = report.get("run_id")
+    decisions = report.get("candidate_decisions")
+    outcomes = report.get("outcomes")
+    active = report.get("active_outcomes")
+    if not isinstance(run_id, str) or not run_id:
+        raise ControlPlaneError("managed outcome report requires a run_id")
+    if not isinstance(decisions, list) or not all(isinstance(item, dict) for item in decisions):
+        raise ControlPlaneError("managed outcome report candidate decisions are invalid")
+    if not isinstance(outcomes, list) or not all(isinstance(item, dict) for item in outcomes):
+        raise ControlPlaneError("managed outcome report outcomes are invalid")
+    if not isinstance(active, dict) or not all(
+        isinstance(slot_id, str) and isinstance(item, dict)
+        for slot_id, item in active.items()
+    ):
+        raise ControlPlaneError("managed outcome report active outcomes are invalid")
+
+    selected_by_slot = {
+        item.get("slot_id"): item
+        for item in decisions
+        if item.get("decision") == "selected" and isinstance(item.get("slot_id"), str)
+    }
+    positive: list[dict[str, Any]] = []
+    for slot_id, item in active.items():
+        status = item.get("status")
+        recipe_eligible = item.get("recipe_eligible", False)
+        trust_delta = item.get("trust_delta", 0)
+        if status != "verified_success":
+            if recipe_eligible or (isinstance(trust_delta, (int, float)) and trust_delta > 0):
+                raise ControlPlaneError("positive evidence cannot come from a non-success outcome")
+            continue
+        evidence = item.get("verification_evidence")
+        test_refs = item.get("test_refs")
+        if not isinstance(evidence, list) or not evidence:
+            raise ControlPlaneError("verified positive evidence requires verification receipts")
+        if not isinstance(test_refs, list) or not test_refs:
+            raise ControlPlaneError("verified positive evidence requires test references")
+        decision = selected_by_slot.get(slot_id, {})
+        positive.append(
+            {
+                "slot_id": slot_id,
+                "outcome_id": item.get("id"),
+                "candidate_id": decision.get("candidate_id"),
+                "provenance": decision.get("provenance", []),
+                "test_refs": test_refs,
+                "verification_evidence": evidence,
+                "recommendation": "positive_reuse_candidate",
+            }
+        )
+
+    expected_positive = report.get("positive_evidence_count")
+    if type(expected_positive) is not int or expected_positive != len(positive):
+        raise ControlPlaneError("managed positive evidence count disagrees with active verified outcomes")
+
+    warnings = [
+        {
+            "outcome_id": item.get("id"),
+            "slot_id": item.get("slot_id"),
+            "status": item.get("status"),
+            "verifier_findings": item.get("verifier_findings", []),
+            "negative_memory_updates": item.get("negative_memory_updates", []),
+            "recommendation": "do_not_recommend_positively",
+        }
+        for item in outcomes
+        if item.get("status") == "verified_failure"
+    ]
+    hypotheses = [
+        {
+            "candidate_id": item.get("candidate_id"),
+            "decision": item.get("decision"),
+            "reason": item.get("reason"),
+            "provenance": item.get("provenance", []),
+            "limitations": item.get("limitations", []),
+            "verification_state": "unverified",
+            "recommendation": "do_not_recommend_positively",
+        }
+        for item in decisions
+        if item.get("label") == "new_hypothesis"
+    ]
+    return {
+        "schema_version": 1,
+        "run_id": run_id,
+        "positive_recommendations": positive,
+        "failure_warnings": warnings,
+        "unverified_hypotheses": hypotheses,
+        "positive_evidence_count": len(positive),
+    }
+
+
 def _attach_runtime_sufficiency(brief: Any) -> Any:
     """Attach a validated CAM runtime verdict without consulting a ledger."""
 

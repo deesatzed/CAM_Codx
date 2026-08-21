@@ -1,5 +1,21 @@
 # Progress
 
+## 2026-08-21 E6 outcome-memory presentation
+
+- Added `build_outcome_memory_assessment` to the CAM_Codx control plane. It
+  recommends only active receipt-backed `verified_success` outcomes, preserves
+  verified failures as explicit warnings, and labels new hypotheses
+  unverified.
+- Added fail-closed tests for false positive-evidence counts and non-success
+  trust/recipe promotion. The cross-repository fixture test now resolves an
+  explicit or isolated CAM_CAM checkout and exercises the new presentation
+  against CAM_CAM's real in-memory managed-run service.
+- Focused control-plane and cross-repository tests pass `49`. No provider,
+  mining, canonical database/configuration/profile, or target mutation ran.
+- The CAM Better Evidence benchmark owns the E6 receipt and retains the
+  limitation that this is deterministic fixture proof rather than live
+  product outcome memory.
+
 ## 2026-08-17 Sparse evidence graph: CAM_Codx route
 
 - Added the hidden canonical `knowledge-graph-query` CAM_CAM path to the

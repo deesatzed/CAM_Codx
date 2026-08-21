@@ -110,6 +110,99 @@ def _database_snapshot(path: Path) -> tuple:
     )
 
 
+def test_outcome_memory_recommends_only_active_verified_success() -> None:
+    from tools.cam_control_plane import build_outcome_memory_assessment
+
+    report = {
+        "schema_version": 1,
+        "run_id": "fixture-run",
+        "status": "verified_success",
+        "candidate_decisions": [
+            {
+                "candidate_id": "precedent-1",
+                "label": "direct_precedent",
+                "decision": "selected",
+                "reason": "selected precedent",
+                "provenance": ["donor@abc:path.py"],
+                "limitations": ["fixture only"],
+            },
+            {
+                "candidate_id": "hypothesis-1",
+                "label": "new_hypothesis",
+                "decision": "rejected",
+                "reason": "not verified",
+                "provenance": ["hypothesis:new-path"],
+                "limitations": ["no tests"],
+            },
+        ],
+        "outcomes": [
+            {
+                "id": "failed-1",
+                "status": "verified_failure",
+                "slot_id": "slot-1",
+                "verifier_findings": ["sentinel failed"],
+                "negative_memory_updates": ["Do not reuse unsafe branch."],
+                "recipe_eligible": False,
+                "trust_delta": 0,
+            },
+            {
+                "id": "success-1",
+                "status": "verified_success",
+                "slot_id": "slot-1",
+                "test_refs": ["tests::sentinel"],
+                "verification_evidence": [{"receipt_sha256": "a" * 64}],
+                "recipe_eligible": True,
+                "trust_delta": 1,
+                "supersedes_outcome_id": "failed-1",
+            },
+        ],
+        "active_outcomes": {
+            "slot-1": {
+                "id": "success-1",
+                "status": "verified_success",
+                "slot_id": "slot-1",
+                "test_refs": ["tests::sentinel"],
+                "verification_evidence": [{"receipt_sha256": "a" * 64}],
+                "recipe_eligible": True,
+                "trust_delta": 1,
+                "supersedes_outcome_id": "failed-1",
+            }
+        },
+        "positive_evidence_count": 1,
+    }
+
+    result = build_outcome_memory_assessment(report)
+
+    assert [item["outcome_id"] for item in result["positive_recommendations"]] == ["success-1"]
+    assert result["failure_warnings"][0]["outcome_id"] == "failed-1"
+    assert result["failure_warnings"][0]["recommendation"] == "do_not_recommend_positively"
+    assert result["unverified_hypotheses"][0]["candidate_id"] == "hypothesis-1"
+    assert result["unverified_hypotheses"][0]["verification_state"] == "unverified"
+
+
+def test_outcome_memory_fails_closed_on_false_positive_evidence() -> None:
+    from tools.cam_control_plane import ControlPlaneError, build_outcome_memory_assessment
+
+    with pytest.raises(ControlPlaneError, match="positive evidence"):
+        build_outcome_memory_assessment(
+            {
+                "schema_version": 1,
+                "run_id": "unsafe-run",
+                "candidate_decisions": [],
+                "outcomes": [],
+                "active_outcomes": {
+                    "slot-1": {
+                        "id": "failure-1",
+                        "status": "verified_failure",
+                        "recipe_eligible": True,
+                        "trust_delta": 1,
+                    }
+                },
+                "positive_evidence_count": 1,
+            }
+        )
+
+
 @pytest.mark.parametrize(
     ("intent", "operation"),
     [

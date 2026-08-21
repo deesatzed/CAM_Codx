@@ -1,5 +1,23 @@
 # Decisions
 
+## 2026-08-21: Present typed managed outcomes without flattening evidence state
+
+Decision: CAM_Codx derives later-recall recommendations only from active
+`verified_success` managed outcomes with test references and verification
+receipts. Historical verified failures remain warnings, and every
+`new_hypothesis` candidate remains explicitly unverified regardless of its
+selection state.
+
+Reason: a source-to-outcome report already preserves the runtime truth in
+CAM_CAM. CAM_Codx needs a normal-user presentation layer, not a second outcome
+database or a prose heuristic that could promote a failed or hypothetical
+record.
+
+Constraint: a positive count mismatch, missing verification evidence, or
+positive trust/recipe eligibility on a non-success outcome fails closed. The
+current E6 proof uses CAM_CAM's real managed-run service in disposable memory;
+it is fixture proof and does not mutate the canonical corpus.
+
 ## 2026-08-18: Keep MatrAIx/SESA as a separate product-boundary goal
 
 Decision: complete the CAM_Codx/CAM_CAM documentation synchronization, then

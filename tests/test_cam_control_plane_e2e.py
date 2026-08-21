@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 from pathlib import Path
 import sys
 
@@ -10,12 +11,25 @@ import pytest
 
 
 ROOT = Path(__file__).resolve().parents[1]
-CAM_CAM = ROOT.parent / "CAM_CAM"
+
+
+def _cam_cam_root() -> Path:
+    configured = os.environ.get("CAM_CAM_ROOT")
+    candidates = [
+        Path(configured).expanduser() if configured else None,
+        ROOT.parent / "CAM_CAM",
+        ROOT.parent / "CAM_CAM_goal3",
+    ]
+    for candidate in candidates:
+        if candidate is not None and (candidate / "tests" / "test_managed_runs.py").is_file():
+            return candidate.resolve()
+    raise AssertionError("CAM_CAM test fixture checkout could not be resolved")
 
 
 def _managed_run_fixture_module():
-    sys.path.insert(0, str(CAM_CAM / "src"))
-    path = CAM_CAM / "tests" / "test_managed_runs.py"
+    cam_cam = _cam_cam_root()
+    sys.path.insert(0, str(cam_cam / "src"))
+    path = cam_cam / "tests" / "test_managed_runs.py"
     spec = importlib.util.spec_from_file_location("cam_cam_managed_run_fixture", path)
     assert spec is not None and spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -39,6 +53,7 @@ async def test_fixture_chain_keeps_only_corrected_verified_outcome_positive(tmp_
         OutcomeStatus,
         SelectionDecision,
     )
+    from tools.cam_control_plane import build_outcome_memory_assessment
 
     engine = DatabaseEngine(DatabaseConfig(db_path=":memory:"))
     await engine.connect()
@@ -121,6 +136,7 @@ async def test_fixture_chain_keeps_only_corrected_verified_outcome_positive(tmp_
             ),
         )
         report = await service.source_to_outcome_report("fixture-run")
+        assessment = build_outcome_memory_assessment(report)
     finally:
         await engine.close()
 
@@ -135,3 +151,7 @@ async def test_fixture_chain_keeps_only_corrected_verified_outcome_positive(tmp_
         "selected",
         "rejected",
     ]
+    assert assessment["positive_evidence_count"] == 1
+    assert assessment["positive_recommendations"][0]["outcome_id"] == corrected.id
+    assert assessment["failure_warnings"][0]["outcome_id"] == failed.id
+    assert assessment["unverified_hypotheses"][0]["candidate_id"] == "fixture-rejected"
