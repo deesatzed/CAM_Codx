@@ -1,5 +1,18 @@
 # Progress
 
+## 2026-08-21 E7 least-cost knowledge routing
+
+- Added a fail-closed typed knowledge-source selector to the CAM_Codx control
+  plane. It covers local CAM, Context7, combined CAM+Context7, raw source, and
+  abstention without executing any selected route.
+- Added regressions for current public APIs, local invariants, local-plus-
+  current conjunctions, stale source inspection, neither-source sufficiency,
+  and invalid evidence states. Focused routing tests pass `6`.
+- The CAM Better Evidence benchmark owns the seven-case preregistration and
+  score receipt. The current gate measures routing policy given explicit
+  evidence states; it does not claim that CAM already infers those states
+  accurately or that a selected route produced executable software.
+
 ## 2026-08-21 E6 outcome-memory presentation
 
 - Added `build_outcome_memory_assessment` to the CAM_Codx control plane. It

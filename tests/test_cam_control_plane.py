@@ -204,6 +204,105 @@ def test_outcome_memory_fails_closed_on_false_positive_evidence() -> None:
 
 
 @pytest.mark.parametrize(
+    ("signals", "expected_route", "expected_sufficient"),
+    [
+        (
+            {
+                "cam_evidence_state": "insufficient",
+                "requires_current_public_api": True,
+                "requires_local_knowledge": False,
+                "requires_source_inspection": False,
+                "offline": False,
+                "context7_available": True,
+                "raw_source_available": True,
+            },
+            "context7",
+            True,
+        ),
+        (
+            {
+                "cam_evidence_state": "sufficient",
+                "requires_current_public_api": False,
+                "requires_local_knowledge": True,
+                "requires_source_inspection": False,
+                "offline": False,
+                "context7_available": True,
+                "raw_source_available": True,
+            },
+            "cam",
+            True,
+        ),
+        (
+            {
+                "cam_evidence_state": "sufficient",
+                "requires_current_public_api": True,
+                "requires_local_knowledge": True,
+                "requires_source_inspection": False,
+                "offline": False,
+                "context7_available": True,
+                "raw_source_available": True,
+            },
+            "cam_context7",
+            True,
+        ),
+        (
+            {
+                "cam_evidence_state": "stale",
+                "requires_current_public_api": False,
+                "requires_local_knowledge": True,
+                "requires_source_inspection": True,
+                "offline": False,
+                "context7_available": True,
+                "raw_source_available": True,
+            },
+            "raw_source",
+            True,
+        ),
+        (
+            {
+                "cam_evidence_state": "insufficient",
+                "requires_current_public_api": True,
+                "requires_local_knowledge": True,
+                "requires_source_inspection": False,
+                "offline": False,
+                "context7_available": True,
+                "raw_source_available": False,
+            },
+            "abstain",
+            False,
+        ),
+    ],
+)
+def test_knowledge_router_selects_least_cost_sufficient_source(
+    signals: dict[str, object], expected_route: str, expected_sufficient: bool
+) -> None:
+    from tools.cam_control_plane import select_knowledge_source_route
+
+    result = select_knowledge_source_route(signals)
+
+    assert result["route"] == expected_route
+    assert result["sufficient"] is expected_sufficient
+    assert result["mining_calls"] == 0
+
+
+def test_knowledge_router_rejects_unknown_evidence_state() -> None:
+    from tools.cam_control_plane import ControlPlaneError, select_knowledge_source_route
+
+    with pytest.raises(ControlPlaneError, match="evidence state"):
+        select_knowledge_source_route(
+            {
+                "cam_evidence_state": "probably_ok",
+                "requires_current_public_api": False,
+                "requires_local_knowledge": True,
+                "requires_source_inspection": False,
+                "offline": False,
+                "context7_available": True,
+                "raw_source_available": True,
+            }
+        )
+
+
+@pytest.mark.parametrize(
     ("intent", "operation"),
     [
         ("knowledge", "kb search"),

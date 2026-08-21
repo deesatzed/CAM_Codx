@@ -1,5 +1,21 @@
 # Decisions
 
+## 2026-08-21: Route typed knowledge needs by least sufficient cost
+
+Decision: CAM_Codx selects among `cam`, `context7`, `cam_context7`,
+`raw_source`, and `abstain` using an exact typed signal contract. Local CAM
+evidence is preferred when sufficient; current public API needs route to
+Context7; mixed local/current needs combine them; stale evidence requiring
+inspection routes to source; offline or unsatisfied combinations abstain.
+
+Reason: route selection should not require the user to know a repository or
+choose an MCP service. It also must not claim that one available source is
+sufficient for a conjunction that needs both local and current evidence.
+
+Constraint: the router never starts mining, external calls, or source reads.
+Its relative cost units describe a plan, not billed spend. Evidence-state
+calibration and final executable outcomes remain separate gates.
+
 ## 2026-08-21: Present typed managed outcomes without flattening evidence state
 
 Decision: CAM_Codx derives later-recall recommendations only from active

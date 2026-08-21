@@ -209,6 +209,89 @@ def build_outcome_memory_assessment(report: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def select_knowledge_source_route(signals: dict[str, object]) -> dict[str, Any]:
+    """Select the least costly sufficient source from explicit typed signals."""
+
+    required = {
+        "cam_evidence_state",
+        "requires_current_public_api",
+        "requires_local_knowledge",
+        "requires_source_inspection",
+        "offline",
+        "context7_available",
+        "raw_source_available",
+    }
+    if not isinstance(signals, dict) or set(signals) != required:
+        raise ControlPlaneError("knowledge routing signals must exactly match the typed contract")
+    state = signals["cam_evidence_state"]
+    if state not in {"sufficient", "partial", "insufficient", "stale", "conflicted"}:
+        raise ControlPlaneError("knowledge routing evidence state is unsupported")
+    for field in required - {"cam_evidence_state"}:
+        if type(signals[field]) is not bool:
+            raise ControlPlaneError(f"knowledge routing signal {field} must be boolean")
+
+    current = bool(signals["requires_current_public_api"])
+    local = bool(signals["requires_local_knowledge"])
+    inspect_source = bool(signals["requires_source_inspection"])
+    offline = bool(signals["offline"])
+    context7 = bool(signals["context7_available"])
+    raw = bool(signals["raw_source_available"])
+    cam_sufficient = state == "sufficient"
+
+    route = "abstain"
+    sufficient = False
+    reason = "no available source combination satisfies every required obligation"
+    if offline:
+        if local and not current and not inspect_source and cam_sufficient:
+            route = "cam"
+            sufficient = True
+            reason = "offline local CAM evidence is sufficient"
+        else:
+            reason = "offline mode forbids required external or source access"
+    elif current and local:
+        if cam_sufficient and context7 and not inspect_source:
+            route = "cam_context7"
+            sufficient = True
+            reason = "local knowledge and current public API documentation are both required"
+    elif current and not local:
+        if context7 and not inspect_source:
+            route = "context7"
+            sufficient = True
+            reason = "current public API documentation is required and local history is not"
+        elif raw:
+            route = "raw_source"
+            sufficient = True
+            reason = "current documentation service is unavailable; inspect the current source"
+    elif local:
+        if inspect_source:
+            if raw:
+                route = "raw_source"
+                sufficient = True
+                reason = "local evidence is stale or incomplete and source inspection is required"
+        elif cam_sufficient:
+            route = "cam"
+            sufficient = True
+            reason = "local CAM evidence satisfies the task without an external call"
+        elif raw:
+            route = "raw_source"
+            sufficient = True
+            reason = "CAM evidence is not sufficient; inspect the available local source"
+
+    external_calls = int(route in {"context7", "cam_context7"})
+    source_reads = int(route == "raw_source")
+    return {
+        "schema_version": 1,
+        "route": route,
+        "sufficient": sufficient,
+        "reason": reason,
+        "cam_evidence_state": state,
+        "planned_external_calls": external_calls,
+        "planned_source_reads": source_reads,
+        "mining_calls": 0,
+        "relative_cost_units": external_calls + source_reads,
+    }
+
+
 def _attach_runtime_sufficiency(brief: Any) -> Any:
     """Attach a validated CAM runtime verdict without consulting a ledger."""
 
