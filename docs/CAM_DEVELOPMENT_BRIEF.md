@@ -27,6 +27,14 @@ Every recommendation is visibly one of:
 - **Transferable analogy** — a dissimilar source with its transfer rationale.
 - **New hypothesis** — an unproven idea with required validation.
 
+When CAM retained a typed method contract during mining, direct precedents and
+transferable analogies also show its bounded operational semantics:
+preconditions, ordered steps, invariants, failure and recovery behavior,
+verification, discriminative terms, and source provenance. Unknown fields are
+not passed through. This makes a method inspectable without presenting it as a
+verified implementation; target-specific tests and receipts still arbitrate
+whether reuse succeeded.
+
 ## Safe default
 
 The first run uses only the named target and the explicitly supplied CAM

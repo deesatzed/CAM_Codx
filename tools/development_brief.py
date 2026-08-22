@@ -77,6 +77,36 @@ class BriefRequest:
 
 
 @dataclass(frozen=True)
+class MethodContract:
+    problem: str = ""
+    preconditions: tuple[str, ...] = ()
+    ordered_steps: tuple[str, ...] = ()
+    invariants: tuple[str, ...] = ()
+    failure_behavior: str = ""
+    recovery_behavior: str = ""
+    verification: tuple[str, ...] = ()
+    discriminative_terms: tuple[str, ...] = ()
+    source_repo: str = ""
+    source_revision: str = ""
+    license_type: str = ""
+    source_files: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        semantic_values = (
+            self.problem,
+            *self.preconditions,
+            *self.ordered_steps,
+            *self.invariants,
+            self.failure_behavior,
+            self.recovery_behavior,
+            *self.verification,
+            *self.discriminative_terms,
+        )
+        if not any(isinstance(value, str) and value.strip() for value in semantic_values):
+            raise BriefValidationError("method contract requires bounded semantic content")
+
+
+@dataclass(frozen=True)
 class EvidenceItem:
     evidence_class: EvidenceClass
     title: str
@@ -85,12 +115,17 @@ class EvidenceItem:
     why_it_applies: str
     confidence: Confidence
     limitation: str
+    method_contract: MethodContract | None = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.evidence_class, EvidenceClass):
             raise BriefValidationError("evidence class must be a known EvidenceClass")
         if not isinstance(self.confidence, Confidence):
             raise BriefValidationError("confidence must be a known Confidence")
+        if self.method_contract is not None and not isinstance(
+            self.method_contract, MethodContract
+        ):
+            raise BriefValidationError("method_contract must be a MethodContract")
         for field_name in (
             "title",
             "source_id",
@@ -383,6 +418,47 @@ def _validate_primary_payload(payload: object, query: str) -> dict[str, object]:
     return payload
 
 
+def _method_contract_from_result(result: dict[str, object]) -> MethodContract | None:
+    raw = result.get("method_contract")
+    if not isinstance(raw, dict):
+        return None
+    provenance = result.get("method_contract_provenance")
+    provenance = provenance if isinstance(provenance, dict) else {}
+
+    def text(container: dict[str, object], field: str, *, limit: int = 1500) -> str:
+        value = container.get(field)
+        return value.strip()[:limit] if isinstance(value, str) and value.strip() else ""
+
+    def items(container: dict[str, object], field: str) -> tuple[str, ...]:
+        value = container.get(field)
+        if not isinstance(value, list):
+            return ()
+        return tuple(
+            item.strip()[:500]
+            for item in value
+            if isinstance(item, str) and item.strip()
+        )[:20]
+
+    values = {
+        "problem": text(raw, "problem"),
+        "preconditions": items(raw, "preconditions"),
+        "ordered_steps": items(raw, "ordered_steps"),
+        "invariants": items(raw, "invariants"),
+        "failure_behavior": text(raw, "failure_behavior"),
+        "recovery_behavior": text(raw, "recovery_behavior"),
+        "verification": items(raw, "verification"),
+        "discriminative_terms": items(raw, "discriminative_terms"),
+        "source_repo": text(provenance, "source_repo", limit=500),
+        "source_revision": text(provenance, "source_revision", limit=500),
+        "license_type": text(provenance, "license_type", limit=500),
+        "source_files": items(provenance, "source_files"),
+    }
+    try:
+        return MethodContract(**values)
+    except BriefValidationError:
+        return None
+
+
 def query_primary_corpus_read_only(
     query: str,
     *,
@@ -477,6 +553,7 @@ def classify_cam_evidence(
                     ),
                     confidence=Confidence.MEDIUM,
                     limitation="Inspect the cited source before reusing it in this target.",
+                    method_contract=_method_contract_from_result(result),
                 )
             )
             continue
@@ -492,6 +569,7 @@ def classify_cam_evidence(
                     why_it_applies=_required_text(rationale, "transfer rationale"),
                     confidence=Confidence.LOW,
                     limitation="This is a transferable analogy, not a drop-in implementation.",
+                    method_contract=_method_contract_from_result(result),
                 )
             )
 
@@ -787,9 +865,44 @@ def render_markdown(brief: DevelopmentBrief) -> str:
                     f"- Why this applies: {item.why_it_applies}",
                     f"- Confidence: {item.confidence.value}",
                     f"- Limitation: {item.limitation}",
-                    "",
                 ]
             )
+            contract = item.method_contract
+            if contract is not None:
+                lines.append("#### Method contract")
+                if contract.problem:
+                    lines.append(f"- Problem: {contract.problem}")
+                if contract.preconditions:
+                    lines.append(f"- Preconditions: {'; '.join(contract.preconditions)}")
+                if contract.ordered_steps:
+                    lines.append("- Ordered steps:")
+                    lines.extend(
+                        f"  {index}. {step}"
+                        for index, step in enumerate(contract.ordered_steps, start=1)
+                    )
+                if contract.invariants:
+                    lines.append(f"- Invariants: {'; '.join(contract.invariants)}")
+                if contract.failure_behavior:
+                    lines.append(f"- Failure behavior: {contract.failure_behavior}")
+                if contract.recovery_behavior:
+                    lines.append(f"- Recovery behavior: {contract.recovery_behavior}")
+                if contract.verification:
+                    lines.append(f"- Verification: {'; '.join(contract.verification)}")
+                if contract.discriminative_terms:
+                    lines.append(
+                        f"- Discriminative terms: {'; '.join(contract.discriminative_terms)}"
+                    )
+                if contract.source_repo:
+                    lines.append(f"- Source repository: `{contract.source_repo}`")
+                if contract.source_revision:
+                    lines.append(f"- Source revision: `{contract.source_revision}`")
+                if contract.license_type:
+                    lines.append(f"- License: {contract.license_type}")
+                if contract.source_files:
+                    lines.append(
+                        "- Source files: " + "; ".join(f"`{path}`" for path in contract.source_files)
+                    )
+            lines.append("")
     else:
         lines.append("- No CAM evidence retrieved.")
 

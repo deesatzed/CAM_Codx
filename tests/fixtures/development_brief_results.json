@@ -10,7 +10,25 @@
       "tags": ["retry", "import", "python", "source:fixture-python"],
       "language": "python",
       "lifecycle_state": "viable",
-      "text_score": -0.9
+      "text_score": -0.9,
+      "method_contract": {
+        "problem": "Transient imports must not repeat completed work.",
+        "preconditions": ["stable import identity"],
+        "ordered_steps": ["read durable state", "attempt import", "persist completion"],
+        "invariants": ["completed work is not repeated"],
+        "failure_behavior": "Stop after the bounded attempt count.",
+        "recovery_behavior": "Resume from the durable state.",
+        "verification": ["interrupt once and resume"],
+        "discriminative_terms": ["durable retry", "resume"],
+        "hidden_tests": ["must not appear"]
+      },
+      "method_contract_provenance": {
+        "source_repo": "fixture-python",
+        "source_revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "license_type": "MIT",
+        "source_files": ["src/retry.py"],
+        "private_note": "must not appear"
+      }
     },
     {
       "methodology_id": "method-go-transaction",
@@ -19,7 +37,9 @@
       "tags": ["transaction", "recovery", "source:fixture-go"],
       "language": "go",
       "lifecycle_state": "viable",
-      "text_score": -0.3
+      "text_score": -0.3,
+      "method_contract": null,
+      "method_contract_provenance": null
     }
   ]
 }

@@ -1,5 +1,25 @@
 # Progress
 
+## 2026-08-22 Development Brief method-contract packet
+
+- Added a frozen typed `MethodContract` to Development Brief evidence and
+  allowlisted parsing of CAM_CAM method semantics and provenance.
+- Markdown output now shows ordered steps, constraints, failure/recovery
+  behavior, verification, discriminative terms, source repository, immutable
+  revision, license, and source files when present.
+- RED first failed because evidence could not carry a contract. The focused
+  Development Brief/control-plane/manager suite now passes `97` tests, and the
+  fixture proves unknown contract and provenance keys cannot enter output.
+- No CAM command, provider call, mining, target write, database/config/profile
+  mutation, or model change occurred. Full-suite and final diff gates remain
+  before commit.
+- Fresh full suite passes `208` tests against CAM_CAM revision
+  `e5693a30ef5b535309b71bd6cc7214cb2a578e8f`, the exact runtime pinned by the
+  capability-registry fixture. A separate current-adjacent run passes 207 and
+  reports one unrelated revision mismatch because current CAM_CAM main is
+  `84f8d160842cd60fa6310d0222b6dfd2aa2586ea`; this feature does not change the
+  CLI manifest. `git diff --check` passes.
+
 ## 2026-08-17 Sparse evidence graph: CAM_Codx route
 
 - Added the hidden canonical `knowledge-graph-query` CAM_CAM path to the

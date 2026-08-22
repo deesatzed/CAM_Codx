@@ -1,5 +1,22 @@
 # Decisions
 
+## 2026-08-22: Present typed CAM method contracts in the Development Brief
+
+Decision: the normal CAM_Codx Development Brief parses and renders CAM_CAM's
+bounded `method_contract` and source provenance for direct precedents and
+transferable analogies. It accepts only named fields and silently excludes
+unknown payload keys.
+
+Reason: the CAM-versus-Context7 outcome RCA established two diagnostic cases
+where a selected CAM card lost method mechanics before reaching the builder.
+CAM_Codx must preserve the runtime's structured semantics rather than reducing
+them back to title and summary text.
+
+Safety: the route remains read-only and primary-corpus-only. Rendering a
+contract does not mine, call a provider, mutate a target/corpus/config/profile,
+or confer positive outcome trust. The brief continues to label analogies and
+hypotheses separately and requires target verification.
+
 ## 2026-08-18: Keep MatrAIx/SESA as a separate product-boundary goal
 
 Decision: complete the CAM_Codx/CAM_CAM documentation synchronization, then

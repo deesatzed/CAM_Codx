@@ -294,10 +294,34 @@ def test_classifier_distinguishes_direct_analogy_and_hypothesis() -> None:
     )
 
     assert items[0].evidence_class is brief.EvidenceClass.DIRECT_PRECEDENT
+    assert items[0].method_contract is not None
+    assert items[0].method_contract.ordered_steps == (
+        "read durable state",
+        "attempt import",
+        "persist completion",
+    )
+    assert items[0].method_contract.source_revision == "a" * 40
     assert items[1].evidence_class is brief.EvidenceClass.TRANSFERABLE_ANALOGY
     assert "despite the Go" in items[1].why_it_applies
     assert hypothesis.evidence_class is brief.EvidenceClass.NEW_HYPOTHESIS
     assert "validation" in hypothesis.limitation
+
+    rendered = brief.render_markdown(
+        brief.DevelopmentBrief(
+            request=request,
+            target_evidence=(),
+            evidence_items=items,
+            recommendation="Inspect the recalled method.",
+            recommended_next_step=brief.NextStep(kind="inspect", summary="Inspect it."),
+            optional_next_steps=(),
+            limitations=(),
+        )
+    )
+    assert "#### Method contract" in rendered
+    assert "1. read durable state" in rendered
+    assert "Source revision: `" + "a" * 40 + "`" in rendered
+    assert "hidden_tests" not in rendered
+    assert "must not appear" not in rendered
 
 
 def test_low_evidence_requests_named_scope_without_silently_expanding() -> None:
