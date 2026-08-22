@@ -19,6 +19,9 @@
         "failure_behavior": "Stop after the bounded attempt count.",
         "recovery_behavior": "Resume from the durable state.",
         "verification": ["interrupt once and resume"],
+        "decision_predicates": [
+          "bool(environment.get('RETRY')) is true => retry; missing or empty => stop"
+        ],
         "discriminative_terms": ["durable retry", "resume"],
         "hidden_tests": ["must not appear"]
       },

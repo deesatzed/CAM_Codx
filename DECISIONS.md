@@ -1,5 +1,20 @@
 # Decisions
 
+## 2026-08-22: Show exact decision predicates in normal CAM_Codx evidence
+
+Decision: add CAM_CAM's bounded `decision_predicates` field to the immutable
+Development Brief `MethodContract` and render it explicitly beside the other
+method semantics.
+
+Reason: a predicate that controls branch behavior is actionable evidence, not
+merely a retrieval keyword. Reducing it to "variable is set" can erase the
+distinction between truthiness and key presence and between absent and empty
+values.
+
+Safety: CAM_Codx applies the existing 20-item/500-character bound and accepts
+only the named field. Presentation remains read-only and does not imply correct
+extraction, selection, builder use, safety, or software improvement.
+
 ## 2026-08-22: Present typed CAM method contracts in the Development Brief
 
 Decision: the normal CAM_Codx Development Brief parses and renders CAM_CAM's

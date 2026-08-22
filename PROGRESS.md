@@ -1,5 +1,24 @@
 # Progress
 
+## 2026-08-22 Development Brief decision-predicate fidelity
+
+- Added a RED fixture and assertion proving the typed Development Brief could
+  not carry an exact source decision predicate.
+- Added bounded parsing, immutable storage, semantic validation, and Markdown
+  rendering for `decision_predicates`.
+- Focused Development Brief verification passes `15 passed` in `0.40s`.
+- Re-pinned the unchanged 142-path CAM_CAM command manifest to the exact
+  predicate-transport commit `e633438551689e45ad290144715d6b9c8243f3ac`;
+  the manifest digest remains unchanged because no command path changed.
+- With a temporary sibling link to that exact checkout, the full CAM_Codx suite
+  passes `208 passed` in `3.28s`; `git diff --check` passes. The link was removed
+  after verification.
+- No CAM command, provider call, mining, target write, database/config/profile
+  mutation, or model change occurred.
+
+Current status: CAM_Codx presentation is green. The disposable C26
+counterfactual and broader release gates remain.
+
 ## 2026-08-22 Development Brief method-contract packet
 
 - Added a frozen typed `MethodContract` to Development Brief evidence and

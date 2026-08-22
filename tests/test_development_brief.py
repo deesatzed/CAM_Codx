@@ -300,6 +300,9 @@ def test_classifier_distinguishes_direct_analogy_and_hypothesis() -> None:
         "attempt import",
         "persist completion",
     )
+    assert items[0].method_contract.decision_predicates == (
+        "bool(environment.get('RETRY')) is true => retry; missing or empty => stop",
+    )
     assert items[0].method_contract.source_revision == "a" * 40
     assert items[1].evidence_class is brief.EvidenceClass.TRANSFERABLE_ANALOGY
     assert "despite the Go" in items[1].why_it_applies
@@ -319,6 +322,10 @@ def test_classifier_distinguishes_direct_analogy_and_hypothesis() -> None:
     )
     assert "#### Method contract" in rendered
     assert "1. read durable state" in rendered
+    assert (
+        "- Decision predicates: bool(environment.get('RETRY')) is true => retry; "
+        "missing or empty => stop"
+    ) in rendered
     assert "Source revision: `" + "a" * 40 + "`" in rendered
     assert "hidden_tests" not in rendered
     assert "must not appear" not in rendered

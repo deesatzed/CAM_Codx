@@ -85,6 +85,7 @@ class MethodContract:
     failure_behavior: str = ""
     recovery_behavior: str = ""
     verification: tuple[str, ...] = ()
+    decision_predicates: tuple[str, ...] = ()
     discriminative_terms: tuple[str, ...] = ()
     source_repo: str = ""
     source_revision: str = ""
@@ -100,6 +101,7 @@ class MethodContract:
             self.failure_behavior,
             self.recovery_behavior,
             *self.verification,
+            *self.decision_predicates,
             *self.discriminative_terms,
         )
         if not any(isinstance(value, str) and value.strip() for value in semantic_values):
@@ -447,6 +449,7 @@ def _method_contract_from_result(result: dict[str, object]) -> MethodContract | 
         "failure_behavior": text(raw, "failure_behavior"),
         "recovery_behavior": text(raw, "recovery_behavior"),
         "verification": items(raw, "verification"),
+        "decision_predicates": items(raw, "decision_predicates"),
         "discriminative_terms": items(raw, "discriminative_terms"),
         "source_repo": text(provenance, "source_repo", limit=500),
         "source_revision": text(provenance, "source_revision", limit=500),
@@ -888,6 +891,11 @@ def render_markdown(brief: DevelopmentBrief) -> str:
                     lines.append(f"- Recovery behavior: {contract.recovery_behavior}")
                 if contract.verification:
                     lines.append(f"- Verification: {'; '.join(contract.verification)}")
+                if contract.decision_predicates:
+                    lines.append(
+                        "- Decision predicates: "
+                        + "; ".join(contract.decision_predicates)
+                    )
                 if contract.discriminative_terms:
                     lines.append(
                         f"- Discriminative terms: {'; '.join(contract.discriminative_terms)}"
