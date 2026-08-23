@@ -714,7 +714,7 @@
   "schema_version": 1,
   "source": {
     "repo": "CAM_CAM",
-    "commit": "e633438551689e45ad290144715d6b9c8243f3ac",
+    "commit": "0c5fdf88e49225d4f4ff747ee634c6951daa02f0",
     "manifest_sha256": "8bb56420ae57d29074ec8341f4fdf2f13f644fcaecce52e9767c99431e999fb0"
   }
 }

@@ -11,8 +11,13 @@
   into each packet with typed source provenance. The pinned old path selects
   zero, preserving the causal before/after comparison.
 - Focused Development Brief/control-plane verification passes `61`; Ruff and
-  `git diff --check` pass. With a temporary sibling symlink to the same CAM_CAM
-  worktree, the full CAM_Codx suite passes `210`; the symlink was removed.
+  `git diff --check` pass. The full-suite integration gate correctly rejected
+  the predecessor CAM_CAM revision pin, so the unchanged 142-path manifest was
+  re-pinned to native-retrieval commit
+  `0c5fdf88e49225d4f4ff747ee634c6951daa02f0`; its content digest remains
+  `8bb56420ae57d29074ec8341f4fdf2f13f644fcaecce52e9767c99431e999fb0`.
+  With a temporary sibling symlink to that exact worktree, the full CAM_Codx
+  suite passes `210`; the symlink was removed.
 - No provider, mining operation, target/corpus/config/profile mutation, model
   change, or source-repository mutation occurred.
 
