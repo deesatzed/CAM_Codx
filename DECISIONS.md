@@ -1,5 +1,33 @@
 # Decisions
 
+## 2026-08-23: Bound fallback recall before normal packet presentation
+
+Decision: when CAM_CAM reports `any_terms_fallback`, CAM_Codx presents only the
+strongest ranked result. Exact all-terms results retain the existing bounded
+result behavior. Unknown query strategies fail closed, and a requested source
+filename such as `solution.py` supplies the corresponding language hint.
+
+Reason: the relaxed CAM query restored the correct held-out method to rank one
+in five of five public tasks, but passing all fallback rows through would place
+generic distractors into every packet. Normal CAM_Codx selection must improve
+recall without silently degrading packet precision.
+
+Safety: selection remains primary-only and read-only. It does not mine, call a
+provider, mutate a target or corpus, or claim that the selected method produced
+better software.
+
+## 2026-08-23: Present source limitations separately from adaptations
+
+Decision: parse and render CAM_CAM's bounded `source_limitations` and
+`adaptation_requirements` fields as visibly separate method-contract sections.
+
+Reason: the C29 source does not implement deterministic sorting. The sort is a
+valid target hardening requirement, but presenting it as an extracted source
+predicate would fabricate provenance.
+
+Safety: unknown fields remain excluded, legacy payloads remain compatible, and
+the brief continues to require target verification before positive trust.
+
 ## 2026-08-22: Show exact decision predicates in normal CAM_Codx evidence
 
 Decision: add CAM_CAM's bounded `decision_predicates` field to the immutable

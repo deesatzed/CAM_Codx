@@ -86,6 +86,8 @@ class MethodContract:
     recovery_behavior: str = ""
     verification: tuple[str, ...] = ()
     decision_predicates: tuple[str, ...] = ()
+    source_limitations: tuple[str, ...] = ()
+    adaptation_requirements: tuple[str, ...] = ()
     discriminative_terms: tuple[str, ...] = ()
     source_repo: str = ""
     source_revision: str = ""
@@ -102,6 +104,8 @@ class MethodContract:
             self.recovery_behavior,
             *self.verification,
             *self.decision_predicates,
+            *self.source_limitations,
+            *self.adaptation_requirements,
             *self.discriminative_terms,
         )
         if not any(isinstance(value, str) and value.strip() for value in semantic_values):
@@ -450,6 +454,8 @@ def _method_contract_from_result(result: dict[str, object]) -> MethodContract | 
         "recovery_behavior": text(raw, "recovery_behavior"),
         "verification": items(raw, "verification"),
         "decision_predicates": items(raw, "decision_predicates"),
+        "source_limitations": items(raw, "source_limitations"),
+        "adaptation_requirements": items(raw, "adaptation_requirements"),
         "discriminative_terms": items(raw, "discriminative_terms"),
         "source_repo": text(provenance, "source_repo", limit=500),
         "source_revision": text(provenance, "source_revision", limit=500),
@@ -509,6 +515,20 @@ def query_primary_corpus_read_only(
     except json.JSONDecodeError as exc:
         raise BriefValidationError("CAM brief-query did not return valid JSON") from exc
     return _validate_primary_payload(payload, clean_query)
+
+
+def select_cam_results_for_brief(payload: dict[str, object]) -> list[object]:
+    """Bound fallback recall to its strongest result before packet classification."""
+
+    results = payload.get("results")
+    if not isinstance(results, list):
+        raise BriefValidationError("CAM brief-query response results must be a list")
+    strategy = payload.get("query_strategy")
+    if strategy not in {None, "all_terms", "any_terms_fallback"}:
+        raise BriefValidationError("CAM brief-query query strategy is unsupported")
+    if strategy == "any_terms_fallback":
+        return results[:1]
+    return results
 
 
 def classify_cam_evidence(
@@ -725,8 +745,24 @@ def _infer_target_language(task_text: str, explicit_language: str | None) -> str
     if explicit_language and explicit_language.strip():
         return explicit_language.strip().lower()
     task_terms = _terms(task_text)
+    extension_languages = {
+        "python": (".py",),
+        "typescript": (".ts", ".tsx"),
+        "javascript": (".js", ".jsx"),
+        "rust": (".rs",),
+        "go": (".go",),
+        "swift": (".swift",),
+        "java": (".java",),
+        "kotlin": (".kt", ".kts"),
+    }
+    lowered_task = task_text.lower()
     for language in ("python", "typescript", "javascript", "rust", "go", "swift", "java", "kotlin"):
         if language in task_terms:
+            return language
+        if any(
+            re.search(rf"\b[a-z0-9_.-]+{re.escape(suffix)}\b", lowered_task)
+            for suffix in extension_languages[language]
+        ):
             return language
     return None
 
@@ -755,7 +791,7 @@ def build_development_brief(
     )
     evidence_items = classify_cam_evidence(
         request,
-        payload["results"],
+        select_cam_results_for_brief(payload),
         target_language=_infer_target_language(request.task_text, target_language),
         analogy_rationales=analogy_rationales,
     )
@@ -895,6 +931,16 @@ def render_markdown(brief: DevelopmentBrief) -> str:
                     lines.append(
                         "- Decision predicates: "
                         + "; ".join(contract.decision_predicates)
+                    )
+                if contract.source_limitations:
+                    lines.append(
+                        "- Source limitations: "
+                        + "; ".join(contract.source_limitations)
+                    )
+                if contract.adaptation_requirements:
+                    lines.append(
+                        "- Adaptation requirements: "
+                        + "; ".join(contract.adaptation_requirements)
                     )
                 if contract.discriminative_terms:
                     lines.append(

@@ -1,5 +1,25 @@
 # Progress
 
+## 2026-08-23 native CAM packet selection and adaptation labels
+
+- Added RED tests for `solution.py` language inference, strongest-only fallback
+  selection, unknown-strategy rejection, and separate source-limitation versus
+  adaptation-requirement rendering.
+- CAM_Codx now admits only CAM_CAM's top-ranked row after an
+  `any_terms_fallback`; exact all-terms behavior remains compatible.
+- The five-case disposable native-path proof selects exactly the correct method
+  into each packet with typed source provenance. The pinned old path selects
+  zero, preserving the causal before/after comparison.
+- Focused Development Brief/control-plane verification passes `61`; Ruff and
+  `git diff --check` pass. With a temporary sibling symlink to the same CAM_CAM
+  worktree, the full CAM_Codx suite passes `210`; the symlink was removed.
+- No provider, mining operation, target/corpus/config/profile mutation, model
+  change, or source-repository mutation occurred.
+
+Current status: the normal packet path is green on the bounded disposable
+five-method validation. Canonical-corpus coverage and builder gains remain
+separate claims.
+
 ## 2026-08-22 Development Brief decision-predicate fidelity
 
 - Added a RED fixture and assertion proving the typed Development Brief could

@@ -35,6 +35,14 @@ not passed through. This makes a method inspectable without presenting it as a
 verified implementation; target-specific tests and receipts still arbitrate
 whether reuse succeeded.
 
+Source limitations and adaptation requirements are shown separately. A source
+limitation states what the cited implementation does not guarantee; an
+adaptation requirement is new target hardening and must not be cited as source
+behavior. For long natural-language tasks, CAM may report a ranked any-term
+fallback after an exact all-terms miss. CAM_Codx presents only its strongest
+row and rejects unknown query strategies rather than treating broad recall as
+multiple equally applicable precedents.
+
 ## Safe default
 
 The first run uses only the named target and the explicitly supplied CAM

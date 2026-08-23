@@ -303,6 +303,12 @@ def test_classifier_distinguishes_direct_analogy_and_hypothesis() -> None:
     assert items[0].method_contract.decision_predicates == (
         "bool(environment.get('RETRY')) is true => retry; missing or empty => stop",
     )
+    assert items[0].method_contract.source_limitations == (
+        "The source does not provide a stable retry-jitter schedule.",
+    )
+    assert items[0].method_contract.adaptation_requirements == (
+        "Define deterministic jitter semantics before target adoption.",
+    )
     assert items[0].method_contract.source_revision == "a" * 40
     assert items[1].evidence_class is brief.EvidenceClass.TRANSFERABLE_ANALOGY
     assert "despite the Go" in items[1].why_it_applies
@@ -326,9 +332,42 @@ def test_classifier_distinguishes_direct_analogy_and_hypothesis() -> None:
         "- Decision predicates: bool(environment.get('RETRY')) is true => retry; "
         "missing or empty => stop"
     ) in rendered
+    assert "- Source limitations: The source does not provide a stable retry-jitter schedule." in rendered
+    assert (
+        "- Adaptation requirements: Define deterministic jitter semantics before target adoption."
+        in rendered
+    )
     assert "Source revision: `" + "a" * 40 + "`" in rendered
     assert "hidden_tests" not in rendered
     assert "must not appear" not in rendered
+
+
+def test_target_language_infers_python_from_requested_solution_file() -> None:
+    brief = _load_contract()
+
+    assert brief._infer_target_language("Create solution.py with a state boundary", None) == "python"
+
+
+def test_fallback_recall_selects_only_the_strongest_ranked_result() -> None:
+    brief = _load_contract()
+    results = [
+        {"methodology_id": "strongest"},
+        {"methodology_id": "generic-one"},
+        {"methodology_id": "generic-two"},
+    ]
+
+    selected = brief.select_cam_results_for_brief(
+        {"query_strategy": "any_terms_fallback", "results": results}
+    )
+
+    assert selected == [results[0]]
+    assert brief.select_cam_results_for_brief(
+        {"query_strategy": "all_terms", "results": results}
+    ) == results
+    with pytest.raises(brief.BriefValidationError, match="query strategy"):
+        brief.select_cam_results_for_brief(
+            {"query_strategy": "unbounded_recall", "results": results}
+        )
 
 
 def test_low_evidence_requests_named_scope_without_silently_expanding() -> None:
