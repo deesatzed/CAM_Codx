@@ -1,13 +1,38 @@
 # Progress
 
+## 2026-08-24 original-order Unicode and leakage skeleton
+
+- Unicode validation now scans the original scalar order before NFKC and scans
+  the normalized view again. A combining mark at a structural edge cannot be
+  hidden by composing with the preceding possessive `s`. Every Unicode general
+  category `C` scalar fails closed except the explicitly supported tab,
+  line-feed, and carriage-return whitespace; private-use and unassigned or
+  noncharacter scalars therefore cannot cloak repository or attribution
+  boundaries. Invalid surrogate input retains the earlier UTF-8 error.
+- Leakage-only matching uses a bounded NFKD security skeleton with combining
+  marks removed. Canonically decorated possessive-s forms converge on the
+  existing source-attribution grammar, while the skeleton is never used for
+  task decomposition, spans, offsets, IDs, or serialized source text. Exact
+  declaration-before-use matching occurs within the same skeleton, preserving
+  legitimate composed Unicode local owners and ordinary composed prose.
+- Strict TDD RED was `11 failed, 4 passed`. GREEN is `386` resolver tests and
+  `403` resolver plus Development Brief regressions. Five maximum-size timing
+  controls pass in `0.13s` total against their `2.0s` per-case ceiling. Ruff
+  and `git diff --check` pass.
+- No provider/Context7 call, CAM command, mining, database access or mutation,
+  corpus/profile/config change, target write, or N01-N25 source/evaluator
+  inspection occurred.
+
 ## 2026-08-24 fail-closed Unicode structural boundaries
 
-- Task validation now performs one bounded NFKC inspection pass before syntax,
+- This remediation introduced the bounded NFKC inspection before syntax,
   leakage, attribution, or repository parsing. It rejects Unicode format
   controls, a frozen closed table of default-ignorable code points, and control
   characters other than the explicitly supported tab, line-feed, and
-  carriage-return whitespace. Zero-width characters can no longer cloak token
-  boundaries or change which downstream rejection happens first.
+  carriage-return whitespace. The later original-order pass documented above
+  now precedes it and expands the rejection to every ambiguous category `C`
+  scalar. Zero-width characters cannot cloak token boundaries or change which
+  downstream rejection happens first.
 - Residual combining marks fail closed at token, punctuation, symbol, control,
   or adjacent-mark structural edges. Combining sequences that safely compose
   during normalization and ordinary composed Unicode identifiers/prose remain

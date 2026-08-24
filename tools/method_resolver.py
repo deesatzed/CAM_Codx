@@ -520,13 +520,11 @@ def _is_structural_edge_character(character: str) -> bool:
     }
 
 
-def _validate_unicode_boundaries(value: str) -> None:
-    normalized = unicodedata.normalize("NFKC", value)
-    for index, character in enumerate(normalized):
+def _validate_unicode_scan(value: str) -> None:
+    for index, character in enumerate(value):
         category = unicodedata.category(character)
         if (
-            category == "Cf"
-            or (category == "Cc" and character not in _SUPPORTED_CONTROL_WHITESPACE)
+            (category[0] == "C" and character not in _SUPPORTED_CONTROL_WHITESPACE)
             or _is_default_ignorable(character)
         ):
             raise TaskDecompositionError(
@@ -534,16 +532,29 @@ def _validate_unicode_boundaries(value: str) -> None:
             )
         if category[0] != "M":
             continue
-        at_left_edge = index == 0 or _is_structural_edge_character(
-            normalized[index - 1]
-        )
-        at_right_edge = index + 1 == len(normalized) or _is_structural_edge_character(
-            normalized[index + 1]
+        at_left_edge = index == 0 or _is_structural_edge_character(value[index - 1])
+        at_right_edge = index + 1 == len(value) or _is_structural_edge_character(
+            value[index + 1]
         )
         if at_left_edge or at_right_edge:
             raise TaskDecompositionError(
                 "task text contains ambiguous Unicode boundary characters"
             )
+
+
+def _validate_unicode_boundaries(value: str) -> None:
+    _validate_unicode_scan(value)
+    normalized = unicodedata.normalize("NFKC", value)
+    if normalized != value:
+        _validate_unicode_scan(normalized)
+
+
+def _unicode_security_skeleton(value: str) -> str:
+    return "".join(
+        character
+        for character in unicodedata.normalize("NFKD", value)
+        if unicodedata.category(character)[0] != "M"
+    )
 
 
 def _strip_unicode_edge_wrappers(value: str) -> str:
@@ -964,9 +975,10 @@ def _validate_task_text(task_text: object) -> str:
     _validate_balanced_syntax(task_text)
     _quote_ranges(task_text)
     normalized = _normalize(task_text)
-    leakage_form = _leakage_normal_form(task_text)
-    case_identifier_form = unicodedata.normalize("NFKC", task_text).casefold()
-    attribution_form = unicodedata.normalize("NFKC", task_text)
+    security_form = _unicode_security_skeleton(task_text)
+    leakage_form = _leakage_normal_form(security_form)
+    case_identifier_form = unicodedata.normalize("NFKC", security_form).casefold()
+    attribution_form = unicodedata.normalize("NFKC", security_form)
     if (
         _contains_case_identifier(case_identifier_form)
         or any(pattern.search(leakage_form) for pattern in _LEAKAGE_PATTERNS)

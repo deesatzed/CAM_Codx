@@ -701,6 +701,84 @@ def test_unicode_cloaking_at_attribution_and_url_edges_fails_closed(
 @pytest.mark.parametrize(
     "task",
     (
+        "Borrow QuasarForge's\u0301 recovery method.",
+        "Borrow QuasarForge’s\u0301 recovery method.",
+    ),
+)
+def test_original_order_combining_mark_after_possessive_s_fails_closed(
+    task: str,
+) -> None:
+    resolver = _load_resolver()
+
+    with pytest.raises(resolver.TaskDecompositionError, match="Unicode"):
+        resolver.decompose_task(task)
+
+    forged = replace(resolver.decompose_task("Persist state."), task_text=task)
+    with pytest.raises(resolver.TaskDecompositionError, match="Unicode"):
+        resolver.serialize_resolution(forged)
+
+
+@pytest.mark.parametrize("possessive_s", ("ś", "š", "ş", "ṡ", "ṣ"))
+def test_precomposed_possessive_s_is_rejected_as_source_attribution(
+    possessive_s: str,
+) -> None:
+    resolver = _load_resolver()
+    task = f"Borrow QuasarForge'{possessive_s} recovery method."
+
+    with pytest.raises(resolver.TaskDecompositionError, match="leakage"):
+        resolver.decompose_task(task)
+
+    forged = replace(resolver.decompose_task("Persist state."), task_text=task)
+    with pytest.raises(resolver.TaskDecompositionError, match="leakage"):
+        resolver.serialize_resolution(forged)
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Reuse \ue000https://github.com/owner/repository.",
+        "Reuse \ufdd0https://github.com/owner/repository.",
+        "Borrow QuasarSystems\ue000' recovery method.",
+        "Borrow QuasarSystems\ufdd0' recovery method.",
+    ),
+)
+def test_private_use_and_noncharacter_cloaking_fails_closed(task: str) -> None:
+    resolver = _load_resolver()
+
+    with pytest.raises(resolver.TaskDecompositionError, match="Unicode"):
+        resolver.decompose_task(task)
+
+    forged = replace(resolver.decompose_task("Persist state."), task_text=task)
+    with pytest.raises(resolver.TaskDecompositionError, match="Unicode"):
+        resolver.serialize_resolution(forged)
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Create QuasarForge. Implement QuasarForge'ś retry strategy.",
+        "Create Systèmeś. Implement Systèmeś' retry strategy.",
+        "Create Systèmes. Implement Systèmes' retry strategy.",
+        "Create CaféRunner. Implement CaféRunner's retry strategy.",
+        "Document façade, naïve, and café behavior.",
+    ),
+)
+def test_security_skeleton_preserves_local_composed_unicode_controls(
+    task: str,
+) -> None:
+    resolver = _load_resolver()
+
+    result = resolver.decompose_task(task)
+
+    assert result.task_text == task
+    assert resolver.serialize_resolution(result) == resolver.serialize_resolution(
+        resolver.decompose_task(task)
+    )
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
         "Persist\u2060 state.",
         "Persist\x00 state.",
         "Persist state.\x07",
