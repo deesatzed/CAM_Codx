@@ -1,5 +1,34 @@
 # Progress
 
+## 2026-08-24 deterministic task-obligation decomposition
+
+- Added a frozen, schema-versioned CAM_Codx task resolution contract with
+  stable typed obligations for invariant, failure, recovery, safety, order,
+  persistence, verification, current API, and unresolved method needs.
+- The resolver preserves the exact public task buffer plus the exact substring
+  and offsets supporting every obligation. Normalization, task/span/obligation
+  counts, and discriminative terms are explicitly bounded; optional text stays
+  visible as non-required and unrecognized text stays `unresolved`.
+- Leakage gates reject donor-directed source reuse, benchmark case IDs,
+  hidden/held-out test terms, and repository URLs without rejecting ordinary
+  repository-boundary language. No per-case or donor synonym table is present.
+- Strict TDD evidence: the initial focused run was RED with `18 failed` at the
+  missing production-module boundary. A narrower fail-closed current-API test
+  and repository-language false-positive test were each observed RED before
+  their production corrections. The focused suite now passes `20`; Ruff and
+  `git diff --check` pass. The final resolver plus Development Brief regression
+  gate passes `37`.
+- Tests use exact original public C01, C07, C11, C26, and C31 task text plus
+  novel generic-cue and lunar-shader controls. Repeated resolution serializes
+  to byte-identical canonical JSON with stable IDs and ordering.
+- No provider/Context7 call, CAM command, mining, database read or mutation,
+  corpus/profile/config change, target write, or N01-N25 source/evaluator
+  inspection occurred.
+
+Current status: deterministic local decomposition is green. Corpus acquisition,
+ranking, minimum-set selection, packet construction, and adaptive source routing
+remain later tasks and are not implied by these obligations.
+
 ## 2026-08-23 native CAM packet selection and adaptation labels
 
 - Added RED tests for `solution.py` language inference, strongest-only fallback

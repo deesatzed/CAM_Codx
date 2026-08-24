@@ -1,5 +1,26 @@
 # Decisions
 
+## 2026-08-24: Decompose task obligations locally before corpus acquisition
+
+Decision: CAM_Codx converts bounded public task text into frozen obligations
+for invariants, failure, recovery, safety, order, persistence, verification,
+current API needs, and unresolved spans. Each obligation retains the exact
+source substring and offsets, stable content-derived identity, bounded generic
+terms, and whether the source text explicitly made it optional. Serialization
+is canonical schema-versioned JSON.
+
+Reason: later CAM acquisition must query independently supported method needs
+without importing donor identities, benchmark case labels, or hidden-test
+knowledge. Generic syntactic cues provide a deterministic local starting point;
+they do not claim semantic completeness. A span without a supported cue remains
+`unresolved` instead of being guessed.
+
+Safety: decomposition is pure and local. It performs no provider or Context7
+call, corpus query, mining, database access, target mutation, or evidence
+creation. Current-API classification requires an explicit currency cue or a
+concrete version, so an internal API name or supplied runtime-version field
+does not independently recommend external documentation.
+
 ## 2026-08-23: Bound fallback recall before normal packet presentation
 
 Decision: when CAM_CAM reports `any_terms_fallback`, CAM_Codx presents only the
