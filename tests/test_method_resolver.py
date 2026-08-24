@@ -553,6 +553,40 @@ def test_attribution_rejects_supported_apostrophes_and_long_modifiers(task: str)
 @pytest.mark.parametrize(
     "task",
     (
+        "Borrow QuasarForge's " + "carefully " * 70 + "recovery strategy.",
+        'Borrow "QuasarForge\'s" recovery strategy.',
+        "Borrow “QuasarForge’s” recovery method.",
+        "Borrow **QuasarForge's** recovery pattern.",
+        "Borrow “Quasar Forge’s” recovery technique.",
+        'Apply the recovery method from "QuasarForge".',
+        "Apply the recovery strategy from **QuasarForge**.",
+        "Apply the recovery implementation from **Quasar Forge**.",
+    ),
+)
+def test_attribution_has_no_modifier_or_text_wrapper_escape(task: str) -> None:
+    resolver = _load_resolver()
+
+    with pytest.raises(resolver.TaskDecompositionError, match="leakage"):
+        resolver.decompose_task(task)
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Create WorkflowRunner. Implement **WorkflowRunner's** retry strategy.",
+        'Create WorkflowRunner. Apply the retry method from "WorkflowRunner".',
+        "Define workflow runner. Apply the retry method from “workflow runner”.",
+    ),
+)
+def test_attribution_wrappers_preserve_exact_prior_local_declarations(task: str) -> None:
+    resolver = _load_resolver()
+
+    assert resolver.decompose_task(task).task_text == task
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
         "Create ---.",
         "Create ---. Implement ---'s retry strategy.",
         "Create `---`. Implement `$$$`'s retry strategy.",
@@ -613,6 +647,22 @@ def test_case_id_leakage_rejects_separators_between_digits(task: str) -> None:
 @pytest.mark.parametrize(
     "task",
     (
+        "Implement C     0     1.",
+        "Implement C-----0-----1.",
+        "Implement n________________0...............7.",
+        "Implement Ｃ　　　　　０　　　　　１.",
+    ),
+)
+def test_case_id_leakage_has_no_separator_count_escape(task: str) -> None:
+    resolver = _load_resolver()
+
+    with pytest.raises(resolver.TaskDecompositionError, match="leakage"):
+        resolver.decompose_task(task)
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
         "Reuse HTTPS://GitHub.COM./owner/repository.",
         "Reuse https://user@github.com:443/owner/repository.",
         "Reuse https://GITLAB.com:443/owner/repository.git.",
@@ -623,6 +673,26 @@ def test_case_id_leakage_rejects_separators_between_digits(task: str) -> None:
     ),
 )
 def test_repository_url_identity_variants_are_leakage(task: str) -> None:
+    resolver = _load_resolver()
+
+    with pytest.raises(resolver.TaskDecompositionError, match="leakage"):
+        resolver.decompose_task(task)
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Reuse https://github%2ecom/owner/repository.",
+        r"Reuse https:\github.com\owner\repository.",
+        r"Reuse https:\\github.com\owner\repository.",
+        r"Reuse https://user@GITHUB%2ECOM.:443\owner\repository.",
+        "Reuse ssh://git@github%2ecom:22/owner/repository.",
+        "Reuse git@github%2ecom:/owner/repository.",
+    ),
+)
+def test_repository_url_identity_canonicalization_rejects_obfuscation(
+    task: str,
+) -> None:
     resolver = _load_resolver()
 
     with pytest.raises(resolver.TaskDecompositionError, match="leakage"):
@@ -652,6 +722,23 @@ def test_serialization_cannot_emit_normalized_case_or_repository_leakage() -> No
     ),
 )
 def test_normalized_leakage_seals_do_not_overmatch_words_or_numbers(task: str) -> None:
+    resolver = _load_resolver()
+
+    assert resolver.decompose_task(task).task_text == task
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Render CamelC     0     1 output.",
+        "Render C     0     12 palette entries.",
+        "Discuss github%2ecom repository naming in plain prose.",
+        "Use git at github.com in the repository documentation.",
+    ),
+)
+def test_canonical_leakage_scans_preserve_identifier_and_prose_controls(
+    task: str,
+) -> None:
     resolver = _load_resolver()
 
     assert resolver.decompose_task(task).task_text == task
@@ -1056,6 +1143,38 @@ def test_prepositional_phrase_cannot_supply_persistence_direct_object(task: str)
 @pytest.mark.parametrize(
     "task",
     (
+        "Save time via application state.",
+        "Store credit across records.",
+        "Restore confidence over configuration data.",
+        "Save energy per state update.",
+        "Store credit without an artifact.",
+        "Save latency amid session data.",
+    ),
+)
+def test_any_secondary_phrase_before_artifact_head_remains_unresolved(
+    task: str,
+) -> None:
+    resolver = _load_resolver()
+
+    assert "persistence" not in _kinds(resolver.decompose_task(task))
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Paint the words save state on a sign.",
+        "Quote 'store records' in documentation.",
+    ),
+)
+def test_persistence_words_used_as_text_are_not_action_predicates(task: str) -> None:
+    resolver = _load_resolver()
+
+    assert "persistence" not in _kinds(resolver.decompose_task(task))
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
         "Save application state in memory.",
         "Store result artifact in storage.",
         "Restore configuration from backup.",
@@ -1076,6 +1195,26 @@ def test_true_direct_object_remains_persistent_before_preposition(task: str) -> 
     ),
 )
 def test_multiword_local_persistence_objects_remain_positive(task: str) -> None:
+    resolver = _load_resolver()
+
+    assert "persistence" in _kinds(resolver.decompose_task(task))
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Save the durable application state.",
+        "Store a canonical result artifact.",
+        "Restore prior session settings.",
+        "Reload the encrypted checkpoint.",
+        "Write completed workflow data.",
+        "Save durable state via an atomic writer.",
+        "Store result artifact across replicas.",
+    ),
+)
+def test_closed_persistence_object_grammar_accepts_local_direct_heads(
+    task: str,
+) -> None:
     resolver = _load_resolver()
 
     assert "persistence" in _kinds(resolver.decompose_task(task))
@@ -1200,6 +1339,27 @@ def test_maximum_size_single_token_decomposes_within_generous_runtime() -> None:
     elapsed = time.perf_counter() - started
 
     assert result.task_text == task
+    assert elapsed < 2.0
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Implement C" + "-" * 7_000 + "0" + "_" * 7_000 + "1.",
+        "Borrow QuasarForge's "
+        + "layered " * 1_500
+        + "recovery strategy.",
+    ),
+)
+def test_maximum_size_leakage_scans_remain_linear_and_fail_closed(task: str) -> None:
+    resolver = _load_resolver()
+
+    started = time.perf_counter()
+    with pytest.raises(resolver.TaskDecompositionError, match="leakage"):
+        resolver.decompose_task(task)
+    elapsed = time.perf_counter() - started
+
+    assert len(task.encode("utf-8")) <= resolver.MAX_TASK_BYTES
     assert elapsed < 2.0
 
 

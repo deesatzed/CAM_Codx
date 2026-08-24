@@ -14,6 +14,7 @@ import hashlib
 import json
 import re
 import unicodedata
+from urllib.parse import unquote, urlsplit
 
 
 SCHEMA_VERSION = 1
@@ -23,36 +24,148 @@ MAX_OBLIGATIONS = 256
 MAX_DISCRIMINATIVE_TERMS = 12
 MAX_TERM_CHARACTERS = 64
 MAX_LOCAL_DECLARATIONS = 16
-MAX_ATTRIBUTION_SCAN_TOKENS = 64
 MAX_ATTRIBUTION_OWNER_TOKENS = 8
 
 
-_PERSISTENCE_OBJECT = (
-    r"(?:state|settings?|configs?|configurations?|data|records?|results?|artifacts?|"
-    r"checkpoints?|progress|files?|documents?|entries|events?|queues?|journals?|"
-    r"snapshots?|metadata|caches?|sessions?|receipts?|outputs?|work|collections?|"
-    r"mappings?|contents?|payloads?|messages?|logs?|indexes?|baselines?|bytes|"
-    r"evidence|trails?|storage)"
-)
-_PERSISTENCE_ACTION = r"(?:persist|save|store|write|append|restore|reload)"
-_PERSISTENCE_ACTION_INFLECTED = (
-    r"(?:persists?|persisted|saved|stored|writes?|wrote|written|appends?|appended|"
-    r"restores?|restored|reloads?|reloaded)"
-)
-_PERSISTENCE_MODIFIER = (
-    r"(?:(?!(?:after|and|at|before|but|by|during|for|from|in|into|of|on|through|"
-    r"to|under|until|when|while|with|within)\b)"
-    r"(?![a-z0-9_-]*ing\b)"
-    r"[a-z0-9_-]+\s+){0,3}"
-)
-_PERSISTENCE_PREFIX = (
-    r"(?:^|[,;:]\s+|\b(?:first|then|next|finally|must|should|shall|will|can|to)\s+)"
-)
-_PERSISTENCE_DIRECT_OBJECT_PATTERN = re.compile(
-    rf"{_PERSISTENCE_PREFIX}{_PERSISTENCE_ACTION}\b\s+"
-    rf"(?:the\s+|a\s+|an\s+)?{_PERSISTENCE_MODIFIER}{_PERSISTENCE_OBJECT}\b"
-    r"\s*[.!?]?$"
-)
+_PERSISTENCE_ACTIONS = {"append", "persist", "reload", "restore", "save", "store", "write"}
+_PERSISTENCE_INFLECTIONS = {
+    "appended",
+    "appends",
+    "persisted",
+    "persists",
+    "reloaded",
+    "reloads",
+    "restored",
+    "restores",
+    "saved",
+    "saves",
+    "stored",
+    "stores",
+    "writes",
+    "written",
+    "wrote",
+}
+_PERSISTENCE_OBJECT_HEADS = {
+    "artifact",
+    "artifacts",
+    "baseline",
+    "baselines",
+    "bytes",
+    "cache",
+    "caches",
+    "checkpoint",
+    "checkpoints",
+    "collection",
+    "collections",
+    "config",
+    "configs",
+    "configuration",
+    "configurations",
+    "content",
+    "contents",
+    "data",
+    "document",
+    "documents",
+    "entry",
+    "entries",
+    "event",
+    "events",
+    "evidence",
+    "file",
+    "files",
+    "index",
+    "indexes",
+    "journal",
+    "journals",
+    "log",
+    "logs",
+    "mapping",
+    "mappings",
+    "message",
+    "messages",
+    "metadata",
+    "output",
+    "outputs",
+    "payload",
+    "payloads",
+    "progress",
+    "queue",
+    "queues",
+    "receipt",
+    "receipts",
+    "record",
+    "records",
+    "result",
+    "results",
+    "session",
+    "sessions",
+    "setting",
+    "settings",
+    "shader",
+    "shaders",
+    "snapshot",
+    "snapshots",
+    "state",
+    "storage",
+    "trail",
+    "trails",
+    "work",
+}
+_PERSISTENCE_SAFE_MODIFIERS = {
+    "and",
+    "application",
+    "bright",
+    "cached",
+    "canonical",
+    "code_identifier",
+    "completed",
+    "current",
+    "durable",
+    "encrypted",
+    "fast",
+    "local",
+    "pending",
+    "prior",
+    "remote",
+    "result",
+    "runtime",
+    "serialized",
+    "session",
+    "shader",
+    "source",
+    "target",
+    "task",
+    "user",
+    "workflow",
+}
+_PERSISTENCE_PREFIX_WORDS = {
+    "and",
+    "but",
+    "can",
+    "finally",
+    "first",
+    "must",
+    "next",
+    "please",
+    "shall",
+    "should",
+    "then",
+    "to",
+    "will",
+}
+_PERSISTENCE_AUXILIARIES = {
+    "are",
+    "had",
+    "has",
+    "have",
+    "is",
+    "must",
+    "shall",
+    "should",
+    "was",
+    "were",
+    "will",
+}
 
 
 class TaskDecompositionError(ValueError):
@@ -91,6 +204,15 @@ class TaskResolution:
     obligations: tuple[TaskObligation, ...]
 
 
+@dataclass(frozen=True)
+class _ScanToken:
+    raw: str
+    core: str
+    word: str
+    start: int
+    ends_statement: bool
+
+
 # These are domain-independent method cues, not case identifiers or mappings.
 # Each rule is intentionally inspectable and operates on one exact source span.
 _CUE_PATTERNS: dict[ObligationKind, tuple[re.Pattern[str], ...]] = {
@@ -126,32 +248,6 @@ _CUE_PATTERNS: dict[ObligationKind, tuple[re.Pattern[str], ...]] = {
             r"precedence|contiguous|sequence|arrival order|previous|dependencies)\b"
         ),
     ),
-    ObligationKind.PERSISTENCE: (
-        re.compile(
-            rf"{_PERSISTENCE_PREFIX}persist\b\s+(?:the\s+|a\s+|an\s+)?"
-            rf"{_PERSISTENCE_MODIFIER}[a-z0-9_-]+"
-        ),
-        re.compile(
-            rf"{_PERSISTENCE_PREFIX}{_PERSISTENCE_ACTION}\b\s+"
-            rf"(?:the\s+|a\s+|an\s+)?{_PERSISTENCE_MODIFIER}{_PERSISTENCE_OBJECT}\b"
-        ),
-        re.compile(
-            rf"\b{_PERSISTENCE_ACTION_INFLECTED}\b\s+"
-            rf"(?:the\s+|a\s+|an\s+)?{_PERSISTENCE_MODIFIER}{_PERSISTENCE_OBJECT}\b"
-        ),
-        re.compile(
-            rf"\b{_PERSISTENCE_OBJECT}\b\s+"
-            rf"(?:(?:is|are|was|were|has|have|had|must|should|will)\s+){{0,2}}"
-            rf"{_PERSISTENCE_ACTION_INFLECTED}\b"
-        ),
-        re.compile(
-            rf"(?:^|[,;:]\s+)(?:the\s+)?(?:[a-z0-9_-]+\s+){{0,2}}"
-            rf"{_PERSISTENCE_OBJECT}\b\s+"
-            rf"(?:(?:must|should|shall|will|can)\s+)?(?:survive|survives|survived)\b"
-            r"\s+(?:(?:across|after|through)\s+)?(?:a\s+|the\s+)?"
-            r"(?:restart|restarts|reboot|relaunch|shutdown|interruption)\b"
-        ),
-    ),
     ObligationKind.RECOVERY: (
         re.compile(
             r"\b(?:recover(?:y|ed|able)?|resume|resumes|retry|retries|backoff|"
@@ -178,32 +274,18 @@ _CUE_PATTERNS: dict[ObligationKind, tuple[re.Pattern[str], ...]] = {
 }
 
 _LEAKAGE_PATTERNS = (
-    re.compile(
-        r"(?<![a-z0-9])[cn](?:[\W_]{0,4})\d(?:[\W_]{0,4})\d"
-        r"(?![\W_]{0,4}\d)(?![a-z0-9])"
-    ),
     re.compile(r"\bhidden[\W_]*tests?\b"),
     re.compile(r"\bheld[\W_]*out\b"),
     re.compile(r"\bdonor\b"),
 )
-_REPOSITORY_URL_PATTERNS = (
-    re.compile(
-        r"\b(?:https?|ssh|git)://(?:[^\s/@]+@)?"
-        r"(?:www\.)?(?:github\.com|gitlab\.com|bitbucket\.(?:org|com))\.?(?::\d+)?/"
-        r"[^\s/]+/[^\s]+",
-        flags=re.IGNORECASE,
-    ),
-    re.compile(
-        r"(?<![\w.-])(?:[^\s/@:]+@)?"
-        r"(?:github\.com|gitlab\.com|bitbucket\.(?:org|com))\.?:[^\s/]+/[^\s]+",
-        flags=re.IGNORECASE,
-    ),
-)
+_REPOSITORY_HOSTS = {
+    "bitbucket.com",
+    "bitbucket.org",
+    "github.com",
+    "gitlab.com",
+}
+_REPOSITORY_SCHEMES = {"git", "http", "https", "ssh"}
 
-_METHOD_ARTIFACT = (
-    r"(?:method|pattern|algorithm|implementation|approach|strategy|technique|"
-    r"procedure|workflow|mechanism|recipe|design|code)"
-)
 _METHOD_ARTIFACT_WORDS = {
     "algorithm",
     "approach",
@@ -222,12 +304,6 @@ _METHOD_ARTIFACT_WORDS = {
 _APOSTROPHE_TRANSLATION = str.maketrans({"’": "'", "ʼ": "'", "＇": "'"})
 _IDENTIFIER_TOKEN = r"[\w-]+(?:\.[\w-]+)*"
 _BACKTICK_IDENTIFIER = r"`[^`\r\n]{1,128}`"
-_DIRECTIONAL_ATTRIBUTION_PATTERN = re.compile(
-    rf"\b{_METHOD_ARTIFACT}\b\s+(?:from|by|according\s+to)\s+(?P<definite>the\s+)?"
-    rf"(?P<source>{_BACKTICK_IDENTIFIER}|{_IDENTIFIER_TOKEN}"
-    rf"(?:\s+{_IDENTIFIER_TOKEN}){{0,3}})",
-    flags=re.IGNORECASE,
-)
 _DECLARATION_PATTERN = re.compile(
     r"(?:^|(?<=[.!?;]))\s*(?:create|define|declare|construct|instantiate|introduce|"
     r"build)\s+(?:a\s+|an\s+|the\s+)?"
@@ -380,6 +456,80 @@ def _leakage_normal_form(value: str) -> str:
     return separated_camel.casefold()
 
 
+def _contains_case_identifier(value: str) -> bool:
+    """Recognize C/N plus exactly two digits with arbitrary separators, linearly."""
+
+    index = 0
+    while index < len(value):
+        if value[index] not in {"c", "n"} or (
+            index > 0 and value[index - 1].isalnum()
+        ):
+            index += 1
+            continue
+
+        cursor = index + 1
+        while cursor < len(value) and not value[cursor].isalnum():
+            cursor += 1
+        if cursor == len(value) or not value[cursor].isdigit():
+            index += 1
+            continue
+
+        cursor += 1
+        while cursor < len(value) and not value[cursor].isalnum():
+            cursor += 1
+        if cursor == len(value) or not value[cursor].isdigit():
+            index += 1
+            continue
+
+        after = cursor + 1
+        if after == len(value) or not value[after].isalnum():
+            return True
+        index += 1
+    return False
+
+
+def _repository_path_has_identity(path: str) -> bool:
+    return len(tuple(part for part in path.split("/") if part)) >= 2
+
+
+def _canonical_repository_candidate(raw: str) -> str:
+    candidate = unicodedata.normalize("NFKC", raw).strip(
+        "\"'“”‘’()[]{}<>,;!?*`"
+    )
+    candidate = unquote(candidate).replace("\\", "/")
+    candidate = re.sub(
+        r"^([a-z][a-z0-9+.-]*):/+", r"\1://", candidate, count=1, flags=re.IGNORECASE
+    )
+    return candidate
+
+
+def _is_repository_url_candidate(raw: str) -> bool:
+    candidate = _canonical_repository_candidate(raw)
+    if "://" in candidate:
+        try:
+            parsed = urlsplit(candidate)
+            host = (parsed.hostname or "").casefold().rstrip(".")
+        except ValueError:
+            return False
+        return (
+            parsed.scheme.casefold() in _REPOSITORY_SCHEMES
+            and host.removeprefix("www.") in _REPOSITORY_HOSTS
+            and _repository_path_has_identity(parsed.path)
+        )
+
+    if ":" not in candidate:
+        return False
+    authority, path = candidate.split(":", 1)
+    if "/" not in path:
+        return False
+    host = authority.rsplit("@", 1)[-1].casefold().rstrip(".")
+    return host in _REPOSITORY_HOSTS and _repository_path_has_identity(path)
+
+
+def _contains_repository_url(value: str) -> bool:
+    return any(_is_repository_url_candidate(match.group(0)) for match in re.finditer(r"\S+", value))
+
+
 def _entity_identity(value: str) -> str:
     separated_camel = re.sub(
         r"(?<=[a-z0-9])(?=[A-Z])", " ", unicodedata.normalize("NFKC", value)
@@ -407,45 +557,108 @@ def _validate_balanced_syntax(task_text: str) -> None:
         raise TaskDecompositionError("task text contains unbalanced or mismatched syntax")
 
 
-def _scan_word(token: str) -> str:
-    return _normalize(token.strip(".,!?;:()[]{}\"`"))
+_TEXT_WRAPPER_PAIRS = (
+    ("**", "**"),
+    ("__", "__"),
+    ("\"", "\""),
+    ("“", "”"),
+    ("‘", "’"),
+    ("'", "'"),
+    ("`", "`"),
+    ("*", "*"),
+    ("_", "_"),
+)
+
+
+def _unwrap_text_token(raw: str) -> str:
+    core = raw.strip(".,!?;:()[]{}<>")
+    changed = True
+    while changed and core:
+        changed = False
+        for opening, closing in _TEXT_WRAPPER_PAIRS:
+            if core.startswith(opening) and core.endswith(closing) and len(core) > len(
+                opening
+            ) + len(closing):
+                core = core[len(opening) : -len(closing)]
+                changed = True
+                break
+    core = core.lstrip("\"“‘`*_").rstrip("\"”’`*_")
+    return core.translate(_APOSTROPHE_TRANSLATION)
 
 
 def _token_ends_statement(token: str) -> bool:
-    return token.rstrip(")]}").endswith((".", "!", "?", ";"))
+    return token.rstrip(")]}'\"”’`*_").endswith((".", "!", "?", ";"))
 
 
-def _possessive_attributions(task_text: str) -> tuple[tuple[str, int], ...]:
-    normalized_apostrophes = task_text.translate(_APOSTROPHE_TRANSLATION)
-    if "'s" not in normalized_apostrophes.casefold():
-        return ()
-    tokens = tuple(re.finditer(r"\S+", normalized_apostrophes))
+def _attribution_tokens(task_text: str) -> tuple[_ScanToken, ...]:
+    return tuple(
+        _ScanToken(
+            raw=match.group(0),
+            core=_unwrap_text_token(match.group(0)),
+            word=_normalize(_unwrap_text_token(match.group(0))),
+            start=match.start(),
+            ends_statement=_token_ends_statement(match.group(0)),
+        )
+        for match in re.finditer(r"\S+", task_text)
+    )
+
+
+def _possessive_attributions(
+    tokens: tuple[_ScanToken, ...],
+) -> tuple[tuple[str, int], ...]:
+    artifact_later = [False] * len(tokens)
+    seen_artifact = False
+    for index in range(len(tokens) - 1, -1, -1):
+        token = tokens[index]
+        if token.ends_statement:
+            seen_artifact = False
+        artifact_later[index] = seen_artifact
+        if token.word in _METHOD_ARTIFACT_WORDS:
+            seen_artifact = True
+
     attributions: list[tuple[str, int]] = []
-    for index, token_match in enumerate(tokens):
-        raw = token_match.group(0)
-        core = raw.rstrip(".,!?;:)]}")
-        if not core.casefold().endswith("'s"):
+    for index, token in enumerate(tokens):
+        if not token.core.casefold().endswith("'s") or not artifact_later[index]:
             continue
-        artifact_found = False
-        for following in tokens[
-            index + 1 : index + 1 + MAX_ATTRIBUTION_SCAN_TOKENS
-        ]:
-            if _scan_word(following.group(0)) in _METHOD_ARTIFACT_WORDS:
-                artifact_found = True
-                break
-            if _token_ends_statement(following.group(0)):
-                break
-        if not artifact_found:
-            continue
-        owner_parts = [core[:-2]]
+        owner_parts = [token.core[:-2]]
         preceding = index - 1
         while preceding >= 0 and len(owner_parts) < MAX_ATTRIBUTION_OWNER_TOKENS:
-            previous = tokens[preceding].group(0)
-            if _token_ends_statement(previous):
+            previous = tokens[preceding]
+            if previous.ends_statement:
                 break
-            owner_parts.insert(0, previous)
+            owner_parts.insert(0, previous.core)
             preceding -= 1
-        attributions.append((" ".join(owner_parts), token_match.start()))
+        attributions.append((" ".join(owner_parts), token.start))
+    return tuple(attributions)
+
+
+def _directional_attributions(
+    tokens: tuple[_ScanToken, ...],
+) -> tuple[tuple[str, bool, int], ...]:
+    attributions: list[tuple[str, bool, int]] = []
+    for index, token in enumerate(tokens):
+        if token.word not in _METHOD_ARTIFACT_WORDS:
+            continue
+        cursor = index + 1
+        if cursor >= len(tokens):
+            continue
+        if tokens[cursor].word == "according":
+            cursor += 1
+            if cursor >= len(tokens) or tokens[cursor].word != "to":
+                continue
+        elif tokens[cursor].word not in {"by", "from"}:
+            continue
+        cursor += 1
+        definite = cursor < len(tokens) and tokens[cursor].word == "the"
+        if definite:
+            cursor += 1
+        source_parts: list[str] = []
+        while cursor < len(tokens) and len(source_parts) < 4:
+            source_parts.append(tokens[cursor].core)
+            if tokens[cursor].ends_statement:
+                break
+            cursor += 1
+        attributions.append((" ".join(source_parts), definite, token.start))
     return tuple(attributions)
 
 
@@ -514,7 +727,8 @@ def _is_generic_local_reference(source: str, definite: str | None) -> bool:
 
 def _contains_structural_source_attribution(task_text: str) -> bool:
     declarations = _declared_entities(task_text)
-    for owner, position in _possessive_attributions(task_text):
+    tokens = _attribution_tokens(task_text)
+    for owner, position in _possessive_attributions(tokens):
         attributed_entity = _attributed_entity(owner)
         if not _entity_identity(attributed_entity):
             return True
@@ -522,10 +736,11 @@ def _contains_structural_source_attribution(task_text: str) -> bool:
             attributed_entity, position, declarations
         ) and not (_is_generic_local_role(_attribution_owner_phrase(owner))):
             return True
-    for match in _DIRECTIONAL_ATTRIBUTION_PATTERN.finditer(task_text):
-        source = match.group("source")
-        if not _matches_prior_declaration(source, match.start(), declarations) and not (
-            _is_generic_local_reference(source, match.group("definite"))
+    for source, definite, position in _directional_attributions(tokens):
+        if not _entity_identity(source):
+            return True
+        if not _matches_prior_declaration(source, position, declarations) and not (
+            _is_generic_local_reference(source, "the" if definite else None)
         ):
             return True
     return False
@@ -543,18 +758,106 @@ def _validate_task_text(task_text: object) -> str:
     _validate_balanced_syntax(task_text)
     normalized = _normalize(task_text)
     leakage_form = _leakage_normal_form(task_text)
+    case_identifier_form = unicodedata.normalize("NFKC", task_text).casefold()
     attribution_form = unicodedata.normalize("NFKC", task_text)
     if (
-        any(pattern.search(leakage_form) for pattern in _LEAKAGE_PATTERNS)
-        or any(
-            pattern.search(attribution_form) for pattern in _REPOSITORY_URL_PATTERNS
-        )
+        _contains_case_identifier(case_identifier_form)
+        or any(pattern.search(leakage_form) for pattern in _LEAKAGE_PATTERNS)
+        or _contains_repository_url(attribution_form)
         or _contains_structural_source_attribution(attribution_form)
     ):
         raise TaskDecompositionError("task text contains prohibited source or evaluation leakage")
     if _TERM_PATTERN.search(normalized) is None:
         raise TaskDecompositionError("task text must contain a bounded textual term")
     return task_text
+
+
+def _persistence_text(normalized_span: str) -> str:
+    return re.sub(r"`[^`]*`", " code_identifier ", normalized_span)
+
+
+def _persistence_word_matches(normalized_span: str) -> tuple[re.Match[str], ...]:
+    return tuple(_TERM_PATTERN.finditer(_persistence_text(normalized_span)))
+
+
+def _persistence_words(normalized_span: str) -> tuple[str, ...]:
+    return tuple(match.group(0) for match in _persistence_word_matches(normalized_span))
+
+
+def _has_closed_persistence_object(words: tuple[str, ...], start: int) -> bool:
+    if start < len(words) and words[start] in {"a", "an", "the"}:
+        start += 1
+    modifiers = 0
+    while start < len(words):
+        word = words[start]
+        if word in _PERSISTENCE_OBJECT_HEADS:
+            return True
+        if word not in _PERSISTENCE_SAFE_MODIFIERS or modifiers == 4:
+            return False
+        modifiers += 1
+        start += 1
+    return False
+
+
+def _is_closed_persistence_subject(words: tuple[str, ...]) -> bool:
+    if words and words[0] == "the":
+        words = words[1:]
+    if not words or words[-1] not in _PERSISTENCE_OBJECT_HEADS:
+        return False
+    return len(words) <= 5 and all(
+        word in _PERSISTENCE_SAFE_MODIFIERS for word in words[:-1]
+    )
+
+
+def _matches_direct_persistence_action(normalized_span: str) -> bool:
+    persistence_text = _persistence_text(normalized_span)
+    matches = tuple(_TERM_PATTERN.finditer(persistence_text))
+    words = tuple(match.group(0) for match in matches)
+    for index, word in enumerate(words):
+        if word not in _PERSISTENCE_ACTIONS | _PERSISTENCE_INFLECTIONS:
+            continue
+        if word in _PERSISTENCE_ACTIONS and index > 0:
+            gap = persistence_text[matches[index - 1].end() : matches[index].start()]
+            if (
+                words[index - 1] not in _PERSISTENCE_PREFIX_WORDS
+                and not any(character in ",;:" for character in gap)
+            ):
+                continue
+        if _has_closed_persistence_object(words, index + 1):
+            return True
+    return False
+
+
+def _matches_subject_persistence(normalized_span: str) -> bool:
+    words = _persistence_words(normalized_span)
+    for index, word in enumerate(words):
+        if word in _PERSISTENCE_INFLECTIONS:
+            subject_end = index
+            while subject_end and words[subject_end - 1] in _PERSISTENCE_AUXILIARIES:
+                subject_end -= 1
+            if _is_closed_persistence_subject(words[:subject_end]):
+                return True
+        if word not in {"survive", "survived", "survives"}:
+            continue
+        subject_end = index
+        while subject_end and words[subject_end - 1] in (
+            _PERSISTENCE_AUXILIARIES | {"can"}
+        ):
+            subject_end -= 1
+        durability_words = words[index + 1 : index + 5]
+        if _is_closed_persistence_subject(words[:subject_end]) and any(
+            candidate
+            in {"interruption", "reboot", "relaunch", "restart", "restarts", "shutdown"}
+            for candidate in durability_words
+        ):
+            return True
+    return False
+
+
+def _has_persistence_cue(normalized_span: str) -> bool:
+    return _matches_direct_persistence_action(
+        normalized_span
+    ) or _matches_subject_persistence(normalized_span)
 
 
 def _looks_like_inflected_predicate(tokens: tuple[str, ...]) -> bool:
@@ -582,7 +885,7 @@ def _has_unambiguous_predicate_evidence(
 
 
 def _left_has_completed_direct_object(value: str) -> bool:
-    return _PERSISTENCE_DIRECT_OBJECT_PATTERN.match(_normalize(value)) is not None
+    return _matches_direct_persistence_action(_normalize(value))
 
 
 def _has_known_obligation_predicate(normalized: str) -> bool:
@@ -767,11 +1070,13 @@ def _discriminative_terms(normalized_span: str) -> tuple[str, ...]:
 
 
 def _matched_kinds(normalized_span: str) -> tuple[ObligationKind, ...]:
-    matched = tuple(
+    matched = [
         kind
         for kind, patterns in _CUE_PATTERNS.items()
         if any(pattern.search(normalized_span) for pattern in patterns)
-    )
+    ]
+    if _has_persistence_cue(normalized_span):
+        matched.append(ObligationKind.PERSISTENCE)
     return tuple(sorted(matched, key=lambda kind: kind.value)) or (ObligationKind.UNRESOLVED,)
 
 

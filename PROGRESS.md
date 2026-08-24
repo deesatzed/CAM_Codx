@@ -1,31 +1,40 @@
 # Progress
 
-## 2026-08-24 resolver leakage, syntax, and linear-bound hardening
+## 2026-08-24 canonical linear leakage and persistence grammar
 
-- Leakage validation now rejects two-digit case identities even when each
-  digit is separated independently, plus canonical repository-host identities
-  across case, trailing-dot, userinfo, port, HTTP(S), SSH, Git, and scp-style
-  URL forms. Canonical serialization revalidates the preserved task and cannot
-  emit those forms.
-- Possessive attribution now uses bounded linear token/window scanning instead
-  of a modifier-count regex. ASCII, curly, modifier-letter, and normalized
-  fullwidth apostrophes share one representation; long modifier sequences no
-  longer bypass method-artifact attribution. Empty normalized declarations or
-  attributed identities reject before exact identity comparison.
-- Persistence direct-object parsing stops at the full bounded preposition set
-  as well as infinitive/secondary-predicate boundaries. State or artifact terms
-  remain positive only when governed directly by the persistence verb; a later
-  prepositional state/data phrase cannot repair time, credit, energy, or
-  confidence objects.
-- Task validation now rejects unbalanced backticks and mismatched/unbalanced
-  `()[]{}` nesting before span decomposition. Lone surrogates become a typed
-  `TaskDecompositionError` at both decomposition and serialization boundaries.
-- Consolidated TDD RED was `27 failed, 5 passed`; the additional Bitbucket host
-  parity probe was RED at `1 failed, 6 passed`. GREEN is `239` resolver tests
-  and `256` resolver plus Development Brief regressions. The max-size
-  single-token case improved from `5.03s` at RED to a measured ten-run maximum
-  of `0.007200s`; the test retains a generous deterministic `2.0s` ceiling.
-  Ruff and `git diff --check` pass.
+- The case-ID seal is now a bounded linear scan for `C`/`N` plus exactly two
+  digits. Any number of non-alphanumeric separators may occur before either
+  digit, while identifier boundaries and an immediately adjacent third digit
+  remain controls. Repository candidates are normalized before authority matching:
+  NFKC, bounded percent decoding, URL-backslash normalization, hostname case,
+  trailing dots, userinfo, ports, HTTP(S)/SSH/Git, and scp syntax all converge
+  on the conservative GitHub/GitLab/Bitbucket host set. Ordinary repository
+  prose remains valid, and canonical serialization revalidates the same seals.
+- Attribution tokenizes the complete bounded task once. Possessive artifact
+  lookup no longer has a modifier-count window, while owner capture remains
+  bounded. ASCII/curly quotes, Markdown emphasis, backticks, and supported
+  apostrophes normalize before exact declaration matching; empty identities,
+  undeclared sources, multiword wrappers, and 65-plus intervening modifiers
+  fail closed. An exact earlier local declaration remains the only named-source
+  exemption.
+- Persistence uses a deliberately conservative closed direct-object grammar:
+  a persistence action must govern an allowlisted generic state/artifact head
+  after only a bounded article/safe-modifier prefix. Unknown modifiers or any
+  secondary phrase before that head remain unresolved, so later state/data
+  cannot repair time, credit, energy, confidence, or latency. A valid direct
+  head may still precede a trailing prepositional phrase. Quoted persistence
+  words are not treated as action predicates; bounded passive and explicit
+  survival forms retain their prior behavior.
+- Task validation continues to reject unbalanced backticks,
+  mismatched/unbalanced `()[]{}` nesting, and invalid UTF-8 scalar content as
+  `TaskDecompositionError` before decomposition or serialization.
+- This remediation's primary TDD RED was `23 failed, 13 passed`; self-review
+  quote/polysemy controls were separately RED at `3 failed, 10 passed`, and the
+  single-backslash URL control was RED at `1 failed, 5 passed`. GREEN is `281`
+  resolver tests and `298` resolver plus Development Brief regressions.
+  The three maximum-size timing controls pass in `0.06s` total, with the slowest
+  measured call at `0.01s`; every case retains a generous `2.0s` ceiling. Ruff
+  passes.
 - No provider/Context7 call, CAM command, mining, database access or mutation,
   corpus/profile/config change, target write, or N01-N25 source/evaluator
   inspection occurred.
