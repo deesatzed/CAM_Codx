@@ -480,10 +480,70 @@ _NON_SIGNAL_TERMS = {
     "when",
     "with",
 }
+_SUPPORTED_CONTROL_WHITESPACE = {"\t", "\n", "\r"}
+_DEFAULT_IGNORABLE_RANGES = (
+    (0x00AD, 0x00AD),
+    (0x034F, 0x034F),
+    (0x061C, 0x061C),
+    (0x115F, 0x1160),
+    (0x17B4, 0x17B5),
+    (0x180B, 0x180F),
+    (0x200B, 0x200F),
+    (0x202A, 0x202E),
+    (0x2060, 0x206F),
+    (0x3164, 0x3164),
+    (0xFE00, 0xFE0F),
+    (0xFEFF, 0xFEFF),
+    (0xFFA0, 0xFFA0),
+    (0xFFF0, 0xFFF8),
+    (0x1BCA0, 0x1BCA3),
+    (0x1D173, 0x1D17A),
+    (0xE0000, 0xE0FFF),
+)
 
 
 def _normalize(value: str) -> str:
     return " ".join(unicodedata.normalize("NFKC", value).casefold().split())
+
+
+def _is_default_ignorable(character: str) -> bool:
+    codepoint = ord(character)
+    return any(start <= codepoint <= end for start, end in _DEFAULT_IGNORABLE_RANGES)
+
+
+def _is_structural_edge_character(character: str) -> bool:
+    return character.isspace() or unicodedata.category(character)[0] in {
+        "C",
+        "M",
+        "P",
+        "S",
+    }
+
+
+def _validate_unicode_boundaries(value: str) -> None:
+    normalized = unicodedata.normalize("NFKC", value)
+    for index, character in enumerate(normalized):
+        category = unicodedata.category(character)
+        if (
+            category == "Cf"
+            or (category == "Cc" and character not in _SUPPORTED_CONTROL_WHITESPACE)
+            or _is_default_ignorable(character)
+        ):
+            raise TaskDecompositionError(
+                "task text contains ambiguous Unicode boundary characters"
+            )
+        if category[0] != "M":
+            continue
+        at_left_edge = index == 0 or _is_structural_edge_character(
+            normalized[index - 1]
+        )
+        at_right_edge = index + 1 == len(normalized) or _is_structural_edge_character(
+            normalized[index + 1]
+        )
+        if at_left_edge or at_right_edge:
+            raise TaskDecompositionError(
+                "task text contains ambiguous Unicode boundary characters"
+            )
 
 
 def _strip_unicode_edge_wrappers(value: str) -> str:
@@ -900,6 +960,7 @@ def _validate_task_text(task_text: object) -> str:
         raise TaskDecompositionError("task text must be valid UTF-8") from error
     if len(encoded_task) > MAX_TASK_BYTES:
         raise TaskDecompositionError(f"task text exceeds {MAX_TASK_BYTES}-byte limit")
+    _validate_unicode_boundaries(task_text)
     _validate_balanced_syntax(task_text)
     _quote_ranges(task_text)
     normalized = _normalize(task_text)

@@ -1,5 +1,27 @@
 # Progress
 
+## 2026-08-24 fail-closed Unicode structural boundaries
+
+- Task validation now performs one bounded NFKC inspection pass before syntax,
+  leakage, attribution, or repository parsing. It rejects Unicode format
+  controls, a frozen closed table of default-ignorable code points, and control
+  characters other than the explicitly supported tab, line-feed, and
+  carriage-return whitespace. Zero-width characters can no longer cloak token
+  boundaries or change which downstream rejection happens first.
+- Residual combining marks fail closed at token, punctuation, symbol, control,
+  or adjacent-mark structural edges. Combining sequences that safely compose
+  during normalization and ordinary composed Unicode identifiers/prose remain
+  valid. Validation does not rewrite the public task: exact text, offsets,
+  spans, stable IDs, and canonical serialization remain based on the original
+  string, and serialization re-runs the same Unicode boundary check.
+- Strict TDD RED was `11 failed, 4 passed`. GREEN is `370` resolver tests and
+  `387` resolver plus Development Brief regressions. Five maximum-size timing
+  controls pass in `0.12s` total, with the slowest measured call at `0.02s`
+  against a `2.0s` ceiling. Ruff and `git diff --check` pass.
+- No provider/Context7 call, CAM command, mining, database access or mutation,
+  corpus/profile/config change, target write, or N01-N25 source/evaluator
+  inspection occurred.
+
 ## 2026-08-24 plural possessives, textual labels, and numeric elisions
 
 - Attribution now detects a terminal ASCII or curly plural possessive before

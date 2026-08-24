@@ -672,6 +672,76 @@ def test_serialization_cannot_emit_plural_possessive_source_attribution() -> Non
 @pytest.mark.parametrize(
     "task",
     (
+        "Borrow QuasarForge\u200b's recovery method.",
+        "Borrow QuasarForge\u200b’s recovery method.",
+        "Borrow QuasarForge'\u0301s recovery method.",
+        "Borrow QuasarForge’\u0301s recovery method.",
+        "Borrow QuasarSystems\u200b' recovery method.",
+        "Borrow QuasarSystems\u200b’ recovery method.",
+        "Borrow QuasarSystems'\u0301 recovery method.",
+        "Borrow QuasarSystems’\u0301 recovery method.",
+        "Reuse \u200bhttps://github.com/owner/repository.",
+        "Reuse \u0301https://github.com/owner/repository.",
+    ),
+)
+def test_unicode_cloaking_at_attribution_and_url_edges_fails_closed(
+    task: str,
+) -> None:
+    resolver = _load_resolver()
+
+    with pytest.raises(resolver.TaskDecompositionError, match="Unicode"):
+        resolver.decompose_task(task)
+
+    clean = resolver.decompose_task("Persist state.")
+    forged = replace(clean, task_text=task)
+    with pytest.raises(resolver.TaskDecompositionError, match="Unicode"):
+        resolver.serialize_resolution(forged)
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Persist\u2060 state.",
+        "Persist\x00 state.",
+        "Persist state.\x07",
+        "Persist \ufe0fstate.",
+        "Persist \u034fstate.",
+    ),
+)
+def test_format_control_and_default_ignorable_cloaking_fails_closed(
+    task: str,
+) -> None:
+    resolver = _load_resolver()
+
+    with pytest.raises(resolver.TaskDecompositionError, match="Unicode"):
+        resolver.decompose_task(task)
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Create CaféRunner. Implement CaféRunner's retry strategy.",
+        "Create Systèmes. Implement Systèmes' retry strategy.",
+        "Document naïve café behavior.",
+        "Persist state.\n\tVerify output.\r\n",
+    ),
+)
+def test_composed_unicode_and_supported_whitespace_controls_remain_valid(
+    task: str,
+) -> None:
+    resolver = _load_resolver()
+
+    result = resolver.decompose_task(task)
+
+    assert result.task_text == task
+    assert resolver.serialize_resolution(result) == resolver.serialize_resolution(
+        resolver.decompose_task(task)
+    )
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
         "Create ---.",
         "Create ---. Implement ---'s retry strategy.",
         "Create `---`. Implement `$$$`'s retry strategy.",

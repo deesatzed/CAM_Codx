@@ -57,7 +57,13 @@ backslash normalization before conservative authority parsing. Repository token
 edges use the same Unicode punctuation/symbol stripping rule, so normalized
 HTTP(S), SSH, Git, and scp-style identities cannot hide behind userinfo, ports,
 hostname case, trailing dots, guillemets, emphasis, slash, pipe, or symbol
-wrappers. Persistence uses a closed conservative direct object grammar: a
+wrappers. Before those parsers run, a bounded NFKC inspection pass rejects all
+format controls, a frozen closed table of default-ignorable code points, and
+control characters other than tab, line feed, and carriage return. A residual
+combining mark at a token or punctuation/symbol/control structural edge is
+ambiguous and also fails closed; safely composed Unicode identifiers and prose
+remain valid. This inspection never rewrites the source task or its offsets.
+Persistence uses a closed conservative direct object grammar: a
 persistence action must directly govern an allowlisted generic
 state/artifact/storage head after only a bounded article and safe-modifier
 prefix. An unknown word or secondary phrase before the head stays unresolved;
