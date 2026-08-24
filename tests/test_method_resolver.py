@@ -383,6 +383,36 @@ def test_generic_possessives_and_unattributed_sources_remain_valid(task: str) ->
 @pytest.mark.parametrize(
     "task",
     (
+        "Use the caller's retry strategy.",
+        "Please use the runner's recovery method.",
+    ),
+)
+def test_generic_local_role_exemption_requires_exact_owner_phrase(task: str) -> None:
+    resolver = _load_resolver()
+
+    assert resolver.decompose_task(task).task_text == task
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Quasar the caller's retry strategy must be used.",
+        "Use evil the runner's recovery method.",
+        "Use Quasar the caller's retry strategy.",
+        "Use `the caller`'s retry strategy.",
+        "Use evil.the runner's recovery method.",
+    ),
+)
+def test_generic_local_role_suffix_cannot_hide_undeclared_owner(task: str) -> None:
+    resolver = _load_resolver()
+
+    with pytest.raises(resolver.TaskDecompositionError, match="leakage"):
+        resolver.decompose_task(task)
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
         "Borrow quasarforge's retry strategy.",
         "Use quasar forge's recovery approach.",
         "Apply the strategy from quasarforge.",
@@ -743,6 +773,50 @@ def test_and_after_completed_object_splits_predicate_shaped_rhs(
     assert all(task[item.span_start : item.span_end] == item.task_span for item in result.obligations)
 
 
+@pytest.mark.parametrize(
+    ("task", "right_kind", "right_span"),
+    (
+        (
+            "Persist settings for local workers and verify output.",
+            "verification",
+            "verify output.",
+        ),
+        (
+            "Persist settings for local workers and audit output.",
+            "verification",
+            "audit output.",
+        ),
+    ),
+)
+def test_known_rhs_obligation_precedes_prepositional_coordination(
+    task: str, right_kind: str, right_span: str
+) -> None:
+    resolver = _load_resolver()
+
+    result = resolver.decompose_task(task)
+
+    assert [(item.kind.value, item.task_span) for item in result.obligations] == [
+        ("persistence", "Persist settings for local workers"),
+        (right_kind, right_span),
+    ]
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Persist settings for call and render actions.",
+        "Persist records for parse and transform operations.",
+    ),
+)
+def test_verb_like_modifiers_before_shared_plural_head_remain_nominal(task: str) -> None:
+    resolver = _load_resolver()
+
+    result = resolver.decompose_task(task)
+
+    assert [item.kind.value for item in result.obligations] == ["persistence"]
+    assert result.obligations[0].task_span == task
+
+
 def test_semicolon_clause_expansion_obeys_span_bound() -> None:
     resolver = _load_resolver()
     task = "; ".join(
@@ -850,6 +924,35 @@ def test_distant_state_noun_cannot_repair_nonpersistent_object_or_subject(
     ),
 )
 def test_local_persistence_object_or_subject_binding_remains_positive(task: str) -> None:
+    resolver = _load_resolver()
+
+    assert "persistence" in _kinds(resolver.decompose_task(task))
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Save time tuning application state.",
+        "Store credit improving application data.",
+        "Restore confidence using configuration data.",
+        "Save energy to update state.",
+    ),
+)
+def test_secondary_predicate_cannot_supply_persistence_direct_object(task: str) -> None:
+    resolver = _load_resolver()
+
+    assert "persistence" not in _kinds(resolver.decompose_task(task))
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Save durable application state.",
+        "Store encrypted result artifact.",
+        "Restore prior session settings.",
+    ),
+)
+def test_multiword_local_persistence_objects_remain_positive(task: str) -> None:
     resolver = _load_resolver()
 
     assert "persistence" in _kinds(resolver.decompose_task(task))

@@ -1,5 +1,29 @@
 # Progress
 
+## 2026-08-24 exact owner, coordination precedence, and direct objects
+
+- Generic local-role attribution now compares the entire normalized owner
+  phrase after removing only the bounded polite/method-action command wrapper.
+  Exact `the caller`/`the runner`-style roles remain valid, while arbitrary
+  prefixes, suffixes, dotted forms, and backtick wrappers cannot inherit the
+  role exemption without an earlier exact declaration.
+- Clause classification now gives an explicit known obligation predicate on
+  the RHS precedence over prepositional context. Inside a prepositional nominal
+  phrase, however, verb-like coordinated modifiers before a shared plural head
+  remain one noun phrase. This preserves `call and render actions`-shaped
+  coordination without swallowing a separate verification/audit obligation.
+- The save/store/write/append/restore/reload direct-object grammar stops at
+  infinitive and secondary gerund boundaries. A later state/data term cannot
+  repair `save time`, `store credit`, or confidence restoration, while bounded
+  multiword adjective phrases directly ending in a state/artifact object remain
+  persistence evidence.
+- Targeted TDD RED was `11 failed, 7 passed`; GREEN is `205` resolver tests and
+  `222` resolver plus Development Brief regressions. Ruff and `git diff
+  --check` pass.
+- No provider/Context7 call, CAM command, mining, database access or mutation,
+  corpus/profile/config change, target write, or N01-N25 source/evaluator
+  inspection occurred.
+
 ## 2026-08-24 exact declaration, conjunction, and persistence binding
 
 - Local declaration identity is now independent of bounded syntactic wrappers.

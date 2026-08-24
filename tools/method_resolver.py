@@ -38,7 +38,8 @@ _PERSISTENCE_ACTION_INFLECTED = (
     r"restores?|restored|reloads?|reloaded)"
 )
 _PERSISTENCE_MODIFIER = (
-    r"(?:(?!(?:after|and|before|but|during|for|when|while|with)\b)"
+    r"(?:(?!(?:after|and|before|but|during|for|to|when|while|with)\b)"
+    r"(?![a-z0-9_-]*ing\b)"
     r"[a-z0-9_-]+\s+){0,3}"
 )
 _PERSISTENCE_PREFIX = (
@@ -384,24 +385,25 @@ def _matches_prior_declaration(
     return _entity_identity(value) in declared_before
 
 
-def _attributed_entity(owner: str) -> str:
+def _attribution_owner_phrase(owner: str) -> str:
     tokens = owner.split()
     if tokens and _normalize(tokens[0]) in _POLITE_PREFIXES:
         tokens = tokens[1:]
     if tokens and _normalize(tokens[0]) in _ATTRIBUTION_ACTION_WORDS:
         tokens = tokens[1:]
+    return " ".join(tokens)
+
+
+def _attributed_entity(owner: str) -> str:
+    tokens = _attribution_owner_phrase(owner).split()
     if tokens and _normalize(tokens[0]) in {"a", "an", "the"}:
         tokens = tokens[1:]
     return " ".join(tokens)
 
 
 def _is_generic_local_role(owner: str) -> bool:
-    tokens = tuple(token.casefold().strip("._-") for token in owner.split())
-    return (
-        len(tokens) >= 2
-        and tokens[-2] == "the"
-        and tokens[-1] in _GENERIC_LOCAL_ROLES
-    )
+    normalized = _normalize(owner)
+    return any(normalized == f"the {role}" for role in _GENERIC_LOCAL_ROLES)
 
 
 def _is_generic_local_reference(source: str, definite: str | None) -> bool:
@@ -420,7 +422,7 @@ def _contains_structural_source_attribution(task_text: str) -> bool:
         owner = match.group("owner")
         if not _matches_prior_declaration(
             _attributed_entity(owner), match.start(), declarations
-        ) and not (_is_generic_local_role(owner)):
+        ) and not (_is_generic_local_role(_attribution_owner_phrase(owner))):
             return True
     for match in _DIRECTIONAL_ATTRIBUTION_PATTERN.finditer(task_text):
         source = match.group("source")
@@ -478,11 +480,25 @@ def _left_has_completed_direct_object(value: str) -> bool:
     return _PERSISTENCE_DIRECT_OBJECT_PATTERN.match(_normalize(value)) is not None
 
 
+def _has_known_obligation_predicate(normalized: str) -> bool:
+    return _matched_kinds(normalized) != (ObligationKind.UNRESOLVED,)
+
+
+def _has_shared_plural_head(tokens: tuple[str, ...]) -> bool:
+    return len(tokens) >= 2 and tokens[-1].endswith("s")
+
+
 def _starts_independent_clause(value: str, left_value: str) -> bool:
     normalized = _normalize(value)
     if not normalized:
         return False
     tokens = tuple(match.group(0) for match in _TERM_PATTERN.finditer(normalized))
+    if _has_known_obligation_predicate(normalized):
+        return True
+    if _left_is_prepositional_coordination(left_value) and _has_shared_plural_head(
+        tokens
+    ):
+        return False
     if _has_unambiguous_predicate_evidence(tokens, normalized):
         return True
     if _left_is_prepositional_coordination(left_value):

@@ -39,20 +39,26 @@ Plain and backtick-delimited identifiers share the same identity; one polite
 prefix, one closed method-action prefix, and one optional article are syntax,
 not identity, and no other prefix or suffix is discarded.
 Closed local-role and task-document grammar preserves ordinary caller/task
-phrasing without creating an arbitrary lowercase bypass. Leakage seals first
+phrasing without creating an arbitrary lowercase bypass; the local-role
+exemption compares the entire command-stripped owner phrase, never a suffix.
+Leakage seals first
 apply NFKC, camel separation, and case folding so punctuation, underscore,
 dotted, spaced, and camel variants cannot bypass case-ID or hidden/held-out
 controls. Persistence requires an unambiguous persistence action, a behavioral
 save/store/write/append/restore/reload action directly bound to a bounded
-state/artifact/storage object, or an explicit object-survival relation across a
+state/artifact/storage direct object before any infinitive or secondary-gerund
+boundary, or an explicit object-survival relation across a
 restart-like event whose grammatical subject is itself a bounded state or
 artifact term. Benefit/resource senses, decorative durability language,
 and incidental state-file, checkpoint, journal, backup, or storage nouns do
 not create a persistence obligation. Clause splitting classifies `and` by
 position: generic action/modal/subject-predicate evidence starts a sibling
-clause, and a completed direct persistence object makes an otherwise unseen
-base-form command fail closed into its own unresolved span; coordination inside
-a prepositional modifier or incomplete noun phrase remains intact. Code,
+clause, an explicit known obligation predicate takes precedence over preceding
+prepositional context, and a completed direct persistence object makes an
+otherwise unseen base-form command fail closed into its own unresolved span;
+coordination inside
+a prepositional modifier or incomplete noun phrase remains intact, including
+verb-like modifiers sharing a later plural head. Code,
 nesting, exact offsets, and existing bounds remain preserved.
 
 ## 2026-08-23: Bound fallback recall before normal packet presentation
