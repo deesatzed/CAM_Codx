@@ -23,6 +23,8 @@ MAX_OBLIGATIONS = 256
 MAX_DISCRIMINATIVE_TERMS = 12
 MAX_TERM_CHARACTERS = 64
 MAX_LOCAL_DECLARATIONS = 16
+MAX_ATTRIBUTION_SCAN_TOKENS = 64
+MAX_ATTRIBUTION_OWNER_TOKENS = 8
 
 
 _PERSISTENCE_OBJECT = (
@@ -38,7 +40,8 @@ _PERSISTENCE_ACTION_INFLECTED = (
     r"restores?|restored|reloads?|reloaded)"
 )
 _PERSISTENCE_MODIFIER = (
-    r"(?:(?!(?:after|and|before|but|during|for|to|when|while|with)\b)"
+    r"(?:(?!(?:after|and|at|before|but|by|during|for|from|in|into|of|on|through|"
+    r"to|under|until|when|while|with|within)\b)"
     r"(?![a-z0-9_-]*ing\b)"
     r"[a-z0-9_-]+\s+){0,3}"
 )
@@ -175,25 +178,50 @@ _CUE_PATTERNS: dict[ObligationKind, tuple[re.Pattern[str], ...]] = {
 }
 
 _LEAKAGE_PATTERNS = (
-    re.compile(r"(?<![a-z0-9])[cn][\W_]*\d{2}(?![a-z0-9])"),
+    re.compile(
+        r"(?<![a-z0-9])[cn](?:[\W_]{0,4})\d(?:[\W_]{0,4})\d"
+        r"(?![\W_]{0,4}\d)(?![a-z0-9])"
+    ),
     re.compile(r"\bhidden[\W_]*tests?\b"),
     re.compile(r"\bheld[\W_]*out\b"),
     re.compile(r"\bdonor\b"),
-    re.compile(r"https?://(?:www\.)?(?:github|gitlab|bitbucket)\.com/[^\s/]+/[^\s/]+"),
+)
+_REPOSITORY_URL_PATTERNS = (
+    re.compile(
+        r"\b(?:https?|ssh|git)://(?:[^\s/@]+@)?"
+        r"(?:www\.)?(?:github\.com|gitlab\.com|bitbucket\.(?:org|com))\.?(?::\d+)?/"
+        r"[^\s/]+/[^\s]+",
+        flags=re.IGNORECASE,
+    ),
+    re.compile(
+        r"(?<![\w.-])(?:[^\s/@:]+@)?"
+        r"(?:github\.com|gitlab\.com|bitbucket\.(?:org|com))\.?:[^\s/]+/[^\s]+",
+        flags=re.IGNORECASE,
+    ),
 )
 
 _METHOD_ARTIFACT = (
     r"(?:method|pattern|algorithm|implementation|approach|strategy|technique|"
     r"procedure|workflow|mechanism|recipe|design|code)"
 )
+_METHOD_ARTIFACT_WORDS = {
+    "algorithm",
+    "approach",
+    "code",
+    "design",
+    "implementation",
+    "mechanism",
+    "method",
+    "pattern",
+    "procedure",
+    "recipe",
+    "strategy",
+    "technique",
+    "workflow",
+}
+_APOSTROPHE_TRANSLATION = str.maketrans({"’": "'", "ʼ": "'", "＇": "'"})
 _IDENTIFIER_TOKEN = r"[\w-]+(?:\.[\w-]+)*"
 _BACKTICK_IDENTIFIER = r"`[^`\r\n]{1,128}`"
-_ATTRIBUTION_TOKEN = rf"(?:{_BACKTICK_IDENTIFIER}|{_IDENTIFIER_TOKEN})"
-_POSSESSIVE_ATTRIBUTION_PATTERN = re.compile(
-    rf"(?P<owner>{_ATTRIBUTION_TOKEN}(?:\s+{_ATTRIBUTION_TOKEN}){{0,7}})['’]s\s+"
-    rf"(?:[\w-]+\s+){{0,5}}{_METHOD_ARTIFACT}\b",
-    flags=re.IGNORECASE,
-)
 _DIRECTIONAL_ATTRIBUTION_PATTERN = re.compile(
     rf"\b{_METHOD_ARTIFACT}\b\s+(?:from|by|according\s+to)\s+(?P<definite>the\s+)?"
     rf"(?P<source>{_BACKTICK_IDENTIFIER}|{_IDENTIFIER_TOKEN}"
@@ -361,6 +389,66 @@ def _entity_identity(value: str) -> str:
     )
 
 
+def _validate_balanced_syntax(task_text: str) -> None:
+    pairs = {")": "(", "]": "[", "}": "{"}
+    stack: list[str] = []
+    in_code = False
+    for character in task_text:
+        if character == "`":
+            in_code = not in_code
+        elif not in_code and character in "([{":
+            stack.append(character)
+        elif not in_code and character in pairs:
+            if not stack or stack.pop() != pairs[character]:
+                raise TaskDecompositionError(
+                    "task text contains unbalanced or mismatched syntax"
+                )
+    if in_code or stack:
+        raise TaskDecompositionError("task text contains unbalanced or mismatched syntax")
+
+
+def _scan_word(token: str) -> str:
+    return _normalize(token.strip(".,!?;:()[]{}\"`"))
+
+
+def _token_ends_statement(token: str) -> bool:
+    return token.rstrip(")]}").endswith((".", "!", "?", ";"))
+
+
+def _possessive_attributions(task_text: str) -> tuple[tuple[str, int], ...]:
+    normalized_apostrophes = task_text.translate(_APOSTROPHE_TRANSLATION)
+    if "'s" not in normalized_apostrophes.casefold():
+        return ()
+    tokens = tuple(re.finditer(r"\S+", normalized_apostrophes))
+    attributions: list[tuple[str, int]] = []
+    for index, token_match in enumerate(tokens):
+        raw = token_match.group(0)
+        core = raw.rstrip(".,!?;:)]}")
+        if not core.casefold().endswith("'s"):
+            continue
+        artifact_found = False
+        for following in tokens[
+            index + 1 : index + 1 + MAX_ATTRIBUTION_SCAN_TOKENS
+        ]:
+            if _scan_word(following.group(0)) in _METHOD_ARTIFACT_WORDS:
+                artifact_found = True
+                break
+            if _token_ends_statement(following.group(0)):
+                break
+        if not artifact_found:
+            continue
+        owner_parts = [core[:-2]]
+        preceding = index - 1
+        while preceding >= 0 and len(owner_parts) < MAX_ATTRIBUTION_OWNER_TOKENS:
+            previous = tokens[preceding].group(0)
+            if _token_ends_statement(previous):
+                break
+            owner_parts.insert(0, previous)
+            preceding -= 1
+        attributions.append((" ".join(owner_parts), token_match.start()))
+    return tuple(attributions)
+
+
 def _declared_entities(task_text: str) -> tuple[tuple[str, int], ...]:
     declarations: list[tuple[str, int]] = []
     for match in _DECLARATION_PATTERN.finditer(task_text):
@@ -370,7 +458,12 @@ def _declared_entities(task_text: str) -> tuple[tuple[str, int], ...]:
                 break
             retained.append(token)
         if retained:
-            declarations.append((_entity_identity(" ".join(retained)), match.end()))
+            identity = _entity_identity(" ".join(retained))
+            if not identity:
+                raise TaskDecompositionError(
+                    "task text contains prohibited source or evaluation leakage"
+                )
+            declarations.append((identity, match.end()))
         if len(declarations) == MAX_LOCAL_DECLARATIONS:
             break
     return tuple(declarations)
@@ -381,8 +474,11 @@ def _matches_prior_declaration(
     position: int,
     declarations: tuple[tuple[str, int], ...],
 ) -> bool:
+    identity = _entity_identity(value)
+    if not identity:
+        return False
     declared_before = {identity for identity, end in declarations if end <= position}
-    return _entity_identity(value) in declared_before
+    return identity in declared_before
 
 
 def _attribution_owner_phrase(owner: str) -> str:
@@ -418,10 +514,12 @@ def _is_generic_local_reference(source: str, definite: str | None) -> bool:
 
 def _contains_structural_source_attribution(task_text: str) -> bool:
     declarations = _declared_entities(task_text)
-    for match in _POSSESSIVE_ATTRIBUTION_PATTERN.finditer(task_text):
-        owner = match.group("owner")
+    for owner, position in _possessive_attributions(task_text):
+        attributed_entity = _attributed_entity(owner)
+        if not _entity_identity(attributed_entity):
+            return True
         if not _matches_prior_declaration(
-            _attributed_entity(owner), match.start(), declarations
+            attributed_entity, position, declarations
         ) and not (_is_generic_local_role(_attribution_owner_phrase(owner))):
             return True
     for match in _DIRECTIONAL_ATTRIBUTION_PATTERN.finditer(task_text):
@@ -436,13 +534,22 @@ def _contains_structural_source_attribution(task_text: str) -> bool:
 def _validate_task_text(task_text: object) -> str:
     if not isinstance(task_text, str) or not task_text.strip():
         raise TaskDecompositionError("task text must be a non-empty string")
-    if len(task_text.encode("utf-8")) > MAX_TASK_BYTES:
+    try:
+        encoded_task = task_text.encode("utf-8")
+    except UnicodeEncodeError as error:
+        raise TaskDecompositionError("task text must be valid UTF-8") from error
+    if len(encoded_task) > MAX_TASK_BYTES:
         raise TaskDecompositionError(f"task text exceeds {MAX_TASK_BYTES}-byte limit")
+    _validate_balanced_syntax(task_text)
     normalized = _normalize(task_text)
     leakage_form = _leakage_normal_form(task_text)
     attribution_form = unicodedata.normalize("NFKC", task_text)
-    if any(pattern.search(leakage_form) for pattern in _LEAKAGE_PATTERNS) or (
-        _contains_structural_source_attribution(attribution_form)
+    if (
+        any(pattern.search(leakage_form) for pattern in _LEAKAGE_PATTERNS)
+        or any(
+            pattern.search(attribution_form) for pattern in _REPOSITORY_URL_PATTERNS
+        )
+        or _contains_structural_source_attribution(attribution_form)
     ):
         raise TaskDecompositionError("task text contains prohibited source or evaluation leakage")
     if _TERM_PATTERN.search(normalized) is None:

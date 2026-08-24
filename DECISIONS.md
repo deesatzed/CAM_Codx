@@ -30,36 +30,43 @@ comparing values; Python equality between `True`/`1`, `0`/`0.0`, or a string
 enum/plain string cannot cross this boundary. The top-level lexer treats
 semicolon and adversative `but` as clause boundaries, while an `and` split
 requires an independently clause-shaped right side so noun coordination stays
-intact. Source attribution is recognized from proper/camel/dotted/spaced source
-shape around a bounded method-artifact grammar, independent of any leading
-action verb. Case and orthography cannot make an attributed entity local: a
-named attribution is admitted only when an exact normalized identity was
-declared earlier through bounded generic declaration/construction syntax.
-Plain and backtick-delimited identifiers share the same identity; one polite
-prefix, one closed method-action prefix, and one optional article are syntax,
-not identity, and no other prefix or suffix is discarded.
-Closed local-role and task-document grammar preserves ordinary caller/task
-phrasing without creating an arbitrary lowercase bypass; the local-role
-exemption compares the entire command-stripped owner phrase, never a suffix.
-Leakage seals first
-apply NFKC, camel separation, and case folding so punctuation, underscore,
-dotted, spaced, and camel variants cannot bypass case-ID or hidden/held-out
-controls. Persistence requires an unambiguous persistence action, a behavioral
+intact. Source attribution uses bounded linear token/window scanning around a
+closed method-artifact grammar, independent of modifier count or leading action
+verb. Supported apostrophes normalize before scanning. Case and orthography
+cannot make an attributed entity local: a named attribution is admitted only
+when a nonempty exact normalized identity was declared earlier through bounded
+generic declaration/construction syntax. Plain and backtick-delimited
+identifiers share the same identity; one polite prefix, one closed
+method-action prefix, and one optional article are syntax, not identity, and no
+other prefix or suffix is discarded. Closed local-role and task-document
+grammar preserves ordinary caller/task phrasing without creating an arbitrary
+lowercase bypass; the role exemption compares the entire command-stripped
+owner phrase, never a suffix.
+
+Leakage seals apply NFKC, camel separation, and case folding so punctuation,
+underscore, dotted, spaced, and camel variants cannot bypass case-ID or
+hidden/held-out controls. Case IDs reject separators between their individual
+digits, and canonical repository hosts reject normalized HTTP(S), SSH, Git, and
+scp-style identities including userinfo, ports, hostname case, and trailing
+dots. Persistence requires an unambiguous persistence action, a behavioral
 save/store/write/append/restore/reload action directly bound to a bounded
-state/artifact/storage direct object before any infinitive or secondary-gerund
-boundary, or an explicit object-survival relation across a
+state/artifact/storage direct object before any preposition, infinitive, or
+secondary-gerund boundary, or an explicit object-survival relation across a
 restart-like event whose grammatical subject is itself a bounded state or
-artifact term. Benefit/resource senses, decorative durability language,
-and incidental state-file, checkpoint, journal, backup, or storage nouns do
-not create a persistence obligation. Clause splitting classifies `and` by
-position: generic action/modal/subject-predicate evidence starts a sibling
-clause, an explicit known obligation predicate takes precedence over preceding
-prepositional context, and a completed direct persistence object makes an
-otherwise unseen base-form command fail closed into its own unresolved span;
-coordination inside
+artifact term. Benefit/resource senses, decorative durability language, and
+incidental state-file, checkpoint, journal, backup, or storage nouns do not
+create a persistence obligation.
+
+Clause splitting classifies `and` by position: generic
+action/modal/subject-predicate evidence starts a sibling clause, an explicit
+known obligation predicate takes precedence over preceding prepositional
+context, and a completed direct persistence object makes an otherwise unseen
+base-form command fail closed into its own unresolved span. Coordination inside
 a prepositional modifier or incomplete noun phrase remains intact, including
-verb-like modifiers sharing a later plural head. Code,
-nesting, exact offsets, and existing bounds remain preserved.
+verb-like modifiers sharing a later plural head. Balanced backticks and
+properly matched `()[]{}` nesting are required before decomposition; invalid
+UTF-8 scalar content fails as `TaskDecompositionError`. Code, nesting, exact
+offsets, and all byte/token/window/span/obligation bounds remain preserved.
 
 ## 2026-08-23: Bound fallback recall before normal packet presentation
 

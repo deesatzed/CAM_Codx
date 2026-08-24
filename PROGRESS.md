@@ -1,5 +1,35 @@
 # Progress
 
+## 2026-08-24 resolver leakage, syntax, and linear-bound hardening
+
+- Leakage validation now rejects two-digit case identities even when each
+  digit is separated independently, plus canonical repository-host identities
+  across case, trailing-dot, userinfo, port, HTTP(S), SSH, Git, and scp-style
+  URL forms. Canonical serialization revalidates the preserved task and cannot
+  emit those forms.
+- Possessive attribution now uses bounded linear token/window scanning instead
+  of a modifier-count regex. ASCII, curly, modifier-letter, and normalized
+  fullwidth apostrophes share one representation; long modifier sequences no
+  longer bypass method-artifact attribution. Empty normalized declarations or
+  attributed identities reject before exact identity comparison.
+- Persistence direct-object parsing stops at the full bounded preposition set
+  as well as infinitive/secondary-predicate boundaries. State or artifact terms
+  remain positive only when governed directly by the persistence verb; a later
+  prepositional state/data phrase cannot repair time, credit, energy, or
+  confidence objects.
+- Task validation now rejects unbalanced backticks and mismatched/unbalanced
+  `()[]{}` nesting before span decomposition. Lone surrogates become a typed
+  `TaskDecompositionError` at both decomposition and serialization boundaries.
+- Consolidated TDD RED was `27 failed, 5 passed`; the additional Bitbucket host
+  parity probe was RED at `1 failed, 6 passed`. GREEN is `239` resolver tests
+  and `256` resolver plus Development Brief regressions. The max-size
+  single-token case improved from `5.03s` at RED to a measured ten-run maximum
+  of `0.007200s`; the test retains a generous deterministic `2.0s` ceiling.
+  Ruff and `git diff --check` pass.
+- No provider/Context7 call, CAM command, mining, database access or mutation,
+  corpus/profile/config change, target write, or N01-N25 source/evaluator
+  inspection occurred.
+
 ## 2026-08-24 exact owner, coordination precedence, and direct objects
 
 - Generic local-role attribution now compares the entire normalized owner

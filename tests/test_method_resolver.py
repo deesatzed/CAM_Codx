@@ -4,6 +4,7 @@ from dataclasses import replace
 from pathlib import Path
 import re
 import sys
+import time
 
 import pytest
 
@@ -535,6 +536,38 @@ def test_syntactic_wrappers_cannot_repair_missing_or_mismatched_declarations(
 @pytest.mark.parametrize(
     "task",
     (
+        "Borrow QuasarForgeʼs recovery strategy.",
+        "Borrow QuasarForgeʼs carefully layered robust bounded deterministic "
+        "audited repeatable portable resilient defensive recovery strategy.",
+        "Apply the carefully layered robust bounded deterministic audited repeatable "
+        "portable resilient defensive recovery method from QuasarForge.",
+    ),
+)
+def test_attribution_rejects_supported_apostrophes_and_long_modifiers(task: str) -> None:
+    resolver = _load_resolver()
+
+    with pytest.raises(resolver.TaskDecompositionError, match="leakage"):
+        resolver.decompose_task(task)
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Create ---.",
+        "Create ---. Implement ---'s retry strategy.",
+        "Create `---`. Implement `$$$`'s retry strategy.",
+    ),
+)
+def test_empty_normalized_declaration_or_attribution_identity_rejects(task: str) -> None:
+    resolver = _load_resolver()
+
+    with pytest.raises(resolver.TaskDecompositionError, match="leakage"):
+        resolver.decompose_task(task)
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
         "Implement C-01.",
         "Implement c_01.",
         "Implement C.01.",
@@ -559,6 +592,54 @@ def test_leakage_seals_normalize_case_unicode_and_separators(task: str) -> None:
 
     with pytest.raises(resolver.TaskDecompositionError, match="leakage"):
         resolver.decompose_task(task)
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Implement C-0-1.",
+        "Implement C 0 1.",
+        "Implement N_0.7.",
+        "Implement n/0/7.",
+    ),
+)
+def test_case_id_leakage_rejects_separators_between_digits(task: str) -> None:
+    resolver = _load_resolver()
+
+    with pytest.raises(resolver.TaskDecompositionError, match="leakage"):
+        resolver.decompose_task(task)
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Reuse HTTPS://GitHub.COM./owner/repository.",
+        "Reuse https://user@github.com:443/owner/repository.",
+        "Reuse https://GITLAB.com:443/owner/repository.git.",
+        "Reuse ssh://git@github.com/owner/repository.git.",
+        "Reuse git@github.com:owner/repository.git.",
+        "Reuse git://bitbucket.org/owner/repository.",
+        "Reuse https://BITBUCKET.com./owner/repository.",
+    ),
+)
+def test_repository_url_identity_variants_are_leakage(task: str) -> None:
+    resolver = _load_resolver()
+
+    with pytest.raises(resolver.TaskDecompositionError, match="leakage"):
+        resolver.decompose_task(task)
+
+
+def test_serialization_cannot_emit_normalized_case_or_repository_leakage() -> None:
+    resolver = _load_resolver()
+    clean = resolver.decompose_task("Persist state.")
+
+    for leaked_text in (
+        "Implement C-0-1.",
+        "Reuse git@github.com:owner/repository.git.",
+    ):
+        forged = replace(clean, task_text=leaked_text)
+        with pytest.raises(resolver.TaskDecompositionError, match="leakage"):
+            resolver.serialize_resolution(forged)
 
 
 @pytest.mark.parametrize(
@@ -960,6 +1041,35 @@ def test_secondary_predicate_cannot_supply_persistence_direct_object(task: str) 
 @pytest.mark.parametrize(
     "task",
     (
+        "Save time in application state.",
+        "Store credit in records.",
+        "Restore confidence from configuration data.",
+        "Save energy on state updates.",
+    ),
+)
+def test_prepositional_phrase_cannot_supply_persistence_direct_object(task: str) -> None:
+    resolver = _load_resolver()
+
+    assert "persistence" not in _kinds(resolver.decompose_task(task))
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Save application state in memory.",
+        "Store result artifact in storage.",
+        "Restore configuration from backup.",
+    ),
+)
+def test_true_direct_object_remains_persistent_before_preposition(task: str) -> None:
+    resolver = _load_resolver()
+
+    assert "persistence" in _kinds(resolver.decompose_task(task))
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
         "Save durable application state.",
         "Store encrypted result artifact.",
         "Restore prior session settings.",
@@ -1043,6 +1153,54 @@ def test_invalid_task_types_and_empty_tasks_fail_closed(task: object) -> None:
 
     with pytest.raises(resolver.TaskDecompositionError):
         resolver.decompose_task(task)
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Persist state (and tint output.",
+        "Persist state [and tint output).",
+        "Persist state and tint `output.",
+        "Persist state } and tint output.",
+        "Persist state (inside [mismatched)] syntax.",
+    ),
+)
+def test_unbalanced_or_mismatched_syntax_fails_closed(task: str) -> None:
+    resolver = _load_resolver()
+
+    with pytest.raises(resolver.TaskDecompositionError, match="syntax"):
+        resolver.decompose_task(task)
+
+
+def test_balanced_nested_syntax_remains_valid() -> None:
+    resolver = _load_resolver()
+    task = "Persist state for (local [and remote] workers)."
+
+    assert resolver.decompose_task(task).task_text == task
+
+
+def test_lone_surrogate_fails_as_task_decomposition_error_during_resolution_and_serialization() -> None:
+    resolver = _load_resolver()
+    invalid_text = "Persist state \ud800."
+
+    with pytest.raises(resolver.TaskDecompositionError, match="UTF-8"):
+        resolver.decompose_task(invalid_text)
+
+    forged = replace(resolver.decompose_task("Persist state."), task_text=invalid_text)
+    with pytest.raises(resolver.TaskDecompositionError, match="UTF-8"):
+        resolver.serialize_resolution(forged)
+
+
+def test_maximum_size_single_token_decomposes_within_generous_runtime() -> None:
+    resolver = _load_resolver()
+    task = "x" * resolver.MAX_TASK_BYTES
+
+    started = time.perf_counter()
+    result = resolver.decompose_task(task)
+    elapsed = time.perf_counter() - started
+
+    assert result.task_text == task
+    assert elapsed < 2.0
 
 
 def test_task_and_span_counts_are_bounded() -> None:
