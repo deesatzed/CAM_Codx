@@ -19,7 +19,12 @@ Safety: decomposition is pure and local. It performs no provider or Context7
 call, corpus query, mining, database access, target mutation, or evidence
 creation. Current-API classification requires an explicit currency cue or a
 concrete version, so an internal API name or supplied runtime-version field
-does not independently recommend external documentation.
+does not independently recommend external documentation. Top-level `and`
+clauses are separated when a sentence contains a supported method cue, keeping
+an unknown sibling clause explicitly unresolved. Bare domain nouns such as
+`state` do not establish persistence, attributed source-method grammar fails
+closed without a donor-name table, and serialization accepts only the exact
+canonical decomposition of its preserved task text.
 
 ## 2026-08-23: Bound fallback recall before normal packet presentation
 

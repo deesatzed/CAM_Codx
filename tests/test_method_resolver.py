@@ -1,5 +1,6 @@
 import importlib.util
 import json
+from dataclasses import replace
 from pathlib import Path
 import re
 import sys
@@ -171,6 +172,50 @@ def test_donor_case_and_hidden_test_injection_is_rejected(task: str) -> None:
 
     with pytest.raises(resolver.TaskDecompositionError, match="leakage"):
         resolver.decompose_task(task)
+
+
+def test_donor_name_only_attribution_is_rejected_before_serialization() -> None:
+    resolver = _load_resolver()
+    task = "Reuse MoonShade's recovery method."
+
+    with pytest.raises(resolver.TaskDecompositionError, match="leakage"):
+        resolver.decompose_task(task)
+
+
+def test_serializer_rejects_forged_donor_identity() -> None:
+    resolver = _load_resolver()
+    clean = resolver.decompose_task("Persist the checkpoint.")
+    forged_obligation = replace(
+        clean.obligations[0],
+        discriminative_terms=("moonshade", "checkpoint"),
+    )
+    forged = replace(clean, obligations=(forged_obligation,))
+
+    with pytest.raises(resolver.TaskDecompositionError, match="canonical"):
+        resolver.serialize_resolution(forged)
+
+
+def test_mixed_known_and_unknown_clauses_keep_separate_exact_spans() -> None:
+    resolver = _load_resolver()
+    task = "Persist the checkpoint and tint the lunar shader mauve."
+
+    result = resolver.decompose_task(task)
+    persistence = [item for item in result.obligations if item.kind.value == "persistence"]
+    unresolved = [item for item in result.obligations if item.kind.value == "unresolved"]
+
+    assert [item.task_span for item in persistence] == ["Persist the checkpoint"]
+    assert [item.task_span for item in unresolved] == ["tint the lunar shader mauve."]
+    assert all(task[item.span_start : item.span_end] == item.task_span for item in result.obligations)
+
+
+def test_incidental_state_word_does_not_hallucinate_persistence() -> None:
+    resolver = _load_resolver()
+    task = "Tune the lunar shader state until crater rims look pearlescent."
+
+    result = resolver.decompose_task(task)
+
+    assert [item.kind.value for item in result.obligations] == ["unresolved"]
+    assert result.obligations[0].task_span == task
 
 
 def test_ordinary_repository_language_is_not_mistaken_for_donor_leakage() -> None:

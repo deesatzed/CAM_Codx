@@ -1,5 +1,24 @@
 # Progress
 
+## 2026-08-24 task-obligation adversarial hardening
+
+- Added four exact RED regressions: name-only attributed donor reuse, forged
+  donor terms at serialization, a sentence mixing persistence with an unknown
+  lunar-shader clause, and incidental `state` language that must not imply
+  persistence. The isolated RED run failed `4` for those intended reasons.
+- The resolver now rejects attributed external-method grammar generically,
+  validates that serialized records equal their canonical decomposition, and
+  splits top-level coordinating clauses only when a supported method cue is
+  present. Exact task substrings and offsets remain the trace boundary.
+- Persistence now requires an action or contextual durable-state phrase; bare
+  `state` remains unresolved. No donor identity, case synonym, or shader term
+  was added to the production cue rules.
+- GREEN evidence: `24` resolver tests pass; the resolver plus Development Brief
+  regression gate passes `41`; Ruff and `git diff --check` pass.
+- No provider/Context7 call, CAM command, mining, database access or mutation,
+  corpus/profile/config change, target write, or N01-N25 source/evaluator
+  inspection occurred.
+
 ## 2026-08-24 deterministic task-obligation decomposition
 
 - Added a frozen, schema-versioned CAM_Codx task resolution contract with

@@ -98,8 +98,10 @@ _CUE_PATTERNS: dict[ObligationKind, tuple[re.Pattern[str], ...]] = {
     ObligationKind.PERSISTENCE: (
         re.compile(
             r"\b(?:persist(?:s|ed|ence|ent)?|durable|checkpoint|journal|storage|"
-            r"store|stored|save|saved|write|writes|written|append|appends|backup|state)\b"
+            r"store|stored|save|saved|write|writes|written|append|appends|backup)\b"
         ),
+        re.compile(r"\bstate (?:file|store|path|record|snapshot)\b"),
+        re.compile(r"\b(?:file|store|checkpoint) state\b"),
         re.compile(r"\b(?:atomic|atomically|replace-atomic)\b"),
     ),
     ObligationKind.RECOVERY: (
@@ -132,6 +134,10 @@ _LEAKAGE_PATTERNS = (
     re.compile(r"\b(?:hidden[- ]tests?|held[- ]out)\b"),
     re.compile(r"\bdonor\b"),
     re.compile(r"\b(?:copy|reuse|follow|from)\b.{0,48}\b(?:repository|repo)\b"),
+    re.compile(
+        r"\b(?:copy|reuse|follow|adopt)\s+[^.!?\n]{1,80}['’]s\s+"
+        r"[^.!?\n]{0,80}\b(?:method|algorithm|implementation|pattern|code)\b"
+    ),
     re.compile(r"https?://(?:www\.)?(?:github|gitlab|bitbucket)\.com/[^\s/]+/[^\s/]+"),
 )
 
@@ -189,8 +195,66 @@ def _validate_task_text(task_text: object) -> str:
     return task_text
 
 
+def _conjunction_boundaries(span: str) -> tuple[tuple[int, int], ...]:
+    """Find top-level coordinating conjunctions without parsing code spans."""
+
+    boundaries: list[tuple[int, int]] = []
+    in_code = False
+    nesting = 0
+    index = 0
+    while index < len(span):
+        character = span[index]
+        if character == "`":
+            in_code = not in_code
+            index += 1
+            continue
+        if not in_code:
+            if character in "([{":
+                nesting += 1
+            elif character in ")]}":
+                nesting = max(0, nesting - 1)
+            elif nesting == 0 and span[index : index + 3].casefold() == "and":
+                before = span[index - 1] if index else " "
+                after_index = index + 3
+                after = span[after_index] if after_index < len(span) else " "
+                if not before.isalnum() and not after.isalnum():
+                    boundaries.append((index, after_index))
+                    index = after_index
+                    continue
+        index += 1
+    return tuple(boundaries)
+
+
+def _split_supported_conjunctions(
+    start: int, end: int, span: str
+) -> tuple[tuple[int, int, str], ...]:
+    """Split mixed clauses only when the sentence contains a known method cue."""
+
+    if _matched_kinds(_normalize(span)) == (ObligationKind.UNRESOLVED,):
+        return ((start, end, span),)
+    boundaries = _conjunction_boundaries(span)
+    if not boundaries:
+        return ((start, end, span),)
+
+    clauses: list[tuple[int, int, str]] = []
+    cursor = 0
+    for conjunction_start, conjunction_end in (*boundaries, (len(span), len(span))):
+        clause_start = cursor
+        clause_end = conjunction_start
+        while clause_start < clause_end and span[clause_start].isspace():
+            clause_start += 1
+        while clause_end > clause_start and span[clause_end - 1].isspace():
+            clause_end -= 1
+        if clause_start < clause_end:
+            clause = span[clause_start:clause_end]
+            if _TERM_PATTERN.search(_normalize(clause)) is not None:
+                clauses.append((start + clause_start, start + clause_end, clause))
+        cursor = conjunction_end
+    return tuple(clauses) or ((start, end, span),)
+
+
 def _task_spans(task_text: str) -> tuple[tuple[int, int, str], ...]:
-    """Split sentences iteratively while retaining exact source offsets."""
+    """Split sentences and mixed clauses while retaining exact source offsets."""
 
     boundaries: list[int] = []
     in_code = False
@@ -214,7 +278,7 @@ def _task_spans(task_text: str) -> tuple[tuple[int, int, str], ...]:
         if start < end:
             span = task_text[start:end]
             if _TERM_PATTERN.search(_normalize(span)) is not None:
-                spans.append((start, end, span))
+                spans.extend(_split_supported_conjunctions(start, end, span))
         cursor = boundary
 
     if len(spans) > MAX_TASK_SPANS:
@@ -300,6 +364,8 @@ def serialize_resolution(resolution: TaskResolution) -> bytes:
 
     if not isinstance(resolution, TaskResolution):
         raise TaskDecompositionError("resolution must be a TaskResolution")
+    if resolution != decompose_task(resolution.task_text):
+        raise TaskDecompositionError("resolution is not the canonical decomposition")
     payload = asdict(resolution)
     return json.dumps(
         payload,
