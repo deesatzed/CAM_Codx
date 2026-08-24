@@ -464,6 +464,47 @@ def test_local_declaration_scope_is_bounded() -> None:
 @pytest.mark.parametrize(
     "task",
     (
+        "Create WorkflowRunner. Please implement the WorkflowRunner's retry strategy.",
+        "Define `workflow runner`. Apply `workflow runner`'s recovery approach.",
+        "Construct `retry_policy`. Please use the `retry_policy`’s failure strategy.",
+        "Create a WorkflowRunner. Kindly apply WorkflowRunner’s retry strategy.",
+        "Create `WorkflowRunner`. Implement the `WorkflowRunner`'s retry strategy.",
+        "Create `WorkflowRunner`. Implement WorkflowRunner's retry strategy.",
+        "Create WorkflowRunner. Reuse the `WorkflowRunner`'s retry strategy.",
+        "Create WorkflowRunner. Please port WorkflowRunner's retry implementation.",
+        "Create `WorkflowRunner`. Apply the retry strategy from `WorkflowRunner`.",
+    ),
+)
+def test_local_declaration_binding_strips_only_bounded_syntactic_wrappers(
+    task: str,
+) -> None:
+    resolver = _load_resolver()
+
+    assert resolver.decompose_task(task).task_text == task
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Please implement the WorkflowRunner's retry strategy.",
+        "Create `WorkflowRunner`. Implement `WorkflowRunnerV2`'s retry strategy.",
+        "Create `WorkflowRunner`. Implement Quasar `WorkflowRunner`'s retry strategy.",
+        "Apply the retry strategy from `WorkflowRunner`.",
+        "Create `WorkflowRunner`. Apply the strategy from `WorkflowRunnerV2`.",
+    ),
+)
+def test_syntactic_wrappers_cannot_repair_missing_or_mismatched_declarations(
+    task: str,
+) -> None:
+    resolver = _load_resolver()
+
+    with pytest.raises(resolver.TaskDecompositionError, match="leakage"):
+        resolver.decompose_task(task)
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
         "Implement C-01.",
         "Implement c_01.",
         "Implement C.01.",
@@ -648,6 +689,60 @@ def test_clause_lexer_preserves_singular_prepositional_coordination(task: str) -
     assert result.obligations[0].task_span == task
 
 
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Persist settings for local and remote workers across profiles.",
+        "Persist records for primary and secondary queues within a profile.",
+        "Persist fast and bright shaders across profiles.",
+    ),
+)
+def test_and_inside_modifier_or_noun_phrase_is_not_a_clause_boundary(task: str) -> None:
+    resolver = _load_resolver()
+
+    result = resolver.decompose_task(task)
+
+    assert [item.kind.value for item in result.obligations] == ["persistence"]
+    assert result.obligations[0].task_span == task
+
+
+@pytest.mark.parametrize(
+    ("task", "left_span", "right_kind", "right_span"),
+    (
+        (
+            "Persist the checkpoint and tint output mauve.",
+            "Persist the checkpoint",
+            "unresolved",
+            "tint output mauve.",
+        ),
+        (
+            "Persist the checkpoint and draw output with ink.",
+            "Persist the checkpoint",
+            "unresolved",
+            "draw output with ink.",
+        ),
+        (
+            "Persist settings for local workers and verify the output.",
+            "Persist settings for local workers",
+            "verification",
+            "verify the output.",
+        ),
+    ),
+)
+def test_and_after_completed_object_splits_predicate_shaped_rhs(
+    task: str, left_span: str, right_kind: str, right_span: str
+) -> None:
+    resolver = _load_resolver()
+
+    result = resolver.decompose_task(task)
+
+    assert [(item.kind.value, item.task_span) for item in result.obligations] == [
+        ("persistence", left_span),
+        (right_kind, right_span),
+    ]
+    assert all(task[item.span_start : item.span_end] == item.task_span for item in result.obligations)
+
+
 def test_semicolon_clause_expansion_obeys_span_bound() -> None:
     resolver = _load_resolver()
     task = "; ".join(
@@ -725,6 +820,36 @@ def test_persistence_rejects_benefit_resource_and_decorative_polysemy(task: str)
     ),
 )
 def test_persistence_binds_action_or_survival_to_state_artifact_object(task: str) -> None:
+    resolver = _load_resolver()
+
+    assert "persistence" in _kinds(resolver.decompose_task(task))
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Display application state while confidence survives across restarts.",
+        "Record data before morale survives a restart.",
+        "Save time before state is rendered.",
+    ),
+)
+def test_distant_state_noun_cannot_repair_nonpersistent_object_or_subject(
+    task: str,
+) -> None:
+    resolver = _load_resolver()
+
+    assert "persistence" not in _kinds(resolver.decompose_task(task))
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Application state survives across restarts.",
+        "The checkpoint must survive a restart.",
+        "Save state before restart.",
+    ),
+)
+def test_local_persistence_object_or_subject_binding_remains_positive(task: str) -> None:
     resolver = _load_resolver()
 
     assert "persistence" in _kinds(resolver.decompose_task(task))

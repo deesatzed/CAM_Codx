@@ -1,5 +1,34 @@
 # Progress
 
+## 2026-08-24 exact declaration, conjunction, and persistence binding
+
+- Local declaration identity is now independent of bounded syntactic wrappers.
+  Declarations accept plain or backtick-delimited identifiers; attribution may
+  strip at most one polite prefix, one closed method-action prefix, and one
+  optional article before comparing the exact normalized identifier. The
+  declaration must precede use, and mismatch, suffix injection, absent
+  declarations, and excess declaration counts remain fail-closed.
+- Top-level `and` classification now considers its grammatical location.
+  Coordination inside a prepositional modifier or incomplete noun phrase stays
+  intact, while a predicate-shaped RHS after a completed persistence object is
+  separated even for an otherwise unseen base-form command. Known action and
+  modal predicates still split after a completed prepositional phrase; exact
+  offsets, code/nesting, ordering, and span bounds are unchanged.
+- Persistence survival evidence now binds the state/artifact subject directly
+  to `survive` and a restart-like event. Earlier state/data mentions cannot
+  repair a later nonpersistent subject, just as later state/data mentions
+  cannot repair the direct objects of `save time`, `store credit`, or similar
+  polysemy.
+- Corrected primary RED evidence was `9 failed, 11 passed`; an independent
+  no-determiner command probe was RED at `1 failed, 2 passed`, and broader
+  polite/action wrapper coverage was RED at `2 failed, 6 passed`. Backtick
+  directional attribution was separately RED at `2 failed, 12 passed`. GREEN
+  is `187` resolver tests and `204` resolver plus Development Brief
+  regressions. Ruff and `git diff --check` pass.
+- No provider/Context7 call, CAM command, mining, database access or mutation,
+  corpus/profile/config change, target write, or N01-N25 source/evaluator
+  inspection occurred.
+
 ## 2026-08-24 declaration-bound attribution and conservative cue grammar
 
 - External method-artifact attribution now fails closed regardless of case,

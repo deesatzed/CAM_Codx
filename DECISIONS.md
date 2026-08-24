@@ -35,6 +35,9 @@ shape around a bounded method-artifact grammar, independent of any leading
 action verb. Case and orthography cannot make an attributed entity local: a
 named attribution is admitted only when an exact normalized identity was
 declared earlier through bounded generic declaration/construction syntax.
+Plain and backtick-delimited identifiers share the same identity; one polite
+prefix, one closed method-action prefix, and one optional article are syntax,
+not identity, and no other prefix or suffix is discarded.
 Closed local-role and task-document grammar preserves ordinary caller/task
 phrasing without creating an arbitrary lowercase bypass. Leakage seals first
 apply NFKC, camel separation, and case folding so punctuation, underscore,
@@ -42,11 +45,15 @@ dotted, spaced, and camel variants cannot bypass case-ID or hidden/held-out
 controls. Persistence requires an unambiguous persistence action, a behavioral
 save/store/write/append/restore/reload action directly bound to a bounded
 state/artifact/storage object, or an explicit object-survival relation across a
-restart-like event. Benefit/resource senses, decorative durability language,
+restart-like event whose grammatical subject is itself a bounded state or
+artifact term. Benefit/resource senses, decorative durability language,
 and incidental state-file, checkpoint, journal, backup, or storage nouns do
-not create a persistence obligation. Clause splitting uses top-level generic
-action/modal/subject-predicate evidence and preserves prepositional noun
-coordination, code, nesting, exact offsets, and existing bounds.
+not create a persistence obligation. Clause splitting classifies `and` by
+position: generic action/modal/subject-predicate evidence starts a sibling
+clause, and a completed direct persistence object makes an otherwise unseen
+base-form command fail closed into its own unresolved span; coordination inside
+a prepositional modifier or incomplete noun phrase remains intact. Code,
+nesting, exact offsets, and existing bounds remain preserved.
 
 ## 2026-08-23: Bound fallback recall before normal packet presentation
 

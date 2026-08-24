@@ -44,6 +44,11 @@ _PERSISTENCE_MODIFIER = (
 _PERSISTENCE_PREFIX = (
     r"(?:^|[,;:]\s+|\b(?:first|then|next|finally|must|should|shall|will|can|to)\s+)"
 )
+_PERSISTENCE_DIRECT_OBJECT_PATTERN = re.compile(
+    rf"{_PERSISTENCE_PREFIX}{_PERSISTENCE_ACTION}\b\s+"
+    rf"(?:the\s+|a\s+|an\s+)?{_PERSISTENCE_MODIFIER}{_PERSISTENCE_OBJECT}\b"
+    r"\s*[.!?]?$"
+)
 
 
 class TaskDecompositionError(ValueError):
@@ -136,9 +141,11 @@ _CUE_PATTERNS: dict[ObligationKind, tuple[re.Pattern[str], ...]] = {
             rf"{_PERSISTENCE_ACTION_INFLECTED}\b"
         ),
         re.compile(
-            rf"\b{_PERSISTENCE_OBJECT}\b.{{0,60}}\b(?:survive|survives|survived|"
-            rf"retain|retains|retained|resume|resumes|resumed)\b.{{0,60}}"
-            r"\b(?:restart|restarts|reboot|relaunch|shutdown|interruption)\b"
+            rf"(?:^|[,;:]\s+)(?:the\s+)?(?:[a-z0-9_-]+\s+){{0,2}}"
+            rf"{_PERSISTENCE_OBJECT}\b\s+"
+            rf"(?:(?:must|should|shall|will|can)\s+)?(?:survive|survives|survived)\b"
+            r"\s+(?:(?:across|after|through)\s+)?(?:a\s+|the\s+)?"
+            r"(?:restart|restarts|reboot|relaunch|shutdown|interruption)\b"
         ),
     ),
     ObligationKind.RECOVERY: (
@@ -178,20 +185,25 @@ _METHOD_ARTIFACT = (
     r"(?:method|pattern|algorithm|implementation|approach|strategy|technique|"
     r"procedure|workflow|mechanism|recipe|design|code)"
 )
+_IDENTIFIER_TOKEN = r"[\w-]+(?:\.[\w-]+)*"
+_BACKTICK_IDENTIFIER = r"`[^`\r\n]{1,128}`"
+_ATTRIBUTION_TOKEN = rf"(?:{_BACKTICK_IDENTIFIER}|{_IDENTIFIER_TOKEN})"
 _POSSESSIVE_ATTRIBUTION_PATTERN = re.compile(
-    rf"(?P<owner>[\w-]+(?:\.[\w-]+)*(?:\s+[\w-]+(?:\.[\w-]+)*){{0,3}})['’]s\s+"
+    rf"(?P<owner>{_ATTRIBUTION_TOKEN}(?:\s+{_ATTRIBUTION_TOKEN}){{0,7}})['’]s\s+"
     rf"(?:[\w-]+\s+){{0,5}}{_METHOD_ARTIFACT}\b",
     flags=re.IGNORECASE,
 )
 _DIRECTIONAL_ATTRIBUTION_PATTERN = re.compile(
     rf"\b{_METHOD_ARTIFACT}\b\s+(?:from|by|according\s+to)\s+(?P<definite>the\s+)?"
-    rf"(?P<source>[\w-]+(?:\.[\w-]+)*(?:\s+[\w-]+(?:\.[\w-]+)*){{0,3}})",
+    rf"(?P<source>{_BACKTICK_IDENTIFIER}|{_IDENTIFIER_TOKEN}"
+    rf"(?:\s+{_IDENTIFIER_TOKEN}){{0,3}})",
     flags=re.IGNORECASE,
 )
 _DECLARATION_PATTERN = re.compile(
     r"(?:^|(?<=[.!?;]))\s*(?:create|define|declare|construct|instantiate|introduce|"
     r"build)\s+(?:a\s+|an\s+|the\s+)?"
-    r"(?P<entity>[\w-]+(?:\.[\w-]+)*(?:\s+[\w-]+(?:\.[\w-]+)*){0,3})",
+    rf"(?P<entity>{_BACKTICK_IDENTIFIER}|{_IDENTIFIER_TOKEN}"
+    rf"(?:\s+{_IDENTIFIER_TOKEN}){{0,3}})",
     flags=re.IGNORECASE,
 )
 _DECLARATION_STOP_WORDS = {
@@ -234,6 +246,18 @@ _GENERIC_LOCAL_REFERENCE_MODIFIERS = {
     "supplied",
     "task",
     "this",
+}
+_POLITE_PREFIXES = {"kindly", "please"}
+_ATTRIBUTION_ACTION_WORDS = {
+    "adopt",
+    "apply",
+    "borrow",
+    "follow",
+    "implement",
+    "port",
+    "reuse",
+    "review",
+    "use",
 }
 
 _GENERIC_ACTION_WORDS = {
@@ -355,17 +379,20 @@ def _matches_prior_declaration(
     value: str,
     position: int,
     declarations: tuple[tuple[str, int], ...],
-    *,
-    allow_leading_action: bool = False,
 ) -> bool:
-    tokens = value.split()
     declared_before = {identity for identity, end in declarations if end <= position}
-    return _entity_identity(value) in declared_before or (
-        allow_leading_action
-        and len(tokens) > 1
-        and _normalize(tokens[0]) in _GENERIC_ACTION_WORDS
-        and _entity_identity(" ".join(tokens[1:])) in declared_before
-    )
+    return _entity_identity(value) in declared_before
+
+
+def _attributed_entity(owner: str) -> str:
+    tokens = owner.split()
+    if tokens and _normalize(tokens[0]) in _POLITE_PREFIXES:
+        tokens = tokens[1:]
+    if tokens and _normalize(tokens[0]) in _ATTRIBUTION_ACTION_WORDS:
+        tokens = tokens[1:]
+    if tokens and _normalize(tokens[0]) in {"a", "an", "the"}:
+        tokens = tokens[1:]
+    return " ".join(tokens)
 
 
 def _is_generic_local_role(owner: str) -> bool:
@@ -392,7 +419,7 @@ def _contains_structural_source_attribution(task_text: str) -> bool:
     for match in _POSSESSIVE_ATTRIBUTION_PATTERN.finditer(task_text):
         owner = match.group("owner")
         if not _matches_prior_declaration(
-            owner, match.start(), declarations, allow_leading_action=True
+            _attributed_entity(owner), match.start(), declarations
         ) and not (_is_generic_local_role(owner)):
             return True
     for match in _DIRECTIONAL_ATTRIBUTION_PATTERN.finditer(task_text):
@@ -432,17 +459,14 @@ def _left_is_prepositional_coordination(value: str) -> bool:
     return _PREPOSITIONAL_COORDINATION_PATTERN.search(_normalize(value)) is not None
 
 
-def _has_strong_predicate_evidence(tokens: tuple[str, ...], normalized: str) -> bool:
+def _has_unambiguous_predicate_evidence(
+    tokens: tuple[str, ...], normalized: str
+) -> bool:
     if re.match(r"^[a-z0-9_-]+\s+`", normalized):
         return True
     if len(tokens) >= 3 and tokens[1] in _MODAL_WORDS:
         return True
-    if _looks_like_inflected_predicate(tokens):
-        return True
-    if tokens and (
-        tokens[0] in _GENERIC_ACTION_WORDS
-        or tokens[0].endswith(("ate", "ify", "ise", "ize", "en"))
-    ):
+    if tokens and tokens[0] in _GENERIC_ACTION_WORDS:
         return True
     return re.match(
         r"^[a-z0-9_-]+\s+(?:the|a|an|each|every|this|that|these|those|it|them|to)\b",
@@ -450,15 +474,27 @@ def _has_strong_predicate_evidence(tokens: tuple[str, ...], normalized: str) -> 
     ) is not None
 
 
+def _left_has_completed_direct_object(value: str) -> bool:
+    return _PERSISTENCE_DIRECT_OBJECT_PATTERN.match(_normalize(value)) is not None
+
+
 def _starts_independent_clause(value: str, left_value: str) -> bool:
     normalized = _normalize(value)
     if not normalized:
         return False
     tokens = tuple(match.group(0) for match in _TERM_PATTERN.finditer(normalized))
-    if _has_strong_predicate_evidence(tokens, normalized):
+    if _has_unambiguous_predicate_evidence(tokens, normalized):
         return True
     if _left_is_prepositional_coordination(left_value):
         return False
+    if _left_has_completed_direct_object(left_value) and len(tokens) >= 2:
+        return True
+    if len(tokens) >= 2 and tokens[1].endswith("s"):
+        return False
+    if _looks_like_inflected_predicate(tokens):
+        return True
+    if tokens and tokens[0].endswith(("ate", "ify", "ise", "ize", "en")):
+        return True
     if len(tokens) == 2 and not tokens[1].endswith("s"):
         return _matched_kinds(_normalize(left_value)) != (ObligationKind.UNRESOLVED,)
     if _matched_kinds(normalized) != (ObligationKind.UNRESOLVED,):
