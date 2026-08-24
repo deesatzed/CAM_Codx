@@ -135,8 +135,13 @@ _LEAKAGE_PATTERNS = (
     re.compile(r"\bdonor\b"),
     re.compile(r"\b(?:copy|reuse|follow|from)\b.{0,48}\b(?:repository|repo)\b"),
     re.compile(
-        r"\b(?:copy|reuse|follow|adopt)\s+[^.!?\n]{1,80}['’]s\s+"
+        r"\b(?:copy|reuse|follow|adopt|use|apply)\s+[^.!?\n]{1,80}['’]s\s+"
         r"[^.!?\n]{0,80}\b(?:method|algorithm|implementation|pattern|code)\b"
+    ),
+    re.compile(
+        r"\b(?:copy|reuse|follow|adopt|use|apply)\s+(?:the\s+)?[^.!?\n]{0,80}"
+        r"\b(?:method|algorithm|implementation|pattern|code)\s+from\s+"
+        r"[^.!?\n]{1,80}(?:[.!?]|$)"
     ),
     re.compile(r"https?://(?:www\.)?(?:github|gitlab|bitbucket)\.com/[^\s/]+/[^\s/]+"),
 )
@@ -195,10 +200,22 @@ def _validate_task_text(task_text: object) -> str:
     return task_text
 
 
-def _conjunction_boundaries(span: str) -> tuple[tuple[int, int], ...]:
-    """Find top-level coordinating conjunctions without parsing code spans."""
+def _starts_independent_clause(value: str) -> bool:
+    normalized = _normalize(value)
+    if not normalized:
+        return False
+    if _matched_kinds(normalized) != (ObligationKind.UNRESOLVED,):
+        return True
+    return re.match(
+        r"^[a-z0-9_-]+\s+(?:the|a|an|each|every|this|that|these|those|it|them|to)\b",
+        normalized,
+    ) is not None
 
-    boundaries: list[tuple[int, int]] = []
+
+def _clause_boundaries(span: str) -> tuple[tuple[int, int], ...]:
+    """Find supported top-level clause delimiters without parsing code spans."""
+
+    candidates: list[tuple[int, int, str]] = []
     in_code = False
     nesting = 0
     index = 0
@@ -213,15 +230,39 @@ def _conjunction_boundaries(span: str) -> tuple[tuple[int, int], ...]:
                 nesting += 1
             elif character in ")]}":
                 nesting = max(0, nesting - 1)
-            elif nesting == 0 and span[index : index + 3].casefold() == "and":
-                before = span[index - 1] if index else " "
-                after_index = index + 3
-                after = span[after_index] if after_index < len(span) else " "
-                if not before.isalnum() and not after.isalnum():
-                    boundaries.append((index, after_index))
-                    index = after_index
-                    continue
+            elif nesting == 0 and character == ";":
+                candidates.append((index, index + 1, ";"))
+                index += 1
+                continue
+            elif nesting == 0:
+                matched_delimiter = next(
+                    (
+                        delimiter
+                        for delimiter in ("and", "but")
+                        if span[index : index + len(delimiter)].casefold() == delimiter
+                    ),
+                    None,
+                )
+                if matched_delimiter is not None:
+                    before = span[index - 1] if index else " "
+                    after_index = index + len(matched_delimiter)
+                    after = span[after_index] if after_index < len(span) else " "
+                    if not before.isalnum() and not after.isalnum():
+                        candidates.append((index, after_index, matched_delimiter))
+                        index = after_index
+                        continue
         index += 1
+
+    boundaries: list[tuple[int, int]] = []
+    for candidate_index, (start, end, delimiter) in enumerate(candidates):
+        next_start = (
+            candidates[candidate_index + 1][0]
+            if candidate_index + 1 < len(candidates)
+            else len(span)
+        )
+        right_clause = span[end:next_start]
+        if delimiter in {";", "but"} or _starts_independent_clause(right_clause):
+            boundaries.append((start, end))
     return tuple(boundaries)
 
 
@@ -232,7 +273,7 @@ def _split_supported_conjunctions(
 
     if _matched_kinds(_normalize(span)) == (ObligationKind.UNRESOLVED,):
         return ((start, end, span),)
-    boundaries = _conjunction_boundaries(span)
+    boundaries = _clause_boundaries(span)
     if not boundaries:
         return ((start, end, span),)
 
@@ -362,8 +403,7 @@ def decompose_task(task_text: object) -> TaskResolution:
 def serialize_resolution(resolution: TaskResolution) -> bytes:
     """Serialize one resolution as canonical, stable UTF-8 JSON bytes."""
 
-    if not isinstance(resolution, TaskResolution):
-        raise TaskDecompositionError("resolution must be a TaskResolution")
+    _validate_resolution_types(resolution)
     if resolution != decompose_task(resolution.task_text):
         raise TaskDecompositionError("resolution is not the canonical decomposition")
     payload = asdict(resolution)
@@ -373,3 +413,33 @@ def serialize_resolution(resolution: TaskResolution) -> bytes:
         separators=(",", ":"),
         sort_keys=True,
     ).encode("utf-8")
+
+
+def _validate_resolution_types(resolution: object) -> None:
+    """Reject equality-compatible type confusion before canonical comparison."""
+
+    if type(resolution) is not TaskResolution:
+        raise TaskDecompositionError("resolution is not a canonical TaskResolution type")
+    if type(resolution.schema_version) is not int or resolution.schema_version != SCHEMA_VERSION:
+        raise TaskDecompositionError("resolution has a non-canonical schema version")
+    if type(resolution.task_text) is not str:
+        raise TaskDecompositionError("resolution task text has a non-canonical type")
+    if type(resolution.obligations) is not tuple:
+        raise TaskDecompositionError("resolution obligations have a non-canonical type")
+    for obligation in resolution.obligations:
+        if type(obligation) is not TaskObligation:
+            raise TaskDecompositionError("resolution obligation has a non-canonical type")
+        if type(obligation.obligation_id) is not str:
+            raise TaskDecompositionError("obligation ID has a non-canonical type")
+        if type(obligation.kind) is not ObligationKind:
+            raise TaskDecompositionError("obligation kind has a non-canonical type")
+        if type(obligation.task_span) is not str:
+            raise TaskDecompositionError("obligation span has a non-canonical type")
+        if type(obligation.span_start) is not int or type(obligation.span_end) is not int:
+            raise TaskDecompositionError("obligation offsets have non-canonical types")
+        if type(obligation.discriminative_terms) is not tuple or any(
+            type(term) is not str for term in obligation.discriminative_terms
+        ):
+            raise TaskDecompositionError("obligation terms have non-canonical types")
+        if type(obligation.required) is not bool:
+            raise TaskDecompositionError("obligation required flag has a non-canonical type")

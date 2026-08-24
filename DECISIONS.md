@@ -24,7 +24,13 @@ clauses are separated when a sentence contains a supported method cue, keeping
 an unknown sibling clause explicitly unresolved. Bare domain nouns such as
 `state` do not establish persistence, attributed source-method grammar fails
 closed without a donor-name table, and serialization accepts only the exact
-canonical decomposition of its preserved task text.
+canonical decomposition of its preserved task text. Serialization validates
+the exact resolution, obligation, enum, scalar, and tuple item types before
+comparing values; Python equality between `True`/`1`, `0`/`0.0`, or a string
+enum/plain string cannot cross this boundary. The top-level lexer treats
+semicolon and adversative `but` as clause boundaries, while an `and` split
+requires an independently clause-shaped right side so noun coordination stays
+intact.
 
 ## 2026-08-23: Bound fallback recall before normal packet presentation
 

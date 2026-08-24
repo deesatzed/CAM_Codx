@@ -195,6 +195,148 @@ def test_serializer_rejects_forged_donor_identity() -> None:
         resolver.serialize_resolution(forged)
 
 
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "schema_bool",
+        "schema_float",
+        "task_text_subclass",
+        "task_text_int",
+        "obligations_list",
+        "obligations_string",
+        "obligation_id_subclass",
+        "obligation_id_int",
+        "kind_string",
+        "task_span_subclass",
+        "task_span_int",
+        "span_start_float",
+        "span_start_bool",
+        "span_end_float",
+        "span_end_bool",
+        "terms_list",
+        "terms_string",
+        "term_subclass",
+        "term_bool",
+        "term_int",
+        "required_int",
+        "required_string",
+        "resolution_subclass",
+        "obligation_subclass",
+    ),
+)
+def test_serializer_recursively_requires_exact_frozen_types(mutation: str) -> None:
+    resolver = _load_resolver()
+    clean = resolver.decompose_task("Persist the checkpoint.")
+    obligation = clean.obligations[0]
+
+    class TextSubclass(str):
+        pass
+
+    class ResolutionSubclass(resolver.TaskResolution):
+        pass
+
+    class ObligationSubclass(resolver.TaskObligation):
+        pass
+
+    if mutation == "schema_bool":
+        forged = replace(clean, schema_version=True)
+    elif mutation == "schema_float":
+        forged = replace(clean, schema_version=1.0)
+    elif mutation == "task_text_subclass":
+        forged = replace(clean, task_text=TextSubclass(clean.task_text))
+    elif mutation == "task_text_int":
+        forged = replace(clean, task_text=1)
+    elif mutation == "obligations_list":
+        forged = replace(clean, obligations=list(clean.obligations))
+    elif mutation == "obligations_string":
+        forged = replace(clean, obligations="persistence")
+    elif mutation == "obligation_id_subclass":
+        forged_item = replace(
+            obligation, obligation_id=TextSubclass(obligation.obligation_id)
+        )
+        forged = replace(clean, obligations=(forged_item,))
+    elif mutation == "obligation_id_int":
+        forged_item = replace(obligation, obligation_id=1)
+        forged = replace(clean, obligations=(forged_item,))
+    elif mutation == "kind_string":
+        forged_item = replace(obligation, kind=obligation.kind.value)
+        forged = replace(clean, obligations=(forged_item,))
+    elif mutation == "task_span_subclass":
+        forged_item = replace(obligation, task_span=TextSubclass(obligation.task_span))
+        forged = replace(clean, obligations=(forged_item,))
+    elif mutation == "task_span_int":
+        forged_item = replace(obligation, task_span=1)
+        forged = replace(clean, obligations=(forged_item,))
+    elif mutation == "span_start_float":
+        forged_item = replace(obligation, span_start=float(obligation.span_start))
+        forged = replace(clean, obligations=(forged_item,))
+    elif mutation == "span_start_bool":
+        forged_item = replace(obligation, span_start=False)
+        forged = replace(clean, obligations=(forged_item,))
+    elif mutation == "span_end_float":
+        forged_item = replace(obligation, span_end=float(obligation.span_end))
+        forged = replace(clean, obligations=(forged_item,))
+    elif mutation == "span_end_bool":
+        forged_item = replace(obligation, span_end=True)
+        forged = replace(clean, obligations=(forged_item,))
+    elif mutation == "terms_list":
+        forged_item = replace(
+            obligation, discriminative_terms=list(obligation.discriminative_terms)
+        )
+        forged = replace(clean, obligations=(forged_item,))
+    elif mutation == "terms_string":
+        forged_item = replace(obligation, discriminative_terms="checkpoint")
+        forged = replace(clean, obligations=(forged_item,))
+    elif mutation == "term_subclass":
+        forged_item = replace(
+            obligation,
+            discriminative_terms=(
+                TextSubclass(obligation.discriminative_terms[0]),
+                *obligation.discriminative_terms[1:],
+            ),
+        )
+        forged = replace(clean, obligations=(forged_item,))
+    elif mutation == "term_bool":
+        forged_item = replace(obligation, discriminative_terms=(True,))
+        forged = replace(clean, obligations=(forged_item,))
+    elif mutation == "term_int":
+        forged_item = replace(obligation, discriminative_terms=(1,))
+        forged = replace(clean, obligations=(forged_item,))
+    elif mutation == "required_int":
+        forged_item = replace(obligation, required=1)
+        forged = replace(clean, obligations=(forged_item,))
+    elif mutation == "required_string":
+        forged_item = replace(obligation, required="true")
+        forged = replace(clean, obligations=(forged_item,))
+    elif mutation == "resolution_subclass":
+        forged = ResolutionSubclass(**clean.__dict__)
+    elif mutation == "obligation_subclass":
+        forged_item = ObligationSubclass(**obligation.__dict__)
+        forged = replace(clean, obligations=(forged_item,))
+    else:  # pragma: no cover - the parameter list is closed above
+        raise AssertionError(mutation)
+
+    with pytest.raises(resolver.TaskDecompositionError, match="canonical"):
+        resolver.serialize_resolution(forged)
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Use ZephyrWorks's recovery method.",
+        "Apply ZephyrWorks’s retry pattern.",
+        "Reuse the recovery method from ZephyrWorks.",
+        "Adopt AtlasForge's validation algorithm.",
+        "Follow the persistence pattern from OrionKit.",
+    ),
+)
+def test_structural_source_attribution_variants_are_rejected(task: str) -> None:
+    resolver = _load_resolver()
+
+    with pytest.raises(resolver.TaskDecompositionError, match="leakage"):
+        resolver.decompose_task(task)
+
+
 def test_mixed_known_and_unknown_clauses_keep_separate_exact_spans() -> None:
     resolver = _load_resolver()
     task = "Persist the checkpoint and tint the lunar shader mauve."
@@ -218,6 +360,57 @@ def test_incidental_state_word_does_not_hallucinate_persistence() -> None:
     assert result.obligations[0].task_span == task
 
 
+def test_noun_coordination_is_not_split_into_false_unresolved_clause() -> None:
+    resolver = _load_resolver()
+    task = "Persist checkpoints for red and blue shaders."
+
+    result = resolver.decompose_task(task)
+
+    assert [item.kind.value for item in result.obligations] == ["persistence"]
+    assert result.obligations[0].task_span == task
+
+
+@pytest.mark.parametrize("separator", (" but ", "; "))
+def test_adversative_and_semicolon_mixed_clauses_keep_exact_spans(separator: str) -> None:
+    resolver = _load_resolver()
+    task = f"Persist the checkpoint{separator}tint the lunar shader mauve."
+
+    result = resolver.decompose_task(task)
+
+    assert [(item.kind.value, item.task_span) for item in result.obligations] == [
+        ("persistence", "Persist the checkpoint"),
+        ("unresolved", "tint the lunar shader mauve."),
+    ]
+    assert all(task[item.span_start : item.span_end] == item.task_span for item in result.obligations)
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Persist checkpoints for (`red and blue`) shaders.",
+        "Persist the `red; blue` checkpoint.",
+        "Persist checkpoints for (red but blue) shaders.",
+    ),
+)
+def test_clause_lexer_ignores_delimiters_inside_code_and_nesting(task: str) -> None:
+    resolver = _load_resolver()
+
+    result = resolver.decompose_task(task)
+
+    assert [item.kind.value for item in result.obligations] == ["persistence"]
+    assert result.obligations[0].task_span == task
+
+
+def test_semicolon_clause_expansion_obeys_span_bound() -> None:
+    resolver = _load_resolver()
+    task = "; ".join(
+        "persist checkpoint" for _ in range(resolver.MAX_TASK_SPANS + 1)
+    )
+
+    with pytest.raises(resolver.TaskDecompositionError, match="span limit"):
+        resolver.decompose_task(task)
+
+
 def test_ordinary_repository_language_is_not_mistaken_for_donor_leakage() -> None:
     resolver = _load_resolver()
     task = "Validate the repository root remains inside the workspace."
@@ -225,6 +418,20 @@ def test_ordinary_repository_language_is_not_mistaken_for_donor_leakage() -> Non
     result = resolver.decompose_task(task)
 
     assert {"invariant", "safety", "verification"} <= _kinds(result)
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Use the repository root to persist task state.",
+        "Apply the retry method after failure.",
+        "Validate the task description before execution.",
+    ),
+)
+def test_ordinary_task_and_repository_phrasing_remains_valid(task: str) -> None:
+    resolver = _load_resolver()
+
+    assert resolver.decompose_task(task).task_text == task
 
 
 def test_public_output_has_no_case_donor_or_hidden_test_leakage() -> None:

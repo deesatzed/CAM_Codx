@@ -1,5 +1,28 @@
 # Progress
 
+## 2026-08-24 recursive serialization and clause-lexer hardening
+
+- Added an adversarial recursive type matrix covering equality-compatible
+  Boolean/integer/float/string subclasses and wrong nested container/item
+  types. Serialization now requires the exact frozen resolution, obligation,
+  enum, scalar, tuple, and tuple-item types before canonical value comparison.
+- Expanded source-attribution rejection by grammar rather than identity:
+  source-directed use/apply/reuse/adopt/follow forms with possessive attribution
+  or a method/pattern `from` source fail closed. Ordinary repository roots,
+  task descriptions, and unattributed retry-method phrasing remain valid.
+- Refined the bounded top-level lexer to preserve noun coordination such as
+  `red and blue shaders`, while splitting independently clause-shaped `and`,
+  adversative `but`, and semicolon boundaries outside code/nesting. Exact task
+  offsets and substrings remain unchanged in every emitted obligation, and
+  delimiter expansion remains subject to the existing span ceiling.
+- Exact targeted RED evidence was `17 failed, 8 passed`; failures were the
+  intended type-confusion, attribution, and segmentation gaps. GREEN evidence
+  is `63` resolver tests and `80` resolver plus Development Brief regressions.
+  Ruff and `git diff --check` pass.
+- No provider/Context7 call, CAM command, mining, database access or mutation,
+  corpus/profile/config change, target write, or N01-N25 source/evaluator
+  inspection occurred.
+
 ## 2026-08-24 task-obligation adversarial hardening
 
 - Added four exact RED regressions: name-only attributed donor reuse, forged
