@@ -1,5 +1,30 @@
 # Progress
 
+## 2026-08-24 plural possessives, textual labels, and numeric elisions
+
+- Attribution now detects a terminal ASCII or curly plural possessive before
+  Unicode punctuation/symbol edge stripping, including trailing wrappers after
+  the apostrophe. Undeclared, mismatched, and wrapper-smuggled owners therefore
+  fail closed; only the exact same bounded identity declared earlier may use
+  the local-declaration exemption. Canonical serialization revalidates this
+  boundary and cannot emit rejected attribution.
+- Persistence scanning masks the content of a closed generic directive set
+  when the singular or plural label is followed by a colon: `quote`, `label`,
+  `caption`, `title`, `example`, `sample`, `note`, `text`, and `legend`.
+  Persistence-like words in those textual labels remain unresolved, while a
+  real instruction in a separate following sentence retains its exact span.
+- ASCII apostrophes starting a two-digit numeric elision such as `'90s` or
+  `'99` are not treated as quote delimiters. Other unmatched supported quote
+  delimiters retain the existing fail-closed syntax behavior.
+- Strict TDD RED was `23 failed, 3 passed`; plural directive coverage was
+  separately RED at `2 failed, 9 passed`. GREEN is `351` resolver tests and
+  `368` resolver plus Development Brief regressions. Five maximum-size timing
+  controls pass in `0.08s` total, with the slowest measured call at `0.01s`
+  against a `2.0s` ceiling. Ruff and `git diff --check` pass.
+- No provider/Context7 call, CAM command, mining, database access or mutation,
+  corpus/profile/config change, target write, or N01-N25 source/evaluator
+  inspection occurred.
+
 ## 2026-08-24 structural wrappers and quoted persistence text
 
 - Leakage token edges now use one bounded Unicode-category rule: leading and

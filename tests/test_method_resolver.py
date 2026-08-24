@@ -608,6 +608,70 @@ def test_unicode_category_wrappers_cannot_hide_possessive_attribution(
 @pytest.mark.parametrize(
     "task",
     (
+        "Borrow QuasarSystems' recovery method.",
+        "Borrow QuasarSystems’ recovery method.",
+        "Borrow James' retry strategy.",
+        "Borrow «QuasarSystems'» recovery pattern.",
+        "Borrow |QuasarSystems’§ recovery algorithm.",
+    ),
+)
+def test_terminal_plural_possessive_source_attribution_fails_closed(
+    task: str,
+) -> None:
+    resolver = _load_resolver()
+
+    with pytest.raises(resolver.TaskDecompositionError, match="leakage"):
+        resolver.decompose_task(task)
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Create QuasarSystems. Implement QuasarSystems' retry strategy.",
+        "Define quasar systems. Apply «quasar systems’» recovery method.",
+    ),
+)
+def test_declared_plural_possessive_owner_requires_exact_prior_binding(
+    task: str,
+) -> None:
+    resolver = _load_resolver()
+
+    assert resolver.decompose_task(task).task_text == task
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Implement QuasarSystems' retry strategy. Create QuasarSystems.",
+        "Create QuasarSystem. Implement QuasarSystems' retry strategy.",
+        "Create Systems. Implement QuasarSystems' retry strategy.",
+        "Create QuasarSystems. Implement EvilQuasarSystems’ retry strategy.",
+    ),
+)
+def test_plural_possessive_declaration_mismatch_and_smuggling_reject(
+    task: str,
+) -> None:
+    resolver = _load_resolver()
+
+    with pytest.raises(resolver.TaskDecompositionError, match="leakage"):
+        resolver.decompose_task(task)
+
+
+def test_serialization_cannot_emit_plural_possessive_source_attribution() -> None:
+    resolver = _load_resolver()
+    clean = resolver.decompose_task("Persist state.")
+    forged = replace(
+        clean,
+        task_text="Borrow QuasarSystems' recovery method.",
+    )
+
+    with pytest.raises(resolver.TaskDecompositionError, match="leakage"):
+        resolver.serialize_resolution(forged)
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
         "Create ---.",
         "Create ---. Implement ---'s retry strategy.",
         "Create `---`. Implement `$$$`'s retry strategy.",
@@ -1258,6 +1322,47 @@ def test_quoted_or_decorative_persistence_text_remains_unresolved(task: str) -> 
     assert result.obligations[0].task_span == task
 
 
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Quote: Persist state.",
+        "Label: Save settings.",
+        "Caption: Store records.",
+        "Title: Write data.",
+        "Example: Persist state.",
+        "Sample: Save state.",
+        "Note: Store an artifact.",
+        "Text: Write records.",
+        "Legend: Persist settings.",
+        "Notes: Save state.",
+        "Examples: Store records.",
+    ),
+)
+def test_closed_textual_directives_mask_persistence_phrases(task: str) -> None:
+    resolver = _load_resolver()
+
+    result = resolver.decompose_task(task)
+
+    assert [item.kind.value for item in result.obligations] == ["unresolved"]
+    assert result.obligations[0].task_span == task
+
+
+def test_instruction_after_separate_textual_label_sentence_is_exact() -> None:
+    resolver = _load_resolver()
+    task = "Label: Persist state. Save settings."
+
+    result = resolver.decompose_task(task)
+
+    assert [(item.kind.value, item.task_span) for item in result.obligations] == [
+        ("unresolved", "Label: Persist state."),
+        ("persistence", "Save settings."),
+    ]
+    assert all(
+        task[item.span_start : item.span_end] == item.task_span
+        for item in result.obligations
+    )
+
+
 def test_real_persistence_instruction_outside_quotes_retains_exact_span() -> None:
     resolver = _load_resolver()
     task = 'Quote "Saved state" and persist state.'
@@ -1444,6 +1549,32 @@ def test_apostrophes_units_and_ordinary_symbols_are_not_quote_errors(task: str) 
     resolver = _load_resolver()
 
     assert resolver.decompose_task(task).task_text == task
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Render a '90s palette.",
+        "Compare the ’99 edition.",
+        "Support '24 and ’25 formats.",
+    ),
+)
+def test_numeric_elision_apostrophes_are_not_quote_delimiters(task: str) -> None:
+    resolver = _load_resolver()
+
+    assert resolver.decompose_task(task).task_text == task
+
+
+def test_numeric_elision_before_real_persistence_keeps_exact_instruction() -> None:
+    resolver = _load_resolver()
+    task = "Use '90s styling and persist state."
+
+    result = resolver.decompose_task(task)
+
+    assert [(item.kind.value, item.task_span) for item in result.obligations] == [
+        ("unresolved", "Use '90s styling"),
+        ("persistence", "persist state."),
+    ]
 
 
 def test_balanced_nested_syntax_remains_valid() -> None:

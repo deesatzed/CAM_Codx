@@ -166,6 +166,25 @@ _PERSISTENCE_AUXILIARIES = {
     "were",
     "will",
 }
+_TEXTUAL_DIRECTIVE_ROOTS = {
+    "caption",
+    "example",
+    "label",
+    "legend",
+    "note",
+    "quote",
+    "sample",
+    "text",
+    "title",
+}
+_TEXTUAL_DIRECTIVES = {
+    variant
+    for root in _TEXTUAL_DIRECTIVE_ROOTS
+    for variant in (root, f"{root}s")
+}
+_TEXTUAL_DIRECTIVE_PATTERN = re.compile(
+    rf"^\s*(?:{'|'.join(sorted(_TEXTUAL_DIRECTIVES))})\s*:"
+)
 
 
 class TaskDecompositionError(ValueError):
@@ -496,6 +515,14 @@ def _is_possessive_apostrophe(value: str, index: int) -> bool:
     )
 
 
+def _is_numeric_elision_apostrophe(value: str, index: int) -> bool:
+    return (
+        index + 2 < len(value)
+        and value[index + 1].isdigit()
+        and value[index + 2].isdigit()
+    )
+
+
 def _quote_ranges(value: str) -> tuple[tuple[int, int], ...]:
     """Validate supported quotes and return non-overlapping outer quote ranges."""
 
@@ -513,6 +540,7 @@ def _quote_ranges(value: str) -> tuple[tuple[int, int], ...]:
         if character in {"'", "’", "‘"} and (
             _is_internal_apostrophe(value, index)
             or _is_possessive_apostrophe(value, index)
+            or _is_numeric_elision_apostrophe(value, index)
         ):
             continue
         if stack and character == stack[-1][0]:
@@ -613,6 +641,30 @@ def _canonical_repository_candidate(raw: str) -> str:
     return candidate
 
 
+def _terminal_plural_possessive_owner(raw: str) -> str | None:
+    normalized = unicodedata.normalize("NFKC", raw).translate(_APOSTROPHE_TRANSLATION)
+    start = 0
+    while start < len(normalized) and unicodedata.category(normalized[start])[0] in {
+        "P",
+        "S",
+    }:
+        start += 1
+    cursor = len(normalized) - 1
+    while cursor >= start and unicodedata.category(normalized[cursor])[0] in {
+        "P",
+        "S",
+    }:
+        if (
+            normalized[cursor] == "'"
+            and cursor > start
+            and normalized[cursor - 1].casefold() == "s"
+        ):
+            owner = _strip_unicode_edge_wrappers(normalized[start:cursor])
+            return owner or None
+        cursor -= 1
+    return None
+
+
 def _is_repository_url_candidate(raw: str) -> bool:
     candidate = _canonical_repository_candidate(raw)
     if "://" in candidate:
@@ -668,6 +720,9 @@ def _validate_balanced_syntax(task_text: str) -> None:
 
 
 def _unwrap_text_token(raw: str) -> str:
+    plural_owner = _terminal_plural_possessive_owner(raw)
+    if plural_owner is not None:
+        return f"{plural_owner}'s"
     return _strip_unicode_edge_wrappers(raw).translate(_APOSTROPHE_TRANSLATION)
 
 
@@ -865,7 +920,7 @@ def _validate_task_text(task_text: object) -> str:
 
 def _persistence_text(normalized_span: str) -> str:
     quote_masked = _mask_quoted_spans(normalized_span)
-    if re.match(r"^\s*quote\s*:", quote_masked):
+    if _TEXTUAL_DIRECTIVE_PATTERN.match(quote_masked):
         return " " * len(quote_masked)
     return re.sub(r"`[^`]*`", " code_identifier ", quote_masked)
 

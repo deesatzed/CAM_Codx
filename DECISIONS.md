@@ -44,6 +44,10 @@ optional article are syntax, not identity, and no other identity word is
 discarded. Closed local-role and task-document grammar preserves ordinary
 caller/task phrasing without creating an arbitrary lowercase bypass; the role
 exemption compares the entire command-stripped owner phrase, never a suffix.
+Terminal ASCII and curly plural possessives are recognized before Unicode edge
+wrappers are stripped, including punctuation or symbol wrappers after the
+apostrophe. They receive no special source exemption: only an exact earlier
+declaration of the complete normalized owner identity is local.
 
 Leakage seals apply NFKC and case folding, with camel separation only for the
 hidden/held-out vocabulary seal. Case IDs use a linear identifier-boundary scan
@@ -63,9 +67,12 @@ quotation spans are masked without changing offsets. Bounded passive forms and
 an explicit object-survival relation across a restart-like event remain valid
 only when the grammatical subject is itself a bounded state or artifact term.
 Benefit/resource senses, decorative durability language, quoted persistence
-words, standalone past-participle labels, an explicit leading `Quote:`
-directive, and incidental state-file, checkpoint, journal, backup, or storage
-nouns do not create a persistence obligation.
+words, standalone past-participle labels, and content following the closed
+singular/plural textual directive set `quote`, `label`, `caption`, `title`,
+`example`, `sample`, `note`, `text`, and `legend` plus a colon do not create a
+persistence obligation. Incidental state-file, checkpoint, journal, backup, or
+storage nouns likewise remain insufficient. A separate subsequent sentence is
+still scanned normally.
 
 Clause splitting classifies `and` by position: generic
 action/modal/subject-predicate evidence starts a sibling clause, an explicit
@@ -76,8 +83,9 @@ a prepositional modifier or incomplete noun phrase remains intact, including
 verb-like modifiers sharing a later plural head. Balanced backticks, supported
 paired quotation marks (including canonical fullwidth ASCII forms), and
 properly matched `()[]{}` nesting are required before decomposition; ambiguous
-apostrophes and unit marks are not promoted to quote delimiters. Invalid UTF-8
-scalar content fails as
+apostrophes, two-digit numeric elision apostrophes, and unit marks are not
+promoted to quote delimiters. Other unmatched supported quotes continue to
+fail closed. Invalid UTF-8 scalar content fails as
 `TaskDecompositionError`. Code, quotations, nesting, exact offsets, and all
 byte/token/window/span/obligation bounds remain preserved.
 
