@@ -337,6 +337,93 @@ def test_structural_source_attribution_variants_are_rejected(task: str) -> None:
         resolver.decompose_task(task)
 
 
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Borrow QuasarForge's recovery approach.",
+        "Borrow Quasar.Forge's recovery method.",
+        "Borrow quasar_forge's recovery method.",
+        "Borrow quasar-forge's recovery method.",
+        "Borrow QuasarForge's Recovery Strategy.",
+        "Borrow ＱｕａｓａｒＦｏｒｇｅ＇ｓ Recovery Strategy.",
+        "Port QuasarForge’s retry strategy.",
+        "Implement QuasarForge's failure algorithm.",
+        "Review Quasar Forge's persistence implementation.",
+        "Review QuasarForge team's recovery strategy.",
+        "Review Quasar Forge team's recovery strategy.",
+        "QuasarForge's recovery pattern must be followed.",
+        "Port the recovery approach from QuasarForge.",
+        "Apply the retry strategy by Quasar Forge.",
+        "Implement the algorithm according to QuasarForge.",
+    ),
+)
+def test_proper_source_attribution_rejects_without_leading_verb_dependency(task: str) -> None:
+    resolver = _load_resolver()
+
+    with pytest.raises(resolver.TaskDecompositionError, match="leakage"):
+        resolver.decompose_task(task)
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Preserve the runner's state.",
+        "Use the caller's retry strategy.",
+        "Validate the method's return value.",
+        "Compute the strategy from the task description.",
+        "Apply the method according to the current specification.",
+    ),
+)
+def test_generic_possessives_and_unattributed_sources_remain_valid(task: str) -> None:
+    resolver = _load_resolver()
+
+    assert resolver.decompose_task(task).task_text == task
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Implement C-01.",
+        "Implement c_01.",
+        "Implement C.01.",
+        "Implement C 01.",
+        "Implement N-07.",
+        "Implement n_07.",
+        "Implement N.07.",
+        "Implement Ｃ－０１.",
+        "Use hidden_tests.",
+        "Use hidden‐tests.",
+        "Use hidden.tests.",
+        "Use HiddenTests.",
+        "Use hiddenTests.",
+        "Read held_out evidence.",
+        "Read held.out evidence.",
+        "Read HeldOut evidence.",
+        "Read heldOut evidence.",
+    ),
+)
+def test_leakage_seals_normalize_case_unicode_and_separators(task: str) -> None:
+    resolver = _load_resolver()
+
+    with pytest.raises(resolver.TaskDecompositionError, match="leakage"):
+        resolver.decompose_task(task)
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Handle hidden testability details.",
+        "Use a held outcome value.",
+        "Render C-010 palette entries.",
+        "Use N.7 neighbors.",
+    ),
+)
+def test_normalized_leakage_seals_do_not_overmatch_words_or_numbers(task: str) -> None:
+    resolver = _load_resolver()
+
+    assert resolver.decompose_task(task).task_text == task
+
+
 def test_mixed_known_and_unknown_clauses_keep_separate_exact_spans() -> None:
     resolver = _load_resolver()
     task = "Persist the checkpoint and tint the lunar shader mauve."
@@ -401,6 +488,46 @@ def test_clause_lexer_ignores_delimiters_inside_code_and_nesting(task: str) -> N
     assert result.obligations[0].task_span == task
 
 
+@pytest.mark.parametrize(
+    ("task", "expected_unknown"),
+    (
+        ("Persist the checkpoint and render shader.", "render shader."),
+        ("Persist the checkpoint and call `shade and glow`.", "call `shade and glow`."),
+        ("Persist the checkpoint and worker renders shader.", "worker renders shader."),
+        ("Persist the checkpoint and normalize colors.", "normalize colors."),
+    ),
+)
+def test_clause_lexer_splits_imperative_and_subject_predicates(
+    task: str, expected_unknown: str
+) -> None:
+    resolver = _load_resolver()
+
+    result = resolver.decompose_task(task)
+
+    assert [(item.kind.value, item.task_span) for item in result.obligations] == [
+        ("persistence", "Persist the checkpoint"),
+        ("unresolved", expected_unknown),
+    ]
+    assert all(task[item.span_start : item.span_end] == item.task_span for item in result.obligations)
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Persist checkpoints for red and blue shaders.",
+        "Persist fast and bright shaders.",
+        "Persist settings for local and remote workers.",
+    ),
+)
+def test_clause_lexer_preserves_noun_and_adjective_coordination(task: str) -> None:
+    resolver = _load_resolver()
+
+    result = resolver.decompose_task(task)
+
+    assert [item.kind.value for item in result.obligations] == ["persistence"]
+    assert result.obligations[0].task_span == task
+
+
 def test_semicolon_clause_expansion_obeys_span_bound() -> None:
     resolver = _load_resolver()
     task = "; ".join(
@@ -409,6 +536,40 @@ def test_semicolon_clause_expansion_obeys_span_bound() -> None:
 
     with pytest.raises(resolver.TaskDecompositionError, match="span limit"):
         resolver.decompose_task(task)
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Tune the lunar shader state file icon.",
+        "Render the storage checkpoint badge.",
+        "Color the journal and backup symbols.",
+        "Show the save icon.",
+    ),
+)
+def test_persistence_rejects_incidental_storage_nouns_and_icons(task: str) -> None:
+    resolver = _load_resolver()
+
+    result = resolver.decompose_task(task)
+
+    assert "persistence" not in _kinds(result)
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Persist the shader settings.",
+        "Save the shader settings.",
+        "Restore settings after restart.",
+        "Settings must survive a restart.",
+        "Write settings durably.",
+        "Settings persisted across restarts.",
+    ),
+)
+def test_persistence_requires_action_survival_or_durability(task: str) -> None:
+    resolver = _load_resolver()
+
+    assert "persistence" in _kinds(resolver.decompose_task(task))
 
 
 def test_ordinary_repository_language_is_not_mistaken_for_donor_leakage() -> None:

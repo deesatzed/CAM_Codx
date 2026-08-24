@@ -30,7 +30,14 @@ comparing values; Python equality between `True`/`1`, `0`/`0.0`, or a string
 enum/plain string cannot cross this boundary. The top-level lexer treats
 semicolon and adversative `but` as clause boundaries, while an `and` split
 requires an independently clause-shaped right side so noun coordination stays
-intact.
+intact. Source attribution is recognized from proper/camel/dotted/spaced source
+shape around a bounded method-artifact grammar, independent of any leading
+action verb; lowercase role possessives remain ordinary task text. Leakage
+seals first apply NFKC, camel separation, and case folding so punctuation,
+underscore, dotted, spaced, and camel variants cannot bypass case-ID or hidden/
+held-out controls. Persistence requires an action, survival, or durability cue;
+state-file, checkpoint, journal, backup, and storage nouns alone do not create
+a persistence obligation.
 
 ## 2026-08-23: Bound fallback recall before normal packet presentation
 

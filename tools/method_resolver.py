@@ -97,12 +97,21 @@ _CUE_PATTERNS: dict[ObligationKind, tuple[re.Pattern[str], ...]] = {
     ),
     ObligationKind.PERSISTENCE: (
         re.compile(
-            r"\b(?:persist(?:s|ed|ence|ent)?|durable|checkpoint|journal|storage|"
-            r"store|stored|save|saved|write|writes|written|append|appends|backup)\b"
+            r"\b(?:persist(?:s|ed|ing|ence|ent)?|durable|durably|durability|"
+            r"survive|survives|survived|survival)\b"
         ),
-        re.compile(r"\bstate (?:file|store|path|record|snapshot)\b"),
-        re.compile(r"\b(?:file|store|checkpoint) state\b"),
-        re.compile(r"\b(?:atomic|atomically|replace-atomic)\b"),
+        re.compile(
+            r"(?:^|\b(?:must|should|shall|will|can|to)\s+)"
+            r"(?:save|store|write|append|restore)\b"
+        ),
+        re.compile(
+            r"\b(?:saves|saved|saving|stores|stored|storing|writes|wrote|written|"
+            r"writing|appends|appended|appending|restores|restored|restoring)\b"
+        ),
+        re.compile(
+            r"\b(?:retain|retains|retained|resume|resumes|resumed)\b.{0,60}"
+            r"\b(?:restart|reboot|relaunch|interruption)\b"
+        ),
     ),
     ObligationKind.RECOVERY: (
         re.compile(
@@ -130,20 +139,26 @@ _CUE_PATTERNS: dict[ObligationKind, tuple[re.Pattern[str], ...]] = {
 }
 
 _LEAKAGE_PATTERNS = (
-    re.compile(r"(?<![a-z0-9])[cn]\d{2}(?![a-z0-9])"),
-    re.compile(r"\b(?:hidden[- ]tests?|held[- ]out)\b"),
+    re.compile(r"(?<![a-z0-9])[cn][\W_]*\d{2}(?![a-z0-9])"),
+    re.compile(r"\bhidden[\W_]*tests?\b"),
+    re.compile(r"\bheld[\W_]*out\b"),
     re.compile(r"\bdonor\b"),
-    re.compile(r"\b(?:copy|reuse|follow|from)\b.{0,48}\b(?:repository|repo)\b"),
-    re.compile(
-        r"\b(?:copy|reuse|follow|adopt|use|apply)\s+[^.!?\n]{1,80}['’]s\s+"
-        r"[^.!?\n]{0,80}\b(?:method|algorithm|implementation|pattern|code)\b"
-    ),
-    re.compile(
-        r"\b(?:copy|reuse|follow|adopt|use|apply)\s+(?:the\s+)?[^.!?\n]{0,80}"
-        r"\b(?:method|algorithm|implementation|pattern|code)\s+from\s+"
-        r"[^.!?\n]{1,80}(?:[.!?]|$)"
-    ),
     re.compile(r"https?://(?:www\.)?(?:github|gitlab|bitbucket)\.com/[^\s/]+/[^\s/]+"),
+)
+
+_METHOD_ARTIFACT = (
+    r"(?:method|pattern|algorithm|implementation|approach|strategy|technique|"
+    r"procedure|workflow|mechanism|recipe|design|code)"
+)
+_POSSESSIVE_ATTRIBUTION_PATTERN = re.compile(
+    rf"(?P<owner>[\w.-]+(?:\s+[\w.-]+){{0,3}})['’]s\s+"
+    rf"(?:[\w-]+\s+){{0,5}}{_METHOD_ARTIFACT}\b",
+    flags=re.IGNORECASE,
+)
+_DIRECTIONAL_ATTRIBUTION_PATTERN = re.compile(
+    rf"\b{_METHOD_ARTIFACT}\b\s+(?:from|by|according\s+to)\s+(?:the\s+)?"
+    rf"(?P<source>[\w.-]+(?:\s+[\w.-]+){{0,3}})",
+    flags=re.IGNORECASE,
 )
 
 _TERM_PATTERN = re.compile(r"[a-z0-9][a-z0-9_-]*")
@@ -187,29 +202,98 @@ def _normalize(value: str) -> str:
     return " ".join(unicodedata.normalize("NFKC", value).casefold().split())
 
 
+def _leakage_normal_form(value: str) -> str:
+    normalized = unicodedata.normalize("NFKC", value)
+    separated_camel = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", normalized)
+    return separated_camel.casefold()
+
+
+def _token_looks_like_source(token: str) -> bool:
+    cleaned = token.strip("._-")
+    return bool(cleaned) and (
+        cleaned[0].isupper()
+        or any(character.isupper() for character in cleaned[1:])
+        or any(separator in cleaned for separator in (".", "_", "-"))
+    )
+
+
+def _possessive_owner_looks_like_source(owner: str) -> bool:
+    tokens = owner.split()
+    if not tokens:
+        return False
+    if _token_looks_like_source(tokens[-1]):
+        return True
+    for index, token in enumerate(tokens):
+        cleaned = token.strip("._-")
+        if not cleaned:
+            continue
+        if any(separator in cleaned for separator in (".", "_", "-")) or any(
+            character.isupper() for character in cleaned[1:]
+        ):
+            return True
+        if index > 0 and cleaned[0].isupper():
+            return True
+    return False
+
+
+def _contains_structural_source_attribution(task_text: str) -> bool:
+    for match in _POSSESSIVE_ATTRIBUTION_PATTERN.finditer(task_text):
+        if _possessive_owner_looks_like_source(match.group("owner")):
+            return True
+    for match in _DIRECTIONAL_ATTRIBUTION_PATTERN.finditer(task_text):
+        if any(
+            _token_looks_like_source(token)
+            for token in match.group("source").split()
+        ):
+            return True
+    return False
+
+
 def _validate_task_text(task_text: object) -> str:
     if not isinstance(task_text, str) or not task_text.strip():
         raise TaskDecompositionError("task text must be a non-empty string")
     if len(task_text.encode("utf-8")) > MAX_TASK_BYTES:
         raise TaskDecompositionError(f"task text exceeds {MAX_TASK_BYTES}-byte limit")
     normalized = _normalize(task_text)
-    if any(pattern.search(normalized) for pattern in _LEAKAGE_PATTERNS):
+    leakage_form = _leakage_normal_form(task_text)
+    attribution_form = unicodedata.normalize("NFKC", task_text)
+    if any(pattern.search(leakage_form) for pattern in _LEAKAGE_PATTERNS) or (
+        _contains_structural_source_attribution(attribution_form)
+    ):
         raise TaskDecompositionError("task text contains prohibited source or evaluation leakage")
     if _TERM_PATTERN.search(normalized) is None:
         raise TaskDecompositionError("task text must contain a bounded textual term")
     return task_text
 
 
-def _starts_independent_clause(value: str) -> bool:
+def _looks_like_inflected_predicate(tokens: tuple[str, ...]) -> bool:
+    if len(tokens) < 3:
+        return False
+    predicate = tokens[1]
+    return predicate.endswith(("s", "ed", "ing"))
+
+
+def _starts_independent_clause(value: str, left_value: str) -> bool:
     normalized = _normalize(value)
     if not normalized:
         return False
-    if _matched_kinds(normalized) != (ObligationKind.UNRESOLVED,):
+    if re.match(r"^[a-z0-9_-]+\s+`", normalized):
         return True
-    return re.match(
+    if re.match(
         r"^[a-z0-9_-]+\s+(?:the|a|an|each|every|this|that|these|those|it|them|to)\b",
         normalized,
-    ) is not None
+    ):
+        return True
+    tokens = tuple(match.group(0) for match in _TERM_PATTERN.finditer(normalized))
+    if _looks_like_inflected_predicate(tokens):
+        return True
+    if tokens and tokens[0].endswith(("ate", "ify", "ise", "ize", "en")):
+        return True
+    if len(tokens) == 2 and not tokens[1].endswith("s"):
+        return _matched_kinds(_normalize(left_value)) != (ObligationKind.UNRESOLVED,)
+    if _matched_kinds(normalized) != (ObligationKind.UNRESOLVED,):
+        return len(tokens) != 2 or not tokens[1].endswith("s")
+    return False
 
 
 def _clause_boundaries(span: str) -> tuple[tuple[int, int], ...]:
@@ -255,13 +339,17 @@ def _clause_boundaries(span: str) -> tuple[tuple[int, int], ...]:
 
     boundaries: list[tuple[int, int]] = []
     for candidate_index, (start, end, delimiter) in enumerate(candidates):
+        previous_end = candidates[candidate_index - 1][1] if candidate_index else 0
         next_start = (
             candidates[candidate_index + 1][0]
             if candidate_index + 1 < len(candidates)
             else len(span)
         )
+        left_clause = span[previous_end:start]
         right_clause = span[end:next_start]
-        if delimiter in {";", "but"} or _starts_independent_clause(right_clause):
+        if delimiter in {";", "but"} or _starts_independent_clause(
+            right_clause, left_clause
+        ):
             boundaries.append((start, end))
     return tuple(boundaries)
 

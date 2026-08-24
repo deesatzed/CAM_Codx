@@ -1,5 +1,36 @@
 # Progress
 
+## 2026-08-24 structural leakage, clause, and persistence grammar
+
+- Replaced action-verb-dependent source rejection with a bounded structural
+  grammar: proper/camel/dotted/spaced possessive sources and method-artifact
+  attribution through `from`, `by`, or `according to` fail closed regardless of
+  sentence verb. Lowercase runner/caller/method possessives and ordinary task or
+  specification sources remain valid; no donor identity list exists.
+- Added a dedicated leakage normal form using NFKC, camel-boundary separation,
+  and case folding. Case IDs and hidden/held-out terms now reject hyphen,
+  underscore, dotted, spaced, camel, Unicode-width, and Unicode-separator forms
+  without matching longer words or wrong digit widths.
+- Extended the bounded top-level clause lexer with local imperative, code-call,
+  subject-predicate, and verb-morphology shapes. It splits unknown sibling
+  clauses such as a render/call predicate while preserving plural noun and
+  adjective coordination, exact offsets, code/nesting, stable order, and span
+  limits.
+- Persistence now requires persistence/durability/survival morphology or a
+  syntactically behavioral save/store/write/append/restore action. Incidental
+  state-file, storage, checkpoint, journal, backup, and save-icon nouns do not
+  create persistence; persist/save/restore/survive/restart behaviors remain
+  covered.
+- Primary targeted RED evidence was `33 failed, 16 passed`; a self-review
+  phrase-owner extension was separately RED at `2 failed, 8 passed`, followed
+  by one-case RED checks for case-insensitive artifact grammar and NFKC-width
+  attribution and a two-case RED separator-source check. GREEN is `121`
+  resolver tests and `138` resolver plus
+  Development Brief regressions. Ruff and `git diff --check` pass.
+- No provider/Context7 call, CAM command, mining, database access or mutation,
+  corpus/profile/config change, target write, or N01-N25 source/evaluator
+  inspection occurred.
+
 ## 2026-08-24 recursive serialization and clause-lexer hardening
 
 - Added an adversarial recursive type matrix covering equality-compatible
