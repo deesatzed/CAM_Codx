@@ -12,14 +12,17 @@
   phrase, however, verb-like coordinated modifiers before a shared plural head
   remain one noun phrase. This preserves `call and render actions`-shaped
   coordination without swallowing a separate verification/audit obligation.
+  Determiner/modal predicate evidence takes precedence over shared-head
+  suppression, so `render the outputs` remains a separate exact span.
 - The save/store/write/append/restore/reload direct-object grammar stops at
   infinitive and secondary gerund boundaries. A later state/data term cannot
   repair `save time`, `store credit`, or confidence restoration, while bounded
   multiword adjective phrases directly ending in a state/artifact object remain
   persistence evidence.
-- Targeted TDD RED was `11 failed, 7 passed`; GREEN is `205` resolver tests and
-  `222` resolver plus Development Brief regressions. Ruff and `git diff
-  --check` pass.
+- Targeted TDD RED was `11 failed, 7 passed`; the final precedence regression
+  was separately RED at `1 failed, 2 passed`. GREEN is `206` resolver tests and
+  `223` resolver plus Development Brief regressions. Ruff and `git diff --check`
+  pass.
 - No provider/Context7 call, CAM command, mining, database access or mutation,
   corpus/profile/config change, target write, or N01-N25 source/evaluator
   inspection occurred.

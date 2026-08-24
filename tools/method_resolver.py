@@ -468,8 +468,6 @@ def _has_unambiguous_predicate_evidence(
         return True
     if len(tokens) >= 3 and tokens[1] in _MODAL_WORDS:
         return True
-    if tokens and tokens[0] in _GENERIC_ACTION_WORDS:
-        return True
     return re.match(
         r"^[a-z0-9_-]+\s+(?:the|a|an|each|every|this|that|these|those|it|them|to)\b",
         normalized,
@@ -495,11 +493,13 @@ def _starts_independent_clause(value: str, left_value: str) -> bool:
     tokens = tuple(match.group(0) for match in _TERM_PATTERN.finditer(normalized))
     if _has_known_obligation_predicate(normalized):
         return True
+    if _has_unambiguous_predicate_evidence(tokens, normalized):
+        return True
     if _left_is_prepositional_coordination(left_value) and _has_shared_plural_head(
         tokens
     ):
         return False
-    if _has_unambiguous_predicate_evidence(tokens, normalized):
+    if tokens and tokens[0] in _GENERIC_ACTION_WORDS:
         return True
     if _left_is_prepositional_coordination(left_value):
         return False

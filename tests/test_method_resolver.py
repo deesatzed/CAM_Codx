@@ -801,6 +801,19 @@ def test_known_rhs_obligation_precedes_prepositional_coordination(
     ]
 
 
+def test_determiner_predicate_precedes_shared_plural_head_suppression() -> None:
+    resolver = _load_resolver()
+    task = "Persist settings for local workers and render the outputs."
+
+    result = resolver.decompose_task(task)
+
+    assert [(item.kind.value, item.task_span) for item in result.obligations] == [
+        ("persistence", "Persist settings for local workers"),
+        ("unresolved", "render the outputs."),
+    ]
+    assert all(task[item.span_start : item.span_end] == item.task_span for item in result.obligations)
+
+
 @pytest.mark.parametrize(
     "task",
     (
