@@ -1,5 +1,33 @@
 # Progress
 
+## 2026-08-24 declaration-bound attribution and conservative cue grammar
+
+- External method-artifact attribution now fails closed regardless of case,
+  spacing, separator, article, possessive, or `from`/`by` form. The only named
+  entity exception is an exact normalized identity introduced earlier by a
+  bounded declaration/construction statement; declaration order, identity,
+  and count are enforced, and suffix smuggling cannot borrow that exception.
+  A small closed grammar preserves ordinary local roles and task/specification
+  references without treating arbitrary lowercase text as local provenance.
+- The top-level clause lexer now uses bounded generic action, modal-predicate,
+  and subject-predicate evidence. It separates independently actionable RHS
+  clauses while retaining coordination inside prepositional noun phrases,
+  adjective lists, code spans, and nested delimiters with exact source offsets.
+- Persistence now requires an unambiguous persistence action or a
+  save/store/write/append/restore/reload action directly bound to a bounded
+  state, artifact, or storage object, or an explicit object-survival relation
+  across restart-like events. Benefit/resource and decorative senses such as
+  saving time or energy, store credit, confidence restoration, and durability
+  labels stay unresolved even when a later unrelated state noun appears.
+- Initial adversarial RED was `21 failed, 10 passed`; further self-review RED
+  probes exposed definite-article attribution (`2 failed`), distant-object
+  persistence repair (`3 failed`), and declared-name suffix smuggling
+  (`1 failed`). GREEN is `161` resolver tests and `178` resolver plus
+  Development Brief regressions. Ruff and `git diff --check` pass.
+- No provider/Context7 call, CAM command, mining, database access or mutation,
+  corpus/profile/config change, target write, or N01-N25 source/evaluator
+  inspection occurred.
+
 ## 2026-08-24 structural leakage, clause, and persistence grammar
 
 - Replaced action-verb-dependent source rejection with a bounded structural

@@ -383,6 +383,87 @@ def test_generic_possessives_and_unattributed_sources_remain_valid(task: str) ->
 @pytest.mark.parametrize(
     "task",
     (
+        "Borrow quasarforge's retry strategy.",
+        "Use quasar forge's recovery approach.",
+        "Apply the strategy from quasarforge.",
+        "Use the approach by quasar forge.",
+        "Follow the algorithm according to quasarforge.",
+    ),
+)
+def test_lowercase_external_method_attribution_fails_closed(task: str) -> None:
+    resolver = _load_resolver()
+
+    with pytest.raises(resolver.TaskDecompositionError, match="leakage"):
+        resolver.decompose_task(task)
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Use the approach by the quasar forge.",
+        "Follow the algorithm according to the workflow runner.",
+        "Borrow the voyager's recovery strategy.",
+    ),
+)
+def test_external_attribution_cannot_hide_behind_articles_or_role_morphology(
+    task: str,
+) -> None:
+    resolver = _load_resolver()
+
+    with pytest.raises(resolver.TaskDecompositionError, match="leakage"):
+        resolver.decompose_task(task)
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Create WorkflowRunner. Implement WorkflowRunner's retry strategy.",
+        "Define workflow runner. Apply workflow runner's recovery approach.",
+        "Construct retry_policy. Use retry_policy's failure strategy.",
+        "Create WorkflowRunner. Implement workflow_runner's retry strategy.",
+        "Create WorkflowRunner. Apply the retry strategy from workflow_runner.",
+    ),
+)
+def test_prior_local_declaration_allows_exact_normalized_attribution(task: str) -> None:
+    resolver = _load_resolver()
+
+    assert resolver.decompose_task(task).task_text == task
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Implement WorkflowRunner's retry strategy. Create WorkflowRunner.",
+        "Create WorkflowRunner. Implement WorkflowRunnerV2's retry strategy.",
+        "Create a report about WorkflowRunner. Implement WorkflowRunner's retry strategy.",
+        "Create WorkflowRunner. Implement Quasar WorkflowRunner's retry strategy.",
+    ),
+)
+def test_local_declaration_must_precede_and_match_attributed_identity(task: str) -> None:
+    resolver = _load_resolver()
+
+    with pytest.raises(resolver.TaskDecompositionError, match="leakage"):
+        resolver.decompose_task(task)
+
+
+def test_local_declaration_scope_is_bounded() -> None:
+    resolver = _load_resolver()
+    declarations = " ".join(
+        f"Create LocalEntity{index}."
+        for index in range(resolver.MAX_LOCAL_DECLARATIONS + 1)
+    )
+    task = (
+        f"{declarations} Implement "
+        f"LocalEntity{resolver.MAX_LOCAL_DECLARATIONS}'s retry strategy."
+    )
+
+    with pytest.raises(resolver.TaskDecompositionError, match="leakage"):
+        resolver.decompose_task(task)
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
         "Implement C-01.",
         "Implement c_01.",
         "Implement C.01.",
@@ -512,6 +593,28 @@ def test_clause_lexer_splits_imperative_and_subject_predicates(
 
 
 @pytest.mark.parametrize(
+    ("task", "expected_unknown"),
+    (
+        ("Persist the checkpoint and worker can tint output.", "worker can tint output."),
+        ("Persist the checkpoint and emit output.", "emit output."),
+        ("Persist the checkpoint and process records.", "process records."),
+    ),
+)
+def test_clause_lexer_splits_modal_and_generic_action_predicates(
+    task: str, expected_unknown: str
+) -> None:
+    resolver = _load_resolver()
+
+    result = resolver.decompose_task(task)
+
+    assert [(item.kind.value, item.task_span) for item in result.obligations] == [
+        ("persistence", "Persist the checkpoint"),
+        ("unresolved", expected_unknown),
+    ]
+    assert all(task[item.span_start : item.span_end] == item.task_span for item in result.obligations)
+
+
+@pytest.mark.parametrize(
     "task",
     (
         "Persist checkpoints for red and blue shaders.",
@@ -520,6 +623,23 @@ def test_clause_lexer_splits_imperative_and_subject_predicates(
     ),
 )
 def test_clause_lexer_preserves_noun_and_adjective_coordination(task: str) -> None:
+    resolver = _load_resolver()
+
+    result = resolver.decompose_task(task)
+
+    assert [item.kind.value for item in result.obligations] == ["persistence"]
+    assert result.obligations[0].task_span == task
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Persist settings for local and remote worker.",
+        "Persist records for primary and secondary queue.",
+        "Persist artifacts with source and target identifier.",
+    ),
+)
+def test_clause_lexer_preserves_singular_prepositional_coordination(task: str) -> None:
     resolver = _load_resolver()
 
     result = resolver.decompose_task(task)
@@ -567,6 +687,44 @@ def test_persistence_rejects_incidental_storage_nouns_and_icons(task: str) -> No
     ),
 )
 def test_persistence_requires_action_survival_or_durability(task: str) -> None:
+    resolver = _load_resolver()
+
+    assert "persistence" in _kinds(resolver.decompose_task(task))
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Save time during rendering.",
+        "Save energy during processing.",
+        "Store credit for later.",
+        "Paint the word durable on the shader.",
+        "Display a persistence badge.",
+        "Restore confidence after failure.",
+        "Save time while application state is displayed.",
+        "Store credit for data processing.",
+        "Restore confidence after configuration review.",
+    ),
+)
+def test_persistence_rejects_benefit_resource_and_decorative_polysemy(task: str) -> None:
+    resolver = _load_resolver()
+
+    assert "persistence" not in _kinds(resolver.decompose_task(task))
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Save application state.",
+        "Store the result artifact.",
+        "Restore configuration after restart.",
+        "Reload the checkpoint after restart.",
+        "Settings survive across restarts.",
+        "Persist output data.",
+        "The session state was saved before shutdown.",
+    ),
+)
+def test_persistence_binds_action_or_survival_to_state_artifact_object(task: str) -> None:
     resolver = _load_resolver()
 
     assert "persistence" in _kinds(resolver.decompose_task(task))

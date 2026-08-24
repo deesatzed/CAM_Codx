@@ -32,12 +32,21 @@ semicolon and adversative `but` as clause boundaries, while an `and` split
 requires an independently clause-shaped right side so noun coordination stays
 intact. Source attribution is recognized from proper/camel/dotted/spaced source
 shape around a bounded method-artifact grammar, independent of any leading
-action verb; lowercase role possessives remain ordinary task text. Leakage
-seals first apply NFKC, camel separation, and case folding so punctuation,
-underscore, dotted, spaced, and camel variants cannot bypass case-ID or hidden/
-held-out controls. Persistence requires an action, survival, or durability cue;
-state-file, checkpoint, journal, backup, and storage nouns alone do not create
-a persistence obligation.
+action verb. Case and orthography cannot make an attributed entity local: a
+named attribution is admitted only when an exact normalized identity was
+declared earlier through bounded generic declaration/construction syntax.
+Closed local-role and task-document grammar preserves ordinary caller/task
+phrasing without creating an arbitrary lowercase bypass. Leakage seals first
+apply NFKC, camel separation, and case folding so punctuation, underscore,
+dotted, spaced, and camel variants cannot bypass case-ID or hidden/held-out
+controls. Persistence requires an unambiguous persistence action, a behavioral
+save/store/write/append/restore/reload action directly bound to a bounded
+state/artifact/storage object, or an explicit object-survival relation across a
+restart-like event. Benefit/resource senses, decorative durability language,
+and incidental state-file, checkpoint, journal, backup, or storage nouns do
+not create a persistence obligation. Clause splitting uses top-level generic
+action/modal/subject-predicate evidence and preserves prepositional noun
+coordination, code, nesting, exact offsets, and existing bounds.
 
 ## 2026-08-23: Bound fallback recall before normal packet presentation
 

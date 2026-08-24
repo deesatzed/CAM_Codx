@@ -22,6 +22,28 @@ MAX_TASK_SPANS = 64
 MAX_OBLIGATIONS = 256
 MAX_DISCRIMINATIVE_TERMS = 12
 MAX_TERM_CHARACTERS = 64
+MAX_LOCAL_DECLARATIONS = 16
+
+
+_PERSISTENCE_OBJECT = (
+    r"(?:state|settings?|configs?|configurations?|data|records?|results?|artifacts?|"
+    r"checkpoints?|progress|files?|documents?|entries|events?|queues?|journals?|"
+    r"snapshots?|metadata|caches?|sessions?|receipts?|outputs?|work|collections?|"
+    r"mappings?|contents?|payloads?|messages?|logs?|indexes?|baselines?|bytes|"
+    r"evidence|trails?|storage)"
+)
+_PERSISTENCE_ACTION = r"(?:persist|save|store|write|append|restore|reload)"
+_PERSISTENCE_ACTION_INFLECTED = (
+    r"(?:persists?|persisted|saved|stored|writes?|wrote|written|appends?|appended|"
+    r"restores?|restored|reloads?|reloaded)"
+)
+_PERSISTENCE_MODIFIER = (
+    r"(?:(?!(?:after|and|before|but|during|for|when|while|with)\b)"
+    r"[a-z0-9_-]+\s+){0,3}"
+)
+_PERSISTENCE_PREFIX = (
+    r"(?:^|[,;:]\s+|\b(?:first|then|next|finally|must|should|shall|will|can|to)\s+)"
+)
 
 
 class TaskDecompositionError(ValueError):
@@ -97,20 +119,26 @@ _CUE_PATTERNS: dict[ObligationKind, tuple[re.Pattern[str], ...]] = {
     ),
     ObligationKind.PERSISTENCE: (
         re.compile(
-            r"\b(?:persist(?:s|ed|ing|ence|ent)?|durable|durably|durability|"
-            r"survive|survives|survived|survival)\b"
+            rf"{_PERSISTENCE_PREFIX}persist\b\s+(?:the\s+|a\s+|an\s+)?"
+            rf"{_PERSISTENCE_MODIFIER}[a-z0-9_-]+"
         ),
         re.compile(
-            r"(?:^|\b(?:must|should|shall|will|can|to)\s+)"
-            r"(?:save|store|write|append|restore)\b"
+            rf"{_PERSISTENCE_PREFIX}{_PERSISTENCE_ACTION}\b\s+"
+            rf"(?:the\s+|a\s+|an\s+)?{_PERSISTENCE_MODIFIER}{_PERSISTENCE_OBJECT}\b"
         ),
         re.compile(
-            r"\b(?:saves|saved|saving|stores|stored|storing|writes|wrote|written|"
-            r"writing|appends|appended|appending|restores|restored|restoring)\b"
+            rf"\b{_PERSISTENCE_ACTION_INFLECTED}\b\s+"
+            rf"(?:the\s+|a\s+|an\s+)?{_PERSISTENCE_MODIFIER}{_PERSISTENCE_OBJECT}\b"
         ),
         re.compile(
-            r"\b(?:retain|retains|retained|resume|resumes|resumed)\b.{0,60}"
-            r"\b(?:restart|reboot|relaunch|interruption)\b"
+            rf"\b{_PERSISTENCE_OBJECT}\b\s+"
+            rf"(?:(?:is|are|was|were|has|have|had|must|should|will)\s+){{0,2}}"
+            rf"{_PERSISTENCE_ACTION_INFLECTED}\b"
+        ),
+        re.compile(
+            rf"\b{_PERSISTENCE_OBJECT}\b.{{0,60}}\b(?:survive|survives|survived|"
+            rf"retain|retains|retained|resume|resumes|resumed)\b.{{0,60}}"
+            r"\b(?:restart|restarts|reboot|relaunch|shutdown|interruption)\b"
         ),
     ),
     ObligationKind.RECOVERY: (
@@ -151,14 +179,105 @@ _METHOD_ARTIFACT = (
     r"procedure|workflow|mechanism|recipe|design|code)"
 )
 _POSSESSIVE_ATTRIBUTION_PATTERN = re.compile(
-    rf"(?P<owner>[\w.-]+(?:\s+[\w.-]+){{0,3}})['’]s\s+"
+    rf"(?P<owner>[\w-]+(?:\.[\w-]+)*(?:\s+[\w-]+(?:\.[\w-]+)*){{0,3}})['’]s\s+"
     rf"(?:[\w-]+\s+){{0,5}}{_METHOD_ARTIFACT}\b",
     flags=re.IGNORECASE,
 )
 _DIRECTIONAL_ATTRIBUTION_PATTERN = re.compile(
-    rf"\b{_METHOD_ARTIFACT}\b\s+(?:from|by|according\s+to)\s+(?:the\s+)?"
-    rf"(?P<source>[\w.-]+(?:\s+[\w.-]+){{0,3}})",
+    rf"\b{_METHOD_ARTIFACT}\b\s+(?:from|by|according\s+to)\s+(?P<definite>the\s+)?"
+    rf"(?P<source>[\w-]+(?:\.[\w-]+)*(?:\s+[\w-]+(?:\.[\w-]+)*){{0,3}})",
     flags=re.IGNORECASE,
+)
+_DECLARATION_PATTERN = re.compile(
+    r"(?:^|(?<=[.!?;]))\s*(?:create|define|declare|construct|instantiate|introduce|"
+    r"build)\s+(?:a\s+|an\s+|the\s+)?"
+    r"(?P<entity>[\w-]+(?:\.[\w-]+)*(?:\s+[\w-]+(?:\.[\w-]+)*){0,3})",
+    flags=re.IGNORECASE,
+)
+_DECLARATION_STOP_WORDS = {
+    "about",
+    "and",
+    "for",
+    "from",
+    "that",
+    "to",
+    "using",
+    "which",
+    "with",
+}
+_GENERIC_LOCAL_ROLES = {
+    "caller",
+    "client",
+    "handler",
+    "reader",
+    "runner",
+    "server",
+    "user",
+    "worker",
+    "writer",
+}
+_GENERIC_LOCAL_REFERENCE_NOUNS = {
+    "configuration",
+    "description",
+    "instructions",
+    "requirements",
+    "schema",
+    "specification",
+    "text",
+}
+_GENERIC_LOCAL_REFERENCE_MODIFIERS = {
+    "current",
+    "input",
+    "local",
+    "provided",
+    "repository",
+    "supplied",
+    "task",
+    "this",
+}
+
+_GENERIC_ACTION_WORDS = {
+    "add",
+    "apply",
+    "build",
+    "call",
+    "collect",
+    "compute",
+    "convert",
+    "create",
+    "emit",
+    "execute",
+    "generate",
+    "handle",
+    "invoke",
+    "implement",
+    "load",
+    "normalize",
+    "parse",
+    "process",
+    "produce",
+    "render",
+    "return",
+    "set",
+    "transform",
+    "update",
+    "use",
+    "validate",
+}
+_MODAL_WORDS = {
+    "can",
+    "could",
+    "may",
+    "might",
+    "must",
+    "shall",
+    "should",
+    "will",
+    "would",
+}
+_PREPOSITIONAL_COORDINATION_PATTERN = re.compile(
+    r"\b(?:for|of|with|between|among|in|on|to|from|by)\s+"
+    r"(?:[a-z0-9_-]+\s+){0,2}[a-z0-9_-]+\s*$"
 )
 
 _TERM_PATTERN = re.compile(r"[a-z0-9][a-z0-9_-]*")
@@ -208,42 +327,78 @@ def _leakage_normal_form(value: str) -> str:
     return separated_camel.casefold()
 
 
-def _token_looks_like_source(token: str) -> bool:
-    cleaned = token.strip("._-")
-    return bool(cleaned) and (
-        cleaned[0].isupper()
-        or any(character.isupper() for character in cleaned[1:])
-        or any(separator in cleaned for separator in (".", "_", "-"))
+def _entity_identity(value: str) -> str:
+    separated_camel = re.sub(
+        r"(?<=[a-z0-9])(?=[A-Z])", " ", unicodedata.normalize("NFKC", value)
+    )
+    return "".join(
+        character for character in separated_camel.casefold() if character.isalnum()
     )
 
 
-def _possessive_owner_looks_like_source(owner: str) -> bool:
-    tokens = owner.split()
-    if not tokens:
-        return False
-    if _token_looks_like_source(tokens[-1]):
-        return True
-    for index, token in enumerate(tokens):
-        cleaned = token.strip("._-")
-        if not cleaned:
-            continue
-        if any(separator in cleaned for separator in (".", "_", "-")) or any(
-            character.isupper() for character in cleaned[1:]
-        ):
-            return True
-        if index > 0 and cleaned[0].isupper():
-            return True
-    return False
+def _declared_entities(task_text: str) -> tuple[tuple[str, int], ...]:
+    declarations: list[tuple[str, int]] = []
+    for match in _DECLARATION_PATTERN.finditer(task_text):
+        retained: list[str] = []
+        for token in match.group("entity").split():
+            if token.casefold().strip("._-") in _DECLARATION_STOP_WORDS:
+                break
+            retained.append(token)
+        if retained:
+            declarations.append((_entity_identity(" ".join(retained)), match.end()))
+        if len(declarations) == MAX_LOCAL_DECLARATIONS:
+            break
+    return tuple(declarations)
+
+
+def _matches_prior_declaration(
+    value: str,
+    position: int,
+    declarations: tuple[tuple[str, int], ...],
+    *,
+    allow_leading_action: bool = False,
+) -> bool:
+    tokens = value.split()
+    declared_before = {identity for identity, end in declarations if end <= position}
+    return _entity_identity(value) in declared_before or (
+        allow_leading_action
+        and len(tokens) > 1
+        and _normalize(tokens[0]) in _GENERIC_ACTION_WORDS
+        and _entity_identity(" ".join(tokens[1:])) in declared_before
+    )
+
+
+def _is_generic_local_role(owner: str) -> bool:
+    tokens = tuple(token.casefold().strip("._-") for token in owner.split())
+    return (
+        len(tokens) >= 2
+        and tokens[-2] == "the"
+        and tokens[-1] in _GENERIC_LOCAL_ROLES
+    )
+
+
+def _is_generic_local_reference(source: str, definite: str | None) -> bool:
+    tokens = tuple(token.casefold().strip("._-") for token in source.split())
+    return (
+        definite is not None
+        and bool(tokens)
+        and tokens[-1] in _GENERIC_LOCAL_REFERENCE_NOUNS
+        and all(token in _GENERIC_LOCAL_REFERENCE_MODIFIERS for token in tokens[:-1])
+    )
 
 
 def _contains_structural_source_attribution(task_text: str) -> bool:
+    declarations = _declared_entities(task_text)
     for match in _POSSESSIVE_ATTRIBUTION_PATTERN.finditer(task_text):
-        if _possessive_owner_looks_like_source(match.group("owner")):
+        owner = match.group("owner")
+        if not _matches_prior_declaration(
+            owner, match.start(), declarations, allow_leading_action=True
+        ) and not (_is_generic_local_role(owner)):
             return True
     for match in _DIRECTIONAL_ATTRIBUTION_PATTERN.finditer(task_text):
-        if any(
-            _token_looks_like_source(token)
-            for token in match.group("source").split()
+        source = match.group("source")
+        if not _matches_prior_declaration(source, match.start(), declarations) and not (
+            _is_generic_local_reference(source, match.group("definite"))
         ):
             return True
     return False
@@ -273,22 +428,37 @@ def _looks_like_inflected_predicate(tokens: tuple[str, ...]) -> bool:
     return predicate.endswith(("s", "ed", "ing"))
 
 
+def _left_is_prepositional_coordination(value: str) -> bool:
+    return _PREPOSITIONAL_COORDINATION_PATTERN.search(_normalize(value)) is not None
+
+
+def _has_strong_predicate_evidence(tokens: tuple[str, ...], normalized: str) -> bool:
+    if re.match(r"^[a-z0-9_-]+\s+`", normalized):
+        return True
+    if len(tokens) >= 3 and tokens[1] in _MODAL_WORDS:
+        return True
+    if _looks_like_inflected_predicate(tokens):
+        return True
+    if tokens and (
+        tokens[0] in _GENERIC_ACTION_WORDS
+        or tokens[0].endswith(("ate", "ify", "ise", "ize", "en"))
+    ):
+        return True
+    return re.match(
+        r"^[a-z0-9_-]+\s+(?:the|a|an|each|every|this|that|these|those|it|them|to)\b",
+        normalized,
+    ) is not None
+
+
 def _starts_independent_clause(value: str, left_value: str) -> bool:
     normalized = _normalize(value)
     if not normalized:
         return False
-    if re.match(r"^[a-z0-9_-]+\s+`", normalized):
-        return True
-    if re.match(
-        r"^[a-z0-9_-]+\s+(?:the|a|an|each|every|this|that|these|those|it|them|to)\b",
-        normalized,
-    ):
-        return True
     tokens = tuple(match.group(0) for match in _TERM_PATTERN.finditer(normalized))
-    if _looks_like_inflected_predicate(tokens):
+    if _has_strong_predicate_evidence(tokens, normalized):
         return True
-    if tokens and tokens[0].endswith(("ate", "ify", "ise", "ize", "en")):
-        return True
+    if _left_is_prepositional_coordination(left_value):
+        return False
     if len(tokens) == 2 and not tokens[1].endswith("s"):
         return _matched_kinds(_normalize(left_value)) != (ObligationKind.UNRESOLVED,)
     if _matched_kinds(normalized) != (ObligationKind.UNRESOLVED,):
