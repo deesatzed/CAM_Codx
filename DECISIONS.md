@@ -33,13 +33,14 @@ requires an independently clause-shaped right side so noun coordination stays
 intact. Source attribution tokenizes the complete bounded task once around a
 closed method-artifact grammar. Possessive artifact lookup is independent of
 modifier count or leading action verb; only owner capture remains a bounded
-local window. Supported apostrophes, paired ASCII/curly quotes, Markdown
-emphasis, and backticks normalize before matching. Case and orthography cannot
-make an attributed entity local: a named attribution is admitted only when a
-nonempty exact normalized identity was declared earlier through bounded generic
+local window. Rather than enumerate quote/Markdown wrappers, attribution token
+edges strip any Unicode punctuation or symbol category in one bounded linear
+pass while preserving internal apostrophes. Case and orthography cannot make an
+attributed entity local: a named attribution is admitted only when a nonempty
+exact normalized identity was declared earlier through bounded generic
 declaration/construction syntax. Plain and backtick-delimited identifiers share
 the same identity; one polite prefix, one closed method-action prefix, and one
-optional article are syntax, not identity, and no other prefix or suffix is
+optional article are syntax, not identity, and no other identity word is
 discarded. Closed local-role and task-document grammar preserves ordinary
 caller/task phrasing without creating an arbitrary lowercase bypass; the role
 exemption compares the entire command-stripped owner phrase, never a suffix.
@@ -48,19 +49,23 @@ Leakage seals apply NFKC and case folding, with camel separation only for the
 hidden/held-out vocabulary seal. Case IDs use a linear identifier-boundary scan
 and reject any number of non-alphanumeric separators before either of their two
 digits. Repository candidates undergo bounded percent decoding and special-URL
-backslash normalization before conservative authority parsing, so normalized
+backslash normalization before conservative authority parsing. Repository token
+edges use the same Unicode punctuation/symbol stripping rule, so normalized
 HTTP(S), SSH, Git, and scp-style identities cannot hide behind userinfo, ports,
-hostname case, or trailing dots. Persistence uses a closed conservative direct
-object grammar: a persistence action must directly govern an allowlisted generic
+hostname case, trailing dots, guillemets, emphasis, slash, pipe, or symbol
+wrappers. Persistence uses a closed conservative direct object grammar: a
+persistence action must directly govern an allowlisted generic
 state/artifact/storage head after only a bounded article and safe-modifier
 prefix. An unknown word or secondary phrase before the head stays unresolved;
 valid but unlisted terminology is intentionally not promoted. A recognized
-head may precede a trailing phrase. Bounded passive forms and an explicit
-object-survival relation across a restart-like event remain valid only when the
-grammatical subject is itself a bounded state or artifact term.
+head may precede a trailing phrase. Before action scanning, balanced code and
+quotation spans are masked without changing offsets. Bounded passive forms and
+an explicit object-survival relation across a restart-like event remain valid
+only when the grammatical subject is itself a bounded state or artifact term.
 Benefit/resource senses, decorative durability language, quoted persistence
-words, and incidental state-file, checkpoint, journal, backup, or storage nouns
-do not create a persistence obligation.
+words, standalone past-participle labels, an explicit leading `Quote:`
+directive, and incidental state-file, checkpoint, journal, backup, or storage
+nouns do not create a persistence obligation.
 
 Clause splitting classifies `and` by position: generic
 action/modal/subject-predicate evidence starts a sibling clause, an explicit
@@ -68,10 +73,13 @@ known obligation predicate takes precedence over preceding prepositional
 context, and a completed direct persistence object makes an otherwise unseen
 base-form command fail closed into its own unresolved span. Coordination inside
 a prepositional modifier or incomplete noun phrase remains intact, including
-verb-like modifiers sharing a later plural head. Balanced backticks and
-properly matched `()[]{}` nesting are required before decomposition; invalid
-UTF-8 scalar content fails as `TaskDecompositionError`. Code, nesting, exact
-offsets, and all byte/token/window/span/obligation bounds remain preserved.
+verb-like modifiers sharing a later plural head. Balanced backticks, supported
+paired quotation marks (including canonical fullwidth ASCII forms), and
+properly matched `()[]{}` nesting are required before decomposition; ambiguous
+apostrophes and unit marks are not promoted to quote delimiters. Invalid UTF-8
+scalar content fails as
+`TaskDecompositionError`. Code, quotations, nesting, exact offsets, and all
+byte/token/window/span/obligation bounds remain preserved.
 
 ## 2026-08-23: Bound fallback recall before normal packet presentation
 

@@ -302,6 +302,23 @@ _METHOD_ARTIFACT_WORDS = {
     "workflow",
 }
 _APOSTROPHE_TRANSLATION = str.maketrans({"’": "'", "ʼ": "'", "＇": "'"})
+_QUOTE_PAIRS = {
+    "«": "»",
+    "‹": "›",
+    "‘": "’",
+    "‚": "‘",
+    "“": "”",
+    "„": "“",
+    "〈": "〉",
+    "《": "》",
+    "「": "」",
+    "『": "』",
+    "〝": "〞",
+    "❛": "❜",
+    "❝": "❞",
+}
+_QUOTE_CLOSERS = frozenset(_QUOTE_PAIRS.values())
+_QUOTE_CHARACTER_NORMALIZATION = {"＂": '"', "＇": "'"}
 _IDENTIFIER_TOKEN = r"[\w-]+(?:\.[\w-]+)*"
 _BACKTICK_IDENTIFIER = r"`[^`\r\n]{1,128}`"
 _DECLARATION_PATTERN = re.compile(
@@ -450,6 +467,101 @@ def _normalize(value: str) -> str:
     return " ".join(unicodedata.normalize("NFKC", value).casefold().split())
 
 
+def _strip_unicode_edge_wrappers(value: str) -> str:
+    """Strip any punctuation/symbol wrapper at token edges in linear time."""
+
+    start = 0
+    end = len(value)
+    while start < end and unicodedata.category(value[start])[0] in {"P", "S"}:
+        start += 1
+    while end > start and unicodedata.category(value[end - 1])[0] in {"P", "S"}:
+        end -= 1
+    return value[start:end]
+
+
+def _is_internal_apostrophe(value: str, index: int) -> bool:
+    return (
+        0 < index < len(value) - 1
+        and value[index - 1].isalnum()
+        and value[index + 1].isalnum()
+    )
+
+
+def _is_possessive_apostrophe(value: str, index: int) -> bool:
+    return (
+        index > 0
+        and index + 1 < len(value)
+        and value[index + 1].casefold() == "s"
+        and (index + 2 == len(value) or not value[index + 2].isalnum())
+    )
+
+
+def _quote_ranges(value: str) -> tuple[tuple[int, int], ...]:
+    """Validate supported quotes and return non-overlapping outer quote ranges."""
+
+    stack: list[tuple[str, int]] = []
+    ranges: list[tuple[int, int]] = []
+    in_code = False
+    for index, raw_character in enumerate(value):
+        if raw_character == "`":
+            in_code = not in_code
+            continue
+        if in_code:
+            continue
+        character = _QUOTE_CHARACTER_NORMALIZATION.get(raw_character, raw_character)
+
+        if character in {"'", "’", "‘"} and (
+            _is_internal_apostrophe(value, index)
+            or _is_possessive_apostrophe(value, index)
+        ):
+            continue
+        if stack and character == stack[-1][0]:
+            _, opening_index = stack.pop()
+            if not stack:
+                ranges.append((opening_index, index + 1))
+            continue
+
+        if character in {'"', "'"}:
+            if character == '"' and index > 0 and value[index - 1].isdigit():
+                continue
+            previous = value[index - 1] if index else " "
+            following = value[index + 1] if index + 1 < len(value) else " "
+            if (index == 0 or previous.isspace() or unicodedata.category(previous)[0] in {"P", "S"}) and not following.isspace():
+                stack.append((character, index))
+                continue
+            if character == "'" and previous.isalnum():
+                continue
+            raise TaskDecompositionError(
+                "task text contains unbalanced or mismatched quotation syntax"
+            )
+
+        if character in _QUOTE_PAIRS:
+            stack.append((_QUOTE_PAIRS[character], index))
+            continue
+        if character in _QUOTE_CLOSERS:
+            if character in {"’", "‘"} and index > 0 and value[index - 1].isalnum():
+                continue
+            raise TaskDecompositionError(
+                "task text contains unbalanced or mismatched quotation syntax"
+            )
+
+    if stack:
+        raise TaskDecompositionError(
+            "task text contains unbalanced or mismatched quotation syntax"
+        )
+    return tuple(ranges)
+
+
+def _mask_quoted_spans(value: str) -> str:
+    ranges = _quote_ranges(value)
+    if not ranges:
+        return value
+    characters = list(value)
+    for start, end in ranges:
+        characters[start:end] = " " * (end - start)
+    return "".join(characters)
+
+
 def _leakage_normal_form(value: str) -> str:
     normalized = unicodedata.normalize("NFKC", value)
     separated_camel = re.sub(r"(?<=[a-z0-9])(?=[A-Z])", "_", normalized)
@@ -493,10 +605,8 @@ def _repository_path_has_identity(path: str) -> bool:
 
 
 def _canonical_repository_candidate(raw: str) -> str:
-    candidate = unicodedata.normalize("NFKC", raw).strip(
-        "\"'“”‘’()[]{}<>,;!?*`"
-    )
-    candidate = unquote(candidate).replace("\\", "/")
+    candidate = unquote(unicodedata.normalize("NFKC", raw))
+    candidate = _strip_unicode_edge_wrappers(candidate).replace("\\", "/")
     candidate = re.sub(
         r"^([a-z][a-z0-9+.-]*):/+", r"\1://", candidate, count=1, flags=re.IGNORECASE
     )
@@ -557,37 +667,17 @@ def _validate_balanced_syntax(task_text: str) -> None:
         raise TaskDecompositionError("task text contains unbalanced or mismatched syntax")
 
 
-_TEXT_WRAPPER_PAIRS = (
-    ("**", "**"),
-    ("__", "__"),
-    ("\"", "\""),
-    ("“", "”"),
-    ("‘", "’"),
-    ("'", "'"),
-    ("`", "`"),
-    ("*", "*"),
-    ("_", "_"),
-)
-
-
 def _unwrap_text_token(raw: str) -> str:
-    core = raw.strip(".,!?;:()[]{}<>")
-    changed = True
-    while changed and core:
-        changed = False
-        for opening, closing in _TEXT_WRAPPER_PAIRS:
-            if core.startswith(opening) and core.endswith(closing) and len(core) > len(
-                opening
-            ) + len(closing):
-                core = core[len(opening) : -len(closing)]
-                changed = True
-                break
-    core = core.lstrip("\"“‘`*_").rstrip("\"”’`*_")
-    return core.translate(_APOSTROPHE_TRANSLATION)
+    return _strip_unicode_edge_wrappers(raw).translate(_APOSTROPHE_TRANSLATION)
 
 
 def _token_ends_statement(token: str) -> bool:
-    return token.rstrip(")]}'\"”’`*_").endswith((".", "!", "?", ";"))
+    for character in reversed(token):
+        if character in ".!?;":
+            return True
+        if unicodedata.category(character)[0] not in {"P", "S"}:
+            return False
+    return False
 
 
 def _attribution_tokens(task_text: str) -> tuple[_ScanToken, ...]:
@@ -756,6 +846,7 @@ def _validate_task_text(task_text: object) -> str:
     if len(encoded_task) > MAX_TASK_BYTES:
         raise TaskDecompositionError(f"task text exceeds {MAX_TASK_BYTES}-byte limit")
     _validate_balanced_syntax(task_text)
+    _quote_ranges(task_text)
     normalized = _normalize(task_text)
     leakage_form = _leakage_normal_form(task_text)
     case_identifier_form = unicodedata.normalize("NFKC", task_text).casefold()
@@ -773,7 +864,10 @@ def _validate_task_text(task_text: object) -> str:
 
 
 def _persistence_text(normalized_span: str) -> str:
-    return re.sub(r"`[^`]*`", " code_identifier ", normalized_span)
+    quote_masked = _mask_quoted_spans(normalized_span)
+    if re.match(r"^\s*quote\s*:", quote_masked):
+        return " " * len(quote_masked)
+    return re.sub(r"`[^`]*`", " code_identifier ", quote_masked)
 
 
 def _persistence_word_matches(normalized_span: str) -> tuple[re.Match[str], ...]:
@@ -814,9 +908,9 @@ def _matches_direct_persistence_action(normalized_span: str) -> bool:
     matches = tuple(_TERM_PATTERN.finditer(persistence_text))
     words = tuple(match.group(0) for match in matches)
     for index, word in enumerate(words):
-        if word not in _PERSISTENCE_ACTIONS | _PERSISTENCE_INFLECTIONS:
+        if word not in _PERSISTENCE_ACTIONS:
             continue
-        if word in _PERSISTENCE_ACTIONS and index > 0:
+        if index > 0:
             gap = persistence_text[matches[index - 1].end() : matches[index].start()]
             if (
                 words[index - 1] not in _PERSISTENCE_PREFIX_WORDS
@@ -931,12 +1025,13 @@ def _starts_independent_clause(value: str, left_value: str) -> bool:
 def _clause_boundaries(span: str) -> tuple[tuple[int, int], ...]:
     """Find supported top-level clause delimiters without parsing code spans."""
 
+    scan_span = _mask_quoted_spans(span)
     candidates: list[tuple[int, int, str]] = []
     in_code = False
     nesting = 0
     index = 0
-    while index < len(span):
-        character = span[index]
+    while index < len(scan_span):
+        character = scan_span[index]
         if character == "`":
             in_code = not in_code
             index += 1
@@ -955,14 +1050,19 @@ def _clause_boundaries(span: str) -> tuple[tuple[int, int], ...]:
                     (
                         delimiter
                         for delimiter in ("and", "but")
-                        if span[index : index + len(delimiter)].casefold() == delimiter
+                        if scan_span[index : index + len(delimiter)].casefold()
+                        == delimiter
                     ),
                     None,
                 )
                 if matched_delimiter is not None:
-                    before = span[index - 1] if index else " "
+                    before = scan_span[index - 1] if index else " "
                     after_index = index + len(matched_delimiter)
-                    after = span[after_index] if after_index < len(span) else " "
+                    after = (
+                        scan_span[after_index]
+                        if after_index < len(scan_span)
+                        else " "
+                    )
                     if not before.isalnum() and not after.isalnum():
                         candidates.append((index, after_index, matched_delimiter))
                         index = after_index
@@ -1017,14 +1117,15 @@ def _split_supported_conjunctions(
 def _task_spans(task_text: str) -> tuple[tuple[int, int, str], ...]:
     """Split sentences and mixed clauses while retaining exact source offsets."""
 
+    scan_text = _mask_quoted_spans(task_text)
     boundaries: list[int] = []
     in_code = False
-    for index, character in enumerate(task_text):
+    for index, character in enumerate(scan_text):
         if character == "`":
             in_code = not in_code
         if in_code or character not in ".!?":
             continue
-        if index + 1 == len(task_text) or task_text[index + 1].isspace():
+        if index + 1 == len(scan_text) or scan_text[index + 1].isspace():
             boundaries.append(index + 1)
 
     spans: list[tuple[int, int, str]] = []

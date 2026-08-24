@@ -585,6 +585,27 @@ def test_attribution_wrappers_preserve_exact_prior_local_declarations(task: str)
 
 
 @pytest.mark.parametrize(
+    ("opening", "closing"),
+    (
+        ("«", "»"),
+        ("~~", "~~"),
+        ("/", "/"),
+        ("|", "|"),
+        ("§", "§"),
+        ("☃", "☃"),
+    ),
+)
+def test_unicode_category_wrappers_cannot_hide_possessive_attribution(
+    opening: str, closing: str
+) -> None:
+    resolver = _load_resolver()
+    task = f"Borrow {opening}QuasarForge's{closing} recovery method."
+
+    with pytest.raises(resolver.TaskDecompositionError, match="leakage"):
+        resolver.decompose_task(task)
+
+
+@pytest.mark.parametrize(
     "task",
     (
         "Create ---.",
@@ -699,6 +720,27 @@ def test_repository_url_identity_canonicalization_rejects_obfuscation(
         resolver.decompose_task(task)
 
 
+@pytest.mark.parametrize(
+    ("opening", "closing"),
+    (
+        ("«", "»"),
+        ("~~", "~~"),
+        ("/", "/"),
+        ("|", "|"),
+        ("§", "§"),
+        ("☃", "☃"),
+    ),
+)
+def test_unicode_category_wrappers_cannot_hide_repository_urls(
+    opening: str, closing: str
+) -> None:
+    resolver = _load_resolver()
+    task = f"Reuse {opening}https://github.com/owner/repository{closing}."
+
+    with pytest.raises(resolver.TaskDecompositionError, match="leakage"):
+        resolver.decompose_task(task)
+
+
 def test_serialization_cannot_emit_normalized_case_or_repository_leakage() -> None:
     resolver = _load_resolver()
     clean = resolver.decompose_task("Persist state.")
@@ -737,6 +779,23 @@ def test_normalized_leakage_seals_do_not_overmatch_words_or_numbers(task: str) -
     ),
 )
 def test_canonical_leakage_scans_preserve_identifier_and_prose_controls(
+    task: str,
+) -> None:
+    resolver = _load_resolver()
+
+    assert resolver.decompose_task(task).task_text == task
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Compare input/output paths with A|B alternatives.",
+        "Render «local» labels and ~~deprecated~~ notes.",
+        "Use section §3 and a ☃ symbol in output.",
+        "Keep /tmp/example and alpha|beta text.",
+    ),
+)
+def test_structural_wrapper_normalization_preserves_ordinary_punctuation(
     task: str,
 ) -> None:
     resolver = _load_resolver()
@@ -1175,6 +1234,49 @@ def test_persistence_words_used_as_text_are_not_action_predicates(task: str) -> 
 @pytest.mark.parametrize(
     "task",
     (
+        '"Persist state."',
+        "Quote: 'Persist state'.",
+        "The label says “Saved state” in plain text.",
+        "Quote: «Persist state».",
+        "Display ‹Stored records› as a label.",
+        "Render 「Persist state」 in the banner.",
+        "Use 『Saved state』 as a caption.",
+        "＂Persist state.＂",
+        "＂Persist state. Saved data.＂",
+        "Quote: ＇Stored records＇.",
+        "Saved state.",
+        "Label: Stored records.",
+        "Quote: Persist state.",
+    ),
+)
+def test_quoted_or_decorative_persistence_text_remains_unresolved(task: str) -> None:
+    resolver = _load_resolver()
+
+    result = resolver.decompose_task(task)
+
+    assert [item.kind.value for item in result.obligations] == ["unresolved"]
+    assert result.obligations[0].task_span == task
+
+
+def test_real_persistence_instruction_outside_quotes_retains_exact_span() -> None:
+    resolver = _load_resolver()
+    task = 'Quote "Saved state" and persist state.'
+
+    result = resolver.decompose_task(task)
+
+    assert [(item.kind.value, item.task_span) for item in result.obligations] == [
+        ("unresolved", 'Quote "Saved state"'),
+        ("persistence", "persist state."),
+    ]
+    assert all(
+        task[item.span_start : item.span_end] == item.task_span
+        for item in result.obligations
+    )
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
         "Save application state in memory.",
         "Store result artifact in storage.",
         "Restore configuration from backup.",
@@ -1311,6 +1413,39 @@ def test_unbalanced_or_mismatched_syntax_fails_closed(task: str) -> None:
         resolver.decompose_task(task)
 
 
+@pytest.mark.parametrize(
+    "task",
+    (
+        'Quote: "Persist state.',
+        "Quote: 'Persist state.",
+        "Quote: «Persist state.",
+        "The label says “Saved state.",
+        "Quote: 「Persist state.",
+        "Quote: ＂Persist state.",
+    ),
+)
+def test_unmatched_quotes_that_can_cloak_persistence_fail_closed(task: str) -> None:
+    resolver = _load_resolver()
+
+    with pytest.raises(resolver.TaskDecompositionError, match="syntax"):
+        resolver.decompose_task(task)
+
+
+@pytest.mark.parametrize(
+    "task",
+    (
+        "Use the runner's recovery method.",
+        'Measure a 6" spacing value.',
+        "The workers’ settings remain unchanged.",
+        "Use A/B and C|D punctuation.",
+    ),
+)
+def test_apostrophes_units_and_ordinary_symbols_are_not_quote_errors(task: str) -> None:
+    resolver = _load_resolver()
+
+    assert resolver.decompose_task(task).task_text == task
+
+
 def test_balanced_nested_syntax_remains_valid() -> None:
     resolver = _load_resolver()
     task = "Persist state for (local [and remote] workers)."
@@ -1349,6 +1484,16 @@ def test_maximum_size_single_token_decomposes_within_generous_runtime() -> None:
         "Borrow QuasarForge's "
         + "layered " * 1_500
         + "recovery strategy.",
+        "Borrow "
+        + "~" * 6_000
+        + "QuasarForge's"
+        + "~" * 6_000
+        + " recovery method.",
+        "Reuse "
+        + "|" * 6_000
+        + "https://github.com/owner/repository"
+        + "|" * 6_000
+        + ".",
     ),
 )
 def test_maximum_size_leakage_scans_remain_linear_and_fail_closed(task: str) -> None:

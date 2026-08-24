@@ -1,5 +1,36 @@
 # Progress
 
+## 2026-08-24 structural wrappers and quoted persistence text
+
+- Leakage token edges now use one bounded Unicode-category rule: leading and
+  trailing punctuation or symbol code points are stripped structurally before
+  attribution identity or repository-URL parsing. This replaces the finite
+  quote/Markdown wrapper list and covers guillemets, strikethrough markers,
+  slash, pipe, and other Unicode punctuation/symbol wrappers without changing
+  internal apostrophes, URL separators, or ordinary prose punctuation.
+- Persistence scanning now masks balanced quoted spans as well as code spans.
+  ASCII quotes where syntactically unambiguous, curly quotes, guillemets, and
+  common paired Unicode quotation marks cannot turn decorative `Persist state`
+  or `Saved state` text into evidence. Sentence and clause boundary scans use
+  the same masks, so a real instruction outside a quote retains its exact source
+  span. Standalone past-participle labels and an explicit leading `Quote:`
+  directive also stay unresolved rather than acting as commands. Unmatched
+  supported quotes fail closed as syntax; possessive apostrophes,
+  backtick-owner possessives, plural possessives, and inch marks remain
+  controls. Fullwidth ASCII quote forms canonicalize into the same scanner, so
+  internal sentence punctuation cannot break a balanced quoted span.
+- Strict TDD RED was `26 failed, 11 passed`; an additional label/directive
+  matrix was RED at `3 failed, 7 passed`, and the fullwidth multi-sentence quote
+  probe was RED at `1 failed, 12 passed`. The first full regression exposed nine
+  backtick/symbol-owner possessive ambiguities, which the shared apostrophe
+  classifier corrected. GREEN is `323` resolver tests and `340` resolver plus
+  Development Brief regressions. Five maximum-size controls pass in `0.07s`
+  total with the slowest measured call at `0.01s`; Ruff and `git diff --check`
+  pass.
+- No provider/Context7 call, CAM command, mining, database access or mutation,
+  corpus/profile/config change, target write, or N01-N25 source/evaluator
+  inspection occurred.
+
 ## 2026-08-24 canonical linear leakage and persistence grammar
 
 - The case-ID seal is now a bounded linear scan for `C`/`N` plus exactly two
