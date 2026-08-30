@@ -23,6 +23,7 @@ import unicodedata
 
 VerificationStatus = Literal["not_run"]
 NeedCategory = Literal["blocker", "risk", "next_action", "open_question"]
+DirectoryIdentity = tuple[int, int, int, int, int, int]
 
 MAX_HANDOFF_BYTES = 256 * 1024
 MAX_TARGET_ENTRIES = 2_048
@@ -122,6 +123,15 @@ _REVISION_CLAIM_PATTERN = re.compile(
     r"`?([0-9a-f]{7,64})`?\s*$",
     re.IGNORECASE,
 )
+_REVISION_CLAIM_ANY_PATTERN = re.compile(
+    r"^\s*(?:[-*+]\s+)?\*{0,2}(?:revision|head|commit)\*{0,2}\s*:\s*"
+    r"`?([^`\s]+)`?\s*$",
+    re.IGNORECASE,
+)
+_RAW_HTML_OPEN_PATTERN = re.compile(
+    r"^\s{0,3}<(?P<tag>pre|script|style|textarea)(?:\s|>|$)",
+    re.IGNORECASE,
+)
 _HEX_DIGEST_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 _REVISION_PATTERN = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
 _NEED_ID_PATTERN = re.compile(r"^need_[A-Za-z0-9._-]{4,64}$")
@@ -166,6 +176,7 @@ def _checked_string(
     field: str,
     limit: int = MAX_PUBLIC_TEXT,
     allow_empty: bool = False,
+    multiline: bool = False,
 ) -> str:
     if type(value) is not str:
         raise TypeError(f"{field} must be a string")
@@ -173,14 +184,14 @@ def _checked_string(
         raise ValueError(f"{field} must not be empty")
     if len(value) > limit:
         raise ValueError(f"{field} exceeds its bound")
-    if _contains_unsafe_text(value):
+    if _contains_unsafe_text(value, multiline=multiline):
         raise ValueError(f"{field} contains unsafe controls")
     return value
 
 
-def _contains_unsafe_text(value: str) -> bool:
+def _contains_unsafe_text(value: str, *, multiline: bool = False) -> bool:
     for character in value:
-        if character in "\t\n\r":
+        if multiline and character in "\t\n\r":
             continue
         if unicodedata.category(character).startswith("C"):
             return True
@@ -232,9 +243,16 @@ class HandoffEvidence:
         digest = _checked_string(self.sha256, field="sha256", limit=64)
         if not _HEX_DIGEST_PATTERN.fullmatch(digest):
             raise ValueError("sha256 must be a lowercase hexadecimal digest")
-        text = _checked_string(self.text, field="text", limit=MAX_HANDOFF_BYTES)
+        text = _checked_string(
+            self.text,
+            field="text",
+            limit=MAX_HANDOFF_BYTES,
+            multiline=True,
+        )
         if len(text.encode("utf-8")) > MAX_HANDOFF_BYTES:
             raise ValueError("text exceeds its byte bound")
+        if hashlib.sha256(text.encode("utf-8")).hexdigest() != digest:
+            raise ValueError("sha256 must equal the digest of UTF-8 text")
 
 
 @dataclass(frozen=True, slots=True)
@@ -251,6 +269,7 @@ class WipSnapshot:
     visible_gaps: tuple[str, ...]
     conflicts: tuple[str, ...]
     verification_status: VerificationStatus
+    target_repo_id_is_exclusion_authoritative: bool = False
 
     def __post_init__(self) -> None:
         if not isinstance(self.target_path, Path):
@@ -283,6 +302,8 @@ class WipSnapshot:
         _checked_tuple(self.conflicts, field="conflicts", item_limit=4_096)
         if self.verification_status != "not_run":
             raise ValueError("verification_status must be 'not_run'")
+        if type(self.target_repo_id_is_exclusion_authoritative) is not bool:
+            raise TypeError("target_repo_id_is_exclusion_authoritative must be a bool")
 
 
 @dataclass(frozen=True, slots=True)
@@ -300,9 +321,6 @@ class NeedTheme:
     implementation_steps: tuple[()] = ()
 
     def __post_init__(self) -> None:
-        need_id = _checked_string(self.need_id, field="need_id", limit=69)
-        if not _NEED_ID_PATTERN.fullmatch(need_id):
-            raise ValueError("need_id has an invalid format")
         if type(self.category) is not str or self.category not in _CATEGORY_ORDER:
             raise ValueError("category is not supported")
         for field in (
@@ -314,6 +332,13 @@ class NeedTheme:
             "handoff_span",
         ):
             _checked_string(getattr(self, field), field=field, limit=MAX_PUBLIC_TEXT)
+        if not _normalize_span(self.problem):
+            raise ValueError("problem must have a canonical normalized problem identity")
+        need_id = _checked_string(self.need_id, field="need_id", limit=69)
+        if not _NEED_ID_PATTERN.fullmatch(need_id):
+            raise ValueError("need_id has an invalid format")
+        if need_id != _canonical_need_id(self.category, self.problem):
+            raise ValueError("need_id must equal the canonical category and problem identity")
         if type(self.implementation_steps) is not tuple or self.implementation_steps:
             raise ValueError("implementation_steps must be the empty tuple")
 
@@ -353,49 +378,71 @@ def inspect_wip_repository(
     target_path: Path,
     *,
     target_repo_id: str | None = None,
+    require_exclusion_identity: bool = False,
 ) -> WipSnapshot:
     """Inspect a local target through bounded, no-write evidence paths."""
 
-    if not isinstance(target_path, Path):
-        raise TypeError("target_path must be a pathlib.Path")
+    try:
+        if not isinstance(target_path, Path):
+            raise TypeError("target_path must be a pathlib.Path")
+        _checked_string(os.fspath(target_path), field="target path", limit=4_096)
+    except (TypeError, ValueError, OSError) as error:
+        raise OpportunityBriefError("target path contains unsafe controls") from error
     try:
         target = target_path.expanduser().resolve(strict=True)
-    except OSError as error:
+    except (OSError, RuntimeError, TypeError, ValueError) as error:
         raise OpportunityBriefError("target path must be an existing directory") from error
-    if not target.is_dir():
-        raise OpportunityBriefError("target path must be an existing directory")
     try:
         _checked_string(str(target), field="target path", limit=4_096)
     except (TypeError, ValueError) as error:
         raise OpportunityBriefError("target path contains unsafe controls") from error
 
+    if type(require_exclusion_identity) is not bool:
+        raise TypeError("require_exclusion_identity must be a bool")
+    if require_exclusion_identity and target_repo_id is None:
+        raise OpportunityBriefError(
+            "source exclusion requires an explicit shared target_repo_id"
+        )
     repository_id = (
         _default_target_repo_id(target)
         if target_repo_id is None
         else _checked_repo_id(target_repo_id)
     )
-    truth_files = _read_truth_file_names(target)
-    handoff = _read_selected_handoff(target, truth_files)
-    git_snapshot = _read_git_snapshot(target)
-    visible_gaps = _read_visible_gaps(target)
-    conflicts = _find_checkout_conflicts(
-        handoff,
-        revision=git_snapshot.revision,
-        branch=git_snapshot.branch,
-    )
-
-    return WipSnapshot(
-        target_path=target,
-        target_revision=git_snapshot.revision,
-        target_repo_id=repository_id,
-        branch=git_snapshot.branch,
-        dirty_entries=git_snapshot.dirty_entries,
-        handoff=handoff,
-        truth_files=truth_files,
-        visible_gaps=visible_gaps,
-        conflicts=conflicts,
-        verification_status="not_run",
-    )
+    root_descriptor: int | None = None
+    try:
+        root_descriptor, root_identity = _open_pinned_root(target)
+        truth_files = _read_truth_file_names(root_descriptor)
+        handoff = _read_selected_handoff(root_descriptor, truth_files)
+        _assert_root_identity(target, root_descriptor, root_identity)
+        git_snapshot = _read_git_snapshot(
+            target,
+            root_descriptor,
+            root_identity,
+        )
+        _assert_root_identity(target, root_descriptor, root_identity)
+        visible_gaps = _read_visible_gaps(root_descriptor)
+        _assert_root_identity(target, root_descriptor, root_identity)
+        conflicts = _find_checkout_conflicts(
+            handoff,
+            revision=git_snapshot.revision,
+            branch=git_snapshot.branch,
+        )
+        return WipSnapshot(
+            target_path=target,
+            target_revision=git_snapshot.revision,
+            target_repo_id=repository_id,
+            branch=git_snapshot.branch,
+            dirty_entries=git_snapshot.dirty_entries,
+            handoff=handoff,
+            truth_files=truth_files,
+            visible_gaps=visible_gaps,
+            conflicts=conflicts,
+            verification_status="not_run",
+            target_repo_id_is_exclusion_authoritative=target_repo_id is not None,
+        )
+    finally:
+        if root_descriptor is not None:
+            os.close(root_descriptor)
 
 
 def extract_need_themes(
@@ -433,11 +480,65 @@ def extract_need_themes(
     return tuple(_to_need_theme(candidate) for candidate in selected)
 
 
-def _read_truth_file_names(target: Path) -> tuple[str, ...]:
+def _directory_identity(result: os.stat_result) -> DirectoryIdentity:
+    return (
+        result.st_dev,
+        result.st_ino,
+        result.st_nlink,
+        result.st_size,
+        result.st_mtime_ns,
+        result.st_ctime_ns,
+    )
+
+
+def _open_pinned_root(target: Path) -> tuple[int, DirectoryIdentity]:
+    descriptor: int | None = None
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+    try:
+        before = os.lstat(target)
+        if not stat.S_ISDIR(before.st_mode):
+            raise OpportunityBriefError("target path must be an existing directory")
+        descriptor = os.open(target, flags)
+        opened = os.fstat(descriptor)
+        if not stat.S_ISDIR(opened.st_mode) or _directory_identity(opened) != _directory_identity(
+            before
+        ):
+            raise OpportunityBriefError("target root changed during descriptor open")
+        return descriptor, _directory_identity(opened)
+    except OpportunityBriefError:
+        if descriptor is not None:
+            os.close(descriptor)
+        raise
+    except OSError as error:
+        if descriptor is not None:
+            os.close(descriptor)
+        raise OpportunityBriefError("target root could not be pinned safely") from error
+
+
+def _assert_root_identity(
+    target: Path,
+    root_descriptor: int,
+    expected: DirectoryIdentity,
+) -> None:
+    try:
+        descriptor_identity = os.fstat(root_descriptor)
+        path_identity = os.lstat(target)
+    except OSError as error:
+        raise OpportunityBriefError("target root identity changed") from error
+    if (
+        not stat.S_ISDIR(descriptor_identity.st_mode)
+        or not stat.S_ISDIR(path_identity.st_mode)
+        or _directory_identity(descriptor_identity) != expected
+        or _directory_identity(path_identity) != expected
+    ):
+        raise OpportunityBriefError("target root identity changed")
+
+
+def _read_truth_file_names(root_descriptor: int) -> tuple[str, ...]:
     names: list[str] = []
     for name in TRUTH_FILE_NAMES:
         try:
-            os.lstat(target / name)
+            os.stat(name, dir_fd=root_descriptor, follow_symlinks=False)
         except FileNotFoundError:
             continue
         except OSError as error:
@@ -447,15 +548,15 @@ def _read_truth_file_names(target: Path) -> tuple[str, ...]:
 
 
 def _read_selected_handoff(
-    target: Path,
+    root_descriptor: int,
     truth_files: tuple[str, ...],
 ) -> HandoffEvidence | None:
-    latest = target / "HANDOFF_LATEST.md"
-    if _path_exists_nofollow(latest):
-        return _read_evidence(target, latest)
+    latest = "HANDOFF_LATEST.md"
+    if _path_exists_nofollow(root_descriptor, latest):
+        return _read_evidence(root_descriptor, latest)
 
-    dated: list[tuple[date, str, bytes, Path]] = []
-    for name in _scan_directory_names(target, _WalkBudget()):
+    dated: list[tuple[date, str, bytes, str]] = []
+    for name in _scan_directory_names(root_descriptor, _WalkBudget()):
         match = _DATED_HANDOFF_PATTERN.fullmatch(name)
         if match is None:
             continue
@@ -463,17 +564,17 @@ def _read_selected_handoff(
             parsed_date = date.fromisoformat(match.group("date"))
         except ValueError:
             continue
-        dated.append((parsed_date, name.casefold(), os.fsencode(name), target / name))
+        dated.append((parsed_date, name.casefold(), os.fsencode(name), name))
     if dated:
-        return _read_evidence(target, max(dated)[3])
+        return _read_evidence(root_descriptor, max(dated)[3])
     if truth_files:
-        return _read_evidence(target, target / truth_files[0])
+        return _read_evidence(root_descriptor, truth_files[0])
     return None
 
 
-def _path_exists_nofollow(path: Path) -> bool:
+def _path_exists_nofollow(root_descriptor: int, path: str) -> bool:
     try:
-        os.lstat(path)
+        os.stat(path, dir_fd=root_descriptor, follow_symlinks=False)
     except FileNotFoundError:
         return False
     except OSError as error:
@@ -492,16 +593,16 @@ def _stat_identity(result: os.stat_result) -> tuple[int, int, int, int, int, int
     )
 
 
-def _read_evidence(target: Path, path: Path) -> HandoffEvidence:
+def _read_evidence(root_descriptor: int, path: str) -> HandoffEvidence:
     descriptor: int | None = None
     flags = os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK
     try:
-        before = os.lstat(path)
+        before = os.stat(path, dir_fd=root_descriptor, follow_symlinks=False)
         if not stat.S_ISREG(before.st_mode):
             raise OpportunityBriefError("preferred handoff is not a safe regular file")
         if before.st_nlink != 1:
             raise OpportunityBriefError("preferred handoff must have exactly one link")
-        descriptor = os.open(path, flags)
+        descriptor = os.open(path, flags, dir_fd=root_descriptor)
         opened = os.fstat(descriptor)
         if _stat_identity(opened) != _stat_identity(before):
             raise OpportunityBriefError("preferred handoff changed during descriptor open")
@@ -509,17 +610,17 @@ def _read_evidence(target: Path, path: Path) -> HandoffEvidence:
             raise OpportunityBriefError("selected handoff exceeds the bounded size")
         raw = _read_descriptor_bounded(descriptor, MAX_HANDOFF_BYTES)
         after_descriptor = os.fstat(descriptor)
-        after_path = os.lstat(path)
+        after_path = os.stat(path, dir_fd=root_descriptor, follow_symlinks=False)
         if (
             _stat_identity(after_descriptor) != _stat_identity(opened)
             or _stat_identity(after_path) != _stat_identity(opened)
         ):
             raise OpportunityBriefError("selected handoff changed during read race")
         text = raw.decode("utf-8")
-        if _contains_unsafe_text(text):
+        if _contains_unsafe_text(text, multiline=True):
             raise OpportunityBriefError("selected handoff contains unsafe controls")
         return HandoffEvidence(
-            relative_path=path.relative_to(target).as_posix(),
+            relative_path=path,
             sha256=hashlib.sha256(raw).hexdigest(),
             text=text,
         )
@@ -664,13 +765,19 @@ def _stop_process(process: subprocess.Popen[bytes]) -> None:
         pass
 
 
-def _read_git_snapshot(target: Path) -> _GitSnapshot:
+def _read_git_snapshot(
+    target: Path,
+    root_descriptor: int,
+    root_identity: DirectoryIdentity,
+) -> _GitSnapshot:
+    _assert_root_identity(target, root_descriptor, root_identity)
     root = _run_git_bounded(
         target,
         ("rev-parse", "--path-format=absolute", "--show-toplevel"),
         stdout_limit=MAX_GIT_ROOT_BYTES,
         label="Git root verification",
     )
+    _assert_root_identity(target, root_descriptor, root_identity)
     if root.returncode != 0:
         if b"not a git repository" in root.stderr.lower():
             return _GitSnapshot(revision=None, branch=None, dirty_entries=())
@@ -678,6 +785,7 @@ def _read_git_snapshot(target: Path) -> _GitSnapshot:
     if root.stdout != os.fsencode(target) + b"\n":
         raise OpportunityBriefError("target path must be the exact Git worktree root")
 
+    _assert_root_identity(target, root_descriptor, root_identity)
     status_result = _run_git_bounded(
         target,
         (
@@ -693,6 +801,7 @@ def _read_git_snapshot(target: Path) -> _GitSnapshot:
         stdout_limit=MAX_GIT_STATUS_BYTES,
         label="Git status snapshot",
     )
+    _assert_root_identity(target, root_descriptor, root_identity)
     if status_result.returncode != 0:
         raise OpportunityBriefError("Git status snapshot failed")
     return _parse_git_status(status_result.stdout)
@@ -795,10 +904,10 @@ def _display_filesystem_path(value: str) -> str:
     return "".join(display)
 
 
-def _scan_directory_names(path: Path, budget: _WalkBudget) -> tuple[str, ...]:
+def _scan_directory_names(directory_descriptor: int, budget: _WalkBudget) -> tuple[str, ...]:
     names: list[str] = []
     try:
-        with os.scandir(path) as iterator:
+        with os.scandir(directory_descriptor) as iterator:
             for entry in iterator:
                 budget.entries += 1
                 if budget.entries > MAX_TARGET_ENTRIES:
@@ -811,71 +920,136 @@ def _scan_directory_names(path: Path, budget: _WalkBudget) -> tuple[str, ...]:
     return tuple(sorted(names, key=lambda item: (item.casefold(), os.fsencode(item))))
 
 
-def _read_visible_gaps(target: Path) -> tuple[str, ...]:
+def _read_visible_gaps(root_descriptor: int) -> tuple[str, ...]:
     gaps: list[str] = []
     budget = _WalkBudget()
-    pending = [target]
-    while pending:
-        directory = pending.pop()
-        budget.directories += 1
-        if budget.directories > MAX_INSPECTED_DIRECTORIES:
-            raise OpportunityBriefError("target directory inspection exceeds its bound")
-        child_directories: list[Path] = []
-        for name in _scan_directory_names(directory, budget):
-            path = directory / name
-            relative = path.relative_to(target).as_posix()
-            try:
-                identity = os.lstat(path)
-            except OSError as error:
-                raise OpportunityBriefError("target changed during file inspection") from error
-            if stat.S_ISLNK(identity.st_mode):
-                continue
-            if stat.S_ISDIR(identity.st_mode):
-                if not _path_is_skipped(relative):
-                    child_directories.append(path)
-                continue
-            if not stat.S_ISREG(identity.st_mode) or _path_is_skipped(relative):
-                continue
-            budget.files += 1
-            if budget.files > MAX_INSPECTED_FILES:
-                raise OpportunityBriefError("target file inspection exceeds its bound")
-            if path.suffix.casefold() not in _TEXT_SUFFIXES:
-                continue
-            text = _read_gap_text(path, identity)
-            if text is None:
-                continue
-            for line_number, line in enumerate(text.splitlines(), start=1):
-                if not _GAP_PATTERN.search(line):
-                    continue
-                if len(gaps) >= MAX_GAPS:
-                    raise OpportunityBriefError("visible gap inspection exceeds its bound")
-                excerpt = " ".join(line.strip().split())[:240]
-                if _contains_unsafe_text(excerpt):
-                    continue
-                gaps.append(f"{relative}:{line_number}: {excerpt}")
-        pending.extend(reversed(child_directories))
+    _walk_visible_gaps(root_descriptor, (), budget, gaps)
     return tuple(gaps)
 
 
-def _read_gap_text(path: Path, before: os.stat_result) -> str | None:
+def _walk_visible_gaps(
+    directory_descriptor: int,
+    relative_parts: tuple[str, ...],
+    budget: _WalkBudget,
+    gaps: list[str],
+) -> None:
+    budget.directories += 1
+    if budget.directories > MAX_INSPECTED_DIRECTORIES:
+        raise OpportunityBriefError("target directory inspection exceeds its bound")
+    for name in _scan_directory_names(directory_descriptor, budget):
+        child_parts = (*relative_parts, name)
+        raw_relative = "/".join(child_parts)
+        try:
+            identity = os.stat(name, dir_fd=directory_descriptor, follow_symlinks=False)
+        except OSError as error:
+            raise OpportunityBriefError("target changed during file inspection") from error
+        if stat.S_ISLNK(identity.st_mode):
+            continue
+        if stat.S_ISDIR(identity.st_mode):
+            if _path_is_skipped(raw_relative):
+                continue
+            _walk_child_directory(
+                directory_descriptor,
+                name,
+                identity,
+                child_parts,
+                budget,
+                gaps,
+            )
+            continue
+        if not stat.S_ISREG(identity.st_mode) or _path_is_skipped(raw_relative):
+            continue
+        budget.files += 1
+        if budget.files > MAX_INSPECTED_FILES:
+            raise OpportunityBriefError("target file inspection exceeds its bound")
+        if Path(name).suffix.casefold() not in _TEXT_SUFFIXES:
+            continue
+        text = _read_gap_text(directory_descriptor, name, identity)
+        if text is None:
+            continue
+        display_relative = _display_filesystem_path(raw_relative)
+        for line_number, line in enumerate(text.splitlines(), start=1):
+            if not _GAP_PATTERN.search(line):
+                continue
+            if len(gaps) >= MAX_GAPS:
+                raise OpportunityBriefError("visible gap inspection exceeds its bound")
+            excerpt = " ".join(line.strip().split())[:240]
+            if _contains_unsafe_text(excerpt):
+                continue
+            gaps.append(f"{display_relative}:{line_number}: {excerpt}")
+
+
+def _walk_child_directory(
+    parent_descriptor: int,
+    name: str,
+    before: os.stat_result,
+    relative_parts: tuple[str, ...],
+    budget: _WalkBudget,
+    gaps: list[str],
+) -> None:
+    descriptor: int | None = None
+    try:
+        descriptor = os.open(
+            name,
+            os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC,
+            dir_fd=parent_descriptor,
+        )
+        opened = os.fstat(descriptor)
+        if (
+            not stat.S_ISDIR(opened.st_mode)
+            or _directory_identity(opened) != _directory_identity(before)
+        ):
+            raise OpportunityBriefError("target directory changed during descriptor open")
+        _walk_visible_gaps(descriptor, relative_parts, budget, gaps)
+        after_descriptor = os.fstat(descriptor)
+        after_path = os.stat(name, dir_fd=parent_descriptor, follow_symlinks=False)
+        if (
+            not stat.S_ISDIR(after_path.st_mode)
+            or _directory_identity(after_descriptor) != _directory_identity(opened)
+            or _directory_identity(after_path) != _directory_identity(opened)
+        ):
+            raise OpportunityBriefError("target directory changed during inspection")
+    except OpportunityBriefError:
+        raise
+    except OSError as error:
+        raise OpportunityBriefError("target directory changed during inspection") from error
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+
+
+def _read_gap_text(
+    directory_descriptor: int,
+    name: str,
+    before: os.stat_result,
+) -> str | None:
     if before.st_nlink != 1 or before.st_size > MAX_HANDOFF_BYTES:
         return None
     descriptor: int | None = None
     try:
         descriptor = os.open(
-            path,
+            name,
             os.O_RDONLY | os.O_CLOEXEC | os.O_NOFOLLOW | os.O_NONBLOCK,
+            dir_fd=directory_descriptor,
         )
         opened = os.fstat(descriptor)
         if _stat_identity(opened) != _stat_identity(before):
-            return None
+            raise OpportunityBriefError("target file changed during descriptor open")
         raw = _read_descriptor_bounded(descriptor, MAX_HANDOFF_BYTES)
         after = os.fstat(descriptor)
-        if _stat_identity(after) != _stat_identity(opened):
-            return None
+        after_path = os.stat(name, dir_fd=directory_descriptor, follow_symlinks=False)
+        if (
+            _stat_identity(after) != _stat_identity(opened)
+            or _stat_identity(after_path) != _stat_identity(opened)
+        ):
+            raise OpportunityBriefError("target file changed during inspection")
         return raw.decode("utf-8")
-    except (OSError, UnicodeError, OpportunityBriefError):
+    except OpportunityBriefError:
+        raise
+    except UnicodeError:
         return None
+    except OSError as error:
+        raise OpportunityBriefError("target file changed during inspection") from error
     finally:
         if descriptor is not None:
             os.close(descriptor)
@@ -917,12 +1091,19 @@ def _find_checkout_conflicts(
                 )
             continue
         revision_match = _REVISION_CLAIM_PATTERN.fullmatch(line)
-        if revision_match and revision is not None:
-            claimed_revision = revision_match.group(1)
-            if not revision.casefold().startswith(claimed_revision.casefold()):
-                conflicts.append(
-                    f"handoff revision {claimed_revision!r} conflicts with live revision {revision!r}"
-                )
+        if revision_match:
+            if revision is not None:
+                claimed_revision = revision_match.group(1)
+                if not revision.casefold().startswith(claimed_revision.casefold()):
+                    conflicts.append(
+                        f"handoff revision {claimed_revision!r} conflicts with live revision {revision!r}"
+                    )
+            continue
+        malformed_revision = _REVISION_CLAIM_ANY_PATTERN.fullmatch(line)
+        if malformed_revision:
+            conflicts.append(
+                f"handoff revision claim {malformed_revision.group(1)!r} is malformed"
+            )
     return tuple(dict.fromkeys(conflicts))
 
 
@@ -940,12 +1121,13 @@ def _validate_need_bounds(minimum: int, maximum: int) -> None:
 
 
 def _visible_markdown_lines(text: str) -> tuple[str | None, ...]:
-    if _contains_unsafe_text(text):
+    if _contains_unsafe_text(text, multiline=True):
         raise OpportunityBriefError("handoff Markdown contains unsafe controls")
     visible: list[str | None] = []
     in_comment = False
     fence_character: str | None = None
     fence_length = 0
+    raw_html_tag: str | None = None
     for raw_line in text.splitlines():
         if len(visible) >= MAX_MARKDOWN_LINES:
             raise OpportunityBriefError("handoff Markdown line count exceeds its bound")
@@ -960,6 +1142,14 @@ def _visible_markdown_lines(text: str) -> tuple[str | None, ...]:
                 fence_length = 0
             visible.append(None)
             continue
+        if raw_html_tag is not None:
+            if re.search(rf"</\s*{re.escape(raw_html_tag)}\s*>", line, re.IGNORECASE):
+                raw_html_tag = None
+            visible.append(None)
+            continue
+        if _is_indented_markdown_code(raw_line):
+            visible.append(None)
+            continue
         fence = _FENCE_PATTERN.match(line)
         if fence:
             marker = fence.group(1)
@@ -967,8 +1157,29 @@ def _visible_markdown_lines(text: str) -> tuple[str | None, ...]:
             fence_length = len(marker)
             visible.append(None)
             continue
+        raw_html = _RAW_HTML_OPEN_PATTERN.match(line)
+        if raw_html:
+            tag = raw_html.group("tag").casefold()
+            if re.search(rf"</\s*{re.escape(tag)}\s*>", line, re.IGNORECASE) is None:
+                raw_html_tag = tag
+            visible.append(None)
+            continue
         visible.append(line)
     return tuple(visible)
+
+
+def _is_indented_markdown_code(line: str) -> bool:
+    columns = 0
+    for character in line:
+        if character == " ":
+            columns += 1
+        elif character == "\t":
+            columns += 4 - (columns % 4)
+        else:
+            break
+        if columns >= 4:
+            return True
+    return False
 
 
 def _without_html_comments(line: str, in_comment: bool) -> tuple[str, bool]:
@@ -1082,11 +1293,15 @@ def _normalize_span(value: str) -> str:
     return " ".join(normalized.split())
 
 
+def _canonical_need_id(category: NeedCategory, problem: str) -> str:
+    identity_input = f"{category}\0{_normalize_span(problem)}".encode("utf-8")
+    return f"need_{hashlib.sha256(identity_input).hexdigest()[:24]}"
+
+
 def _to_need_theme(candidate: _Candidate) -> NeedTheme:
     label = _CATEGORY_LABELS[candidate.category]
-    identity_input = f"{candidate.category}\0{candidate.normalized_problem}".encode("utf-8")
     return NeedTheme(
-        need_id=f"need_{hashlib.sha256(identity_input).hexdigest()[:24]}",
+        need_id=_canonical_need_id(candidate.category, candidate.problem),
         category=candidate.category,
         problem=candidate.problem,
         desired_improvement=(
