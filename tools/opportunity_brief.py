@@ -4522,9 +4522,9 @@ def _distributed_procedure_fields(
             if match.group(2) in _PROCEDURE_VERBS:
                 markers.append((int(match.group(1)), field))
     withheld: set[str] = set()
-    for index in range(len(markers) - 2):
-        window = markers[index : index + 3]
-        if window[1][0] == window[0][0] + 1 and window[2][0] == window[1][0] + 1:
+    for index in range(len(markers) - 1):
+        window = markers[index : index + 2]
+        if window[1][0] == window[0][0] + 1:
             withheld.update(field for _, field in window)
     return frozenset(withheld)
 

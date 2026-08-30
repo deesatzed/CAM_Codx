@@ -14,9 +14,10 @@ Renderer safety analysis uses Unicode NFKC plus case-folding while preserving
 the original safe prose for display. Code withholding requires structural
 signals: braces, assignment, calls, declarations, shell/SQL forms, or numbered
 imperative sequences. A semicolon or parenthetical alone is ordinary prose.
-Numbered procedures are evaluated across the complete selected record, so a
-distributed sequence cannot evade per-field checks; every participating prose
-field is replaced by the same neutral withholding label.
+Numbered procedures are evaluated across the complete selected record, so two
+or more ordered steps distributed between fields cannot evade per-field checks;
+every participating prose field is replaced by the same neutral withholding
+label. One ordinary numbered reference remains displayable.
 
 Reason: phrase direction and compatibility characters must not change a
 source boundary or safety decision, but conservative rendering also must not

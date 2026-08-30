@@ -2991,6 +2991,37 @@ def test_renderer_withholds_procedure_distributed_across_record_fields(
     assert rendered.count("source statement withheld: code-shaped content") >= 3
 
 
+def test_renderer_withholds_two_steps_distributed_across_record_fields(
+    tmp_path: Path,
+) -> None:
+    from tools import opportunity_brief as brief
+    from tools import opportunity_ranker as ranker
+
+    mapping = make_record_mapping()
+    mapping["problem"] += " 1. Install dependencies."
+    mapping["context"] += " 2. Edit configuration."
+
+    rendered = render_record_mapping(brief, ranker, tmp_path, mapping)
+
+    assert "1. Install dependencies." not in rendered
+    assert "2. Edit configuration." not in rendered
+    assert rendered.count("source statement withheld: code-shaped content") >= 2
+
+
+def test_renderer_preserves_one_ordinary_numbered_reference(tmp_path: Path) -> None:
+    from tools import opportunity_brief as brief
+    from tools import opportunity_ranker as ranker
+
+    mapping = make_record_mapping()
+    observed_effect = mapping["observed_effect"]
+    assert isinstance(observed_effect, dict)
+    observed_effect["text"] = "See item 1. Evidence remained inspectable."
+
+    rendered = render_record_mapping(brief, ranker, tmp_path, mapping)
+
+    assert "See item 1. Evidence remained inspectable." in rendered
+
+
 @pytest.mark.parametrize(
     "field",
     (

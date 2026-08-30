@@ -8,12 +8,14 @@
 - Renderer safety analysis now normalizes compatibility characters with NFKC
   plus case-folding, preserves safe original parenthetical/semicolon prose,
   detects generic leading shell command shapes, and withholds numbered
-  imperative procedures distributed across multiple record fields.
+  imperative procedures distributed across multiple record fields. The final
+  two-field regression was RED at `1 failed, 1 passed`; two ordered steps are
+  now withheld while a single ordinary numbered reference remains visible.
 - Evidence aggregate rendering now reserves the exact omission-summary space
   and asserts that the completed field remains within `65,536` characters.
 - TDD RED was `14 failed, 8 passed` for boundary grammar and controls, plus `6
   failed, 115 deselected` for Unicode, prose, shell, distributed-step, and
-  aggregate-bound renderer cases. The expanded opportunity suite is `159
+  aggregate-bound renderer cases. The expanded opportunity suite is `161
   passed`; Development Brief/method-resolver compatibility is `403 passed`.
   The comparable full run is `750 passed, 3 skipped, 2 failed`; both failures
   remain the existing absent sibling `/Volumes/WS4TB/waswikiT/repos2mine/CAM_CAM`
