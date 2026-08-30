@@ -19,6 +19,7 @@ import signal
 import shutil
 import stat
 import subprocess
+import tempfile
 import time
 from typing import Literal
 import unicodedata
@@ -56,6 +57,12 @@ MAX_OPPORTUNITY_TEXT = 4_096
 MAX_OPPORTUNITY_RECORD_BYTES = 512 * 1024
 MAX_EVIDENCE_ITEMS = 128
 MAX_METHODOLOGY_IDS = 64
+MAX_COMMAND_BYTES = 64 * 1024 * 1024
+MAX_SIDECAR_BYTES = 768 * 1024 * 1024
+MAX_MODEL_ENTRIES = 16_384
+MAX_MODEL_BYTES = 16 * 1024 * 1024 * 1024
+MAX_JSON_DEPTH = 16
+MAX_JSON_NODES = 50_000
 
 TRUTH_FILE_NAMES = (
     "GOAL.md",
@@ -148,6 +155,10 @@ _RECORD_ID_PATTERN = re.compile(r"^opp_[0-9a-f]{32}$")
 _SOURCE_REVISION_PATTERN = re.compile(
     r"^(?:[0-9a-f]{40}|[0-9a-f]{64}|git:(?:[0-9a-f]{40}|[0-9a-f]{64})|"
     r"sha256:[0-9a-f]{64})$"
+)
+_EXPLICITLY_NONOBSERVED_PREFIX = re.compile(
+    r"^(?:intended|proposed|hypothetical)(?=\s|[:;,.!?\-\u2014\u2013]|$)",
+    re.IGNORECASE,
 )
 _KNOWN_LICENSES = frozenset(
     {
@@ -423,6 +434,10 @@ class OpportunityEffect:
             field="observed effect text",
             limit=MAX_OPPORTUNITY_TEXT,
         )
+        if self.status == "observed" and _EXPLICITLY_NONOBSERVED_PREFIX.search(
+            self.text
+        ):
+            raise ValueError("observed effect text describes a non-observed effect")
 
 
 @dataclass(frozen=True, slots=True)
@@ -482,11 +497,7 @@ class OpportunityEvidence:
             field="source_symbols",
             limit=512,
         )
-        _validate_evidence_tuple(
-            self.source_sha256,
-            field="source_sha256",
-            limit=64,
-        )
+        _validate_digest_tuple(self.source_sha256, field="source_sha256")
         if not self.source_files or not self.source_symbols or not self.source_sha256:
             raise ValueError("admitted opportunity evidence must be complete")
         if len(self.source_sha256) != len(self.source_files):
@@ -628,6 +639,12 @@ class AcquisitionCall:
     need_id: str
     query: str
     argv: tuple[str, ...]
+    executable_identity: DirectoryIdentity
+    executable_sha256: str
+    sidecar_identity: DirectoryIdentity
+    sidecar_sha256: str
+    semantic_model_identity: DirectoryIdentity
+    semantic_model_sha256: str
     status: QueryStatus
     result_count: int
     rejection_count: int
@@ -659,6 +676,24 @@ class AcquisitionCall:
             or self.argv[9:] != ("--limit", "20", "--json")
         ):
             raise ValueError("argv is not the supported opportunity-query invocation")
+        _validate_artifact_binding(
+            self.executable_identity,
+            self.executable_sha256,
+            field="executable",
+            require_single_link=True,
+        )
+        _validate_artifact_binding(
+            self.sidecar_identity,
+            self.sidecar_sha256,
+            field="sidecar",
+            require_single_link=True,
+        )
+        _validate_artifact_binding(
+            self.semantic_model_identity,
+            self.semantic_model_sha256,
+            field="semantic model",
+            require_single_link=False,
+        )
         if self.status not in {"ok", "query_failed"}:
             raise ValueError("query call status is unsupported")
         for name, maximum in (
@@ -718,6 +753,15 @@ class AcquisitionReceipt:
 
     target_repo_id: str
     model_id: str
+    cam_command: Path
+    executable_identity: DirectoryIdentity
+    executable_sha256: str
+    sidecar: Path
+    sidecar_identity: DirectoryIdentity
+    sidecar_sha256: str
+    semantic_model_path: Path
+    semantic_model_identity: DirectoryIdentity
+    semantic_model_sha256: str
     calls: tuple[AcquisitionCall, ...]
     candidates: tuple[OpportunityCandidate, ...]
     rejections: tuple[AcquisitionRejection, ...]
@@ -734,6 +778,34 @@ class AcquisitionReceipt:
         )
         if not Path(model_id).is_absolute():
             raise ValueError("model_id must be an absolute local path")
+        for path, field in (
+            (self.cam_command, "cam_command"),
+            (self.sidecar, "sidecar"),
+            (self.semantic_model_path, "semantic_model_path"),
+        ):
+            if not isinstance(path, Path) or not path.is_absolute():
+                raise ValueError(f"{field} must be an absolute pathlib.Path")
+            _checked_canonical_string(str(path), field=field, limit=4_096)
+        if os.path.realpath(self.semantic_model_path) != self.model_id:
+            raise ValueError("model_id must match semantic_model_path identity")
+        _validate_artifact_binding(
+            self.executable_identity,
+            self.executable_sha256,
+            field="executable",
+            require_single_link=True,
+        )
+        _validate_artifact_binding(
+            self.sidecar_identity,
+            self.sidecar_sha256,
+            field="sidecar",
+            require_single_link=True,
+        )
+        _validate_artifact_binding(
+            self.semantic_model_identity,
+            self.semantic_model_sha256,
+            field="semantic model",
+            require_single_link=False,
+        )
         _validate_typed_tuple(
             self.calls,
             field="calls",
@@ -782,6 +854,19 @@ class AcquisitionReceipt:
         call_order = {call.need_id: index for index, call in enumerate(self.calls)}
         if any(call.argv[6] != self.target_repo_id for call in self.calls):
             raise ValueError("query call target identity does not match the receipt")
+        if any(
+            call.argv[0] != str(self.cam_command)
+            or call.argv[4] != str(self.sidecar)
+            or call.argv[8] != str(self.semantic_model_path)
+            or call.executable_identity != self.executable_identity
+            or call.executable_sha256 != self.executable_sha256
+            or call.sidecar_identity != self.sidecar_identity
+            or call.sidecar_sha256 != self.sidecar_sha256
+            or call.semantic_model_identity != self.semantic_model_identity
+            or call.semantic_model_sha256 != self.semantic_model_sha256
+            for call in self.calls
+        ):
+            raise ValueError("query call artifact identity or digest does not match receipt")
         if any(
             candidate.record.evidence.source_repo_id == self.target_repo_id
             for candidate in self.candidates
@@ -859,6 +944,35 @@ def _validate_evidence_tuple(
         raise ValueError(f"{field} must be sorted and unique")
 
 
+def _validate_digest_tuple(value: object, *, field: str) -> None:
+    if type(value) is not tuple:
+        raise TypeError(f"{field} must be a tuple")
+    if len(value) > MAX_EVIDENCE_ITEMS:
+        raise ValueError(f"{field} exceeds its item bound")
+    for digest in value:
+        checked = _checked_canonical_string(digest, field=f"{field} item", limit=64)
+        if _HEX_DIGEST_PATTERN.fullmatch(checked) is None:
+            raise ValueError(f"{field} contains a malformed digest")
+
+
+def _validate_artifact_binding(
+    identity: object,
+    digest: object,
+    *,
+    field: str,
+    require_single_link: bool,
+) -> None:
+    if type(identity) is not tuple or len(identity) != 6:
+        raise TypeError(f"{field} identity must be a six-integer tuple")
+    if any(type(item) is not int or item < 0 for item in identity):
+        raise ValueError(f"{field} identity is malformed")
+    if require_single_link and identity[2] != 1:
+        raise ValueError(f"{field} identity must be single-link")
+    checked = _checked_canonical_string(digest, field=f"{field} digest", limit=64)
+    if _HEX_DIGEST_PATTERN.fullmatch(checked) is None:
+        raise ValueError(f"{field} digest must be a lowercase SHA-256 digest")
+
+
 def _validate_typed_tuple(
     value: object,
     *,
@@ -889,6 +1003,29 @@ class _GitResult:
     returncode: int
     stdout: bytes
     stderr: bytes
+
+
+@dataclass(frozen=True, slots=True)
+class _FileArtifactSnapshot:
+    path: Path
+    identity: DirectoryIdentity
+    sha256: str
+
+
+@dataclass(frozen=True, slots=True)
+class _ModelManifestEntry:
+    relative_path: str
+    kind: Literal["directory", "file"]
+    identity: DirectoryIdentity
+    sha256: str
+
+
+@dataclass(frozen=True, slots=True)
+class _ModelArtifactSnapshot:
+    path: Path
+    identity: DirectoryIdentity
+    entries: tuple[_ModelManifestEntry, ...]
+    sha256: str
 
 
 @dataclass(frozen=True, slots=True)
@@ -1052,88 +1189,154 @@ def acquire_opportunities(
         model_id = str(model_path.resolve(strict=True))
     except (OSError, RuntimeError, ValueError) as error:
         raise OpportunityBriefError("semantic model path identity is unavailable") from error
-
-    calls: list[AcquisitionCall] = []
-    gaps: list[AcquisitionGap] = []
-    rejections: list[AcquisitionRejection] = []
-    candidates: list[OpportunityCandidate] = []
-    candidate_indexes: dict[str, int] = {}
-    for need in unique_needs:
-        argv = (
-            str(command),
-            "opportunity-query",
-            need.query_text,
-            "--db",
-            str(database),
-            "--target-repo-id",
-            target,
-            "--semantic-model-path",
-            str(model_path),
-            "--limit",
-            "20",
-            "--json",
+    executable_descriptor, executable = _pin_executable(command)
+    pinned_directory: Path | None = None
+    pinned_snapshot: _FileArtifactSnapshot | None = None
+    try:
+        _pinned_command, pinned_directory, pinned_snapshot = (
+            _materialize_pinned_executable(
+                executable_descriptor,
+                executable,
+            )
         )
-        completed = _run_query_bounded(argv)
-        if completed.returncode != 0:
+        sidecar_snapshot = _snapshot_single_link_file(
+            database,
+            label="sidecar",
+            byte_limit=MAX_SIDECAR_BYTES,
+        )
+        model_snapshot = _snapshot_model_directory(model_path)
+        calls: list[AcquisitionCall] = []
+        gaps: list[AcquisitionGap] = []
+        rejections: list[AcquisitionRejection] = []
+        candidates: list[OpportunityCandidate] = []
+        candidate_indexes: dict[str, int] = {}
+        for need in unique_needs:
+            argv = (
+                str(command),
+                "opportunity-query",
+                need.query_text,
+                "--db",
+                str(database),
+                "--target-repo-id",
+                target,
+                "--semantic-model-path",
+                str(model_path),
+                "--limit",
+                "20",
+                "--json",
+            )
+            _assert_artifacts_unchanged(
+                executable_descriptor,
+                executable,
+                sidecar_snapshot,
+                model_snapshot,
+            )
+            completed = _run_query_bounded(argv, pinned_snapshot)
+            _assert_artifacts_unchanged(
+                executable_descriptor,
+                executable,
+                sidecar_snapshot,
+                model_snapshot,
+            )
+            call_binding = {
+                "executable_identity": executable.identity,
+                "executable_sha256": executable.sha256,
+                "sidecar_identity": sidecar_snapshot.identity,
+                "sidecar_sha256": sidecar_snapshot.sha256,
+                "semantic_model_identity": model_snapshot.identity,
+                "semantic_model_sha256": model_snapshot.sha256,
+            }
+            if completed.returncode != 0:
+                if not _is_recoverable_query_failure(completed):
+                    raise OpportunityBriefError(
+                        "opportunity query returned a non-recoverable error"
+                    )
+                calls.append(
+                    AcquisitionCall(
+                        need_id=need.need_id,
+                        query=need.query_text,
+                        argv=argv,
+                        status="query_failed",
+                        result_count=0,
+                        rejection_count=0,
+                        **call_binding,
+                    )
+                )
+                gaps.append(
+                    AcquisitionGap(need_id=need.need_id, reason="query_failed")
+                )
+                continue
+            response = _validate_query_response(
+                completed.stdout,
+                need=need,
+                target_repo_id=target,
+                model_id=model_id,
+            )
             calls.append(
                 AcquisitionCall(
                     need_id=need.need_id,
                     query=need.query_text,
                     argv=argv,
-                    status="query_failed",
-                    result_count=0,
-                    rejection_count=0,
+                    status="ok",
+                    result_count=len(response.results),
+                    rejection_count=len(response.rejections),
+                    **call_binding,
                 )
             )
-            gaps.append(AcquisitionGap(need_id=need.need_id, reason="query_failed"))
-            continue
-        response = _validate_query_response(
-            completed.stdout,
-            need=need,
+            rejections.extend(response.rejections)
+            for record_id, record, match in response.results:
+                prior_index = candidate_indexes.get(record_id)
+                if prior_index is None:
+                    candidate_indexes[record_id] = len(candidates)
+                    candidates.append(
+                        OpportunityCandidate(
+                            record_id=record_id,
+                            record=record,
+                            matches=(match,),
+                        )
+                    )
+                    continue
+                prior = candidates[prior_index]
+                if prior.record != record:
+                    raise OpportunityBriefError(
+                        "query responses disagree about a candidate record"
+                    )
+                candidates[prior_index] = OpportunityCandidate(
+                    record_id=prior.record_id,
+                    record=prior.record,
+                    matches=(*prior.matches, match),
+                )
+        _assert_artifacts_unchanged(
+            executable_descriptor,
+            executable,
+            sidecar_snapshot,
+            model_snapshot,
+        )
+        return AcquisitionReceipt(
             target_repo_id=target,
             model_id=model_id,
+            cam_command=command,
+            executable_identity=executable.identity,
+            executable_sha256=executable.sha256,
+            sidecar=database,
+            sidecar_identity=sidecar_snapshot.identity,
+            sidecar_sha256=sidecar_snapshot.sha256,
+            semantic_model_path=model_path,
+            semantic_model_identity=model_snapshot.identity,
+            semantic_model_sha256=model_snapshot.sha256,
+            calls=tuple(calls),
+            candidates=tuple(candidates),
+            rejections=tuple(rejections),
+            gaps=tuple(gaps),
         )
-        calls.append(
-            AcquisitionCall(
-                need_id=need.need_id,
-                query=need.query_text,
-                argv=argv,
-                status="ok",
-                result_count=len(response.results),
-                rejection_count=len(response.rejections),
-            )
-        )
-        rejections.extend(response.rejections)
-        for record_id, record, match in response.results:
-            prior_index = candidate_indexes.get(record_id)
-            if prior_index is None:
-                candidate_indexes[record_id] = len(candidates)
-                candidates.append(
-                    OpportunityCandidate(
-                        record_id=record_id,
-                        record=record,
-                        matches=(match,),
-                    )
-                )
-                continue
-            prior = candidates[prior_index]
-            if prior.record != record:
-                raise OpportunityBriefError(
-                    "query responses disagree about a candidate record"
-                )
-            candidates[prior_index] = OpportunityCandidate(
-                record_id=prior.record_id,
-                record=prior.record,
-                matches=(*prior.matches, match),
-            )
-    return AcquisitionReceipt(
-        target_repo_id=target,
-        model_id=model_id,
-        calls=tuple(calls),
-        candidates=tuple(candidates),
-        rejections=tuple(rejections),
-        gaps=tuple(gaps),
-    )
+    finally:
+        os.close(executable_descriptor)
+        if pinned_directory is not None:
+            try:
+                os.chmod(pinned_directory, 0o700)
+            except OSError:
+                pass
+            shutil.rmtree(pinned_directory, ignore_errors=True)
 
 
 def _unique_acquisition_needs(needs: object) -> tuple[NeedTheme, ...]:
@@ -1186,6 +1389,361 @@ def _validate_acquisition_path(path: object, *, field: str, kind: str) -> Path:
     return path
 
 
+def _pin_executable(path: Path) -> tuple[int, _FileArtifactSnapshot]:
+    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as error:
+        raise OpportunityBriefError("cam command could not be pinned") from error
+    try:
+        snapshot = _snapshot_open_file(
+            descriptor,
+            path,
+            label="cam command",
+            byte_limit=MAX_COMMAND_BYTES,
+            require_executable=True,
+        )
+    except Exception:
+        os.close(descriptor)
+        raise
+    return descriptor, snapshot
+
+
+def _materialize_pinned_executable(
+    descriptor: int,
+    expected: _FileArtifactSnapshot,
+) -> tuple[Path, Path, _FileArtifactSnapshot]:
+    directory = Path(tempfile.mkdtemp(prefix="cam-opportunity-command-"))
+    destination = directory / "cam-command"
+    destination_descriptor: int | None = None
+    completed = False
+    try:
+        destination_descriptor = os.open(
+            destination,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC,
+            0o500,
+        )
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        while True:
+            chunk = os.read(descriptor, 1024 * 1024)
+            if not chunk:
+                break
+            view = memoryview(chunk)
+            while view:
+                written = os.write(destination_descriptor, view)
+                view = view[written:]
+        os.fsync(destination_descriptor)
+        os.close(destination_descriptor)
+        destination_descriptor = None
+        os.chmod(destination, 0o500)
+        copied = _snapshot_single_link_file(
+            destination,
+            label="pinned cam command copy",
+            byte_limit=MAX_COMMAND_BYTES,
+        )
+        if copied.sha256 != expected.sha256 or copied.identity[3] != expected.identity[3]:
+            raise OpportunityBriefError("pinned cam command copy digest is inconsistent")
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        os.chmod(directory, 0o500)
+        completed = True
+        return destination, directory, copied
+    except OpportunityBriefError:
+        raise
+    except OSError as error:
+        raise OpportunityBriefError("cam command could not be pinned for execution") from error
+    finally:
+        if destination_descriptor is not None:
+            os.close(destination_descriptor)
+        if not completed:
+            shutil.rmtree(directory, ignore_errors=True)
+
+
+def _snapshot_single_link_file(
+    path: Path,
+    *,
+    label: str,
+    byte_limit: int,
+) -> _FileArtifactSnapshot:
+    flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC
+    try:
+        descriptor = os.open(path, flags)
+    except OSError as error:
+        raise OpportunityBriefError(f"{label} could not be opened safely") from error
+    try:
+        return _snapshot_open_file(
+            descriptor,
+            path,
+            label=label,
+            byte_limit=byte_limit,
+            require_executable=False,
+        )
+    finally:
+        os.close(descriptor)
+
+
+def _snapshot_open_file(
+    descriptor: int,
+    path: Path,
+    *,
+    label: str,
+    byte_limit: int,
+    require_executable: bool,
+) -> _FileArtifactSnapshot:
+    try:
+        opened_before = os.fstat(descriptor)
+        path_before = os.lstat(path)
+        identity = _stat_identity(opened_before)
+        if (
+            not stat.S_ISREG(opened_before.st_mode)
+            or not stat.S_ISREG(path_before.st_mode)
+            or _stat_identity(path_before) != identity
+        ):
+            raise OpportunityBriefError(f"{label} identity changed")
+        if opened_before.st_nlink != 1:
+            raise OpportunityBriefError(f"{label} must be a single-link regular file")
+        if require_executable and opened_before.st_mode & 0o111 == 0:
+            raise OpportunityBriefError("cam command must be executable")
+        if opened_before.st_size > byte_limit:
+            raise OpportunityBriefError(f"{label} exceeds its byte bound")
+        digest = _hash_descriptor(descriptor, byte_limit=byte_limit, label=label)
+        opened_after = os.fstat(descriptor)
+        path_after = os.lstat(path)
+    except OpportunityBriefError:
+        raise
+    except OSError as error:
+        raise OpportunityBriefError(f"{label} identity could not be read") from error
+    if (
+        _stat_identity(opened_after) != identity
+        or _stat_identity(path_after) != identity
+        or not stat.S_ISREG(path_after.st_mode)
+    ):
+        raise OpportunityBriefError(f"{label} identity changed")
+    return _FileArtifactSnapshot(path=path, identity=identity, sha256=digest)
+
+
+def _hash_descriptor(descriptor: int, *, byte_limit: int, label: str) -> str:
+    digest = hashlib.sha256()
+    total = 0
+    try:
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        while True:
+            chunk = os.read(descriptor, min(1024 * 1024, byte_limit + 1 - total))
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > byte_limit:
+                raise OpportunityBriefError(f"{label} exceeds its byte bound")
+            digest.update(chunk)
+        os.lseek(descriptor, 0, os.SEEK_SET)
+    except OpportunityBriefError:
+        raise
+    except OSError as error:
+        raise OpportunityBriefError(f"{label} content could not be hashed") from error
+    return digest.hexdigest()
+
+
+def _snapshot_model_directory(path: Path) -> _ModelArtifactSnapshot:
+    descriptor: int | None = None
+    flags = os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC
+    try:
+        before = os.lstat(path)
+        descriptor = os.open(path, flags)
+        opened = os.fstat(descriptor)
+        identity = _stat_identity(opened)
+        if (
+            not stat.S_ISDIR(before.st_mode)
+            or not stat.S_ISDIR(opened.st_mode)
+            or _stat_identity(before) != identity
+        ):
+            raise OpportunityBriefError("semantic model directory identity changed")
+        entries: list[_ModelManifestEntry] = []
+        budget = [0, 0]
+        _walk_model_manifest(descriptor, (), entries, budget)
+        opened_after = os.fstat(descriptor)
+        path_after = os.lstat(path)
+        if (
+            _stat_identity(opened_after) != identity
+            or _stat_identity(path_after) != identity
+            or not stat.S_ISDIR(path_after.st_mode)
+        ):
+            raise OpportunityBriefError("semantic model directory identity changed")
+    except OpportunityBriefError:
+        raise
+    except OSError as error:
+        raise OpportunityBriefError("semantic model manifest could not be read") from error
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+    manifest = [
+        [entry.relative_path, entry.kind, entry.sha256]
+        for entry in entries
+    ]
+    encoded = json.dumps(
+        manifest,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return _ModelArtifactSnapshot(
+        path=path,
+        identity=identity,
+        entries=tuple(entries),
+        sha256=hashlib.sha256(encoded).hexdigest(),
+    )
+
+
+def _walk_model_manifest(
+    directory_descriptor: int,
+    relative_parts: tuple[str, ...],
+    entries: list[_ModelManifestEntry],
+    budget: list[int],
+) -> None:
+    try:
+        with os.scandir(directory_descriptor) as iterator:
+            names = sorted(
+                (entry.name for entry in iterator),
+                key=lambda item: (item.casefold(), os.fsencode(item)),
+            )
+    except OSError as error:
+        raise OpportunityBriefError("semantic model manifest could not be scanned") from error
+    for name in names:
+        _checked_relative_path("/".join((*relative_parts, name)), field="model entry")
+        budget[0] += 1
+        if budget[0] > MAX_MODEL_ENTRIES:
+            raise OpportunityBriefError("semantic model manifest exceeds its entry bound")
+        try:
+            before = os.stat(name, dir_fd=directory_descriptor, follow_symlinks=False)
+        except OSError as error:
+            raise OpportunityBriefError("semantic model entry identity changed") from error
+        relative = "/".join((*relative_parts, name))
+        if stat.S_ISLNK(before.st_mode):
+            raise OpportunityBriefError("semantic model manifest must not contain symlinks")
+        if stat.S_ISDIR(before.st_mode):
+            _walk_model_directory(
+                directory_descriptor,
+                name,
+                before,
+                (*relative_parts, name),
+                entries,
+                budget,
+            )
+            entries.append(
+                _ModelManifestEntry(
+                    relative_path=relative,
+                    kind="directory",
+                    identity=_stat_identity(before),
+                    sha256="",
+                )
+            )
+            continue
+        if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1:
+            raise OpportunityBriefError(
+                "semantic model entries must be single-link regular files"
+            )
+        descriptor: int | None = None
+        try:
+            descriptor = os.open(
+                name,
+                os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC,
+                dir_fd=directory_descriptor,
+            )
+            opened = os.fstat(descriptor)
+            identity = _stat_identity(opened)
+            if identity != _stat_identity(before) or not stat.S_ISREG(opened.st_mode):
+                raise OpportunityBriefError("semantic model file identity changed")
+            budget[1] += opened.st_size
+            if budget[1] > MAX_MODEL_BYTES:
+                raise OpportunityBriefError("semantic model content exceeds its byte bound")
+            digest = _hash_descriptor(
+                descriptor,
+                byte_limit=opened.st_size,
+                label="semantic model file",
+            )
+            after = os.fstat(descriptor)
+            path_after = os.stat(
+                name,
+                dir_fd=directory_descriptor,
+                follow_symlinks=False,
+            )
+            if _stat_identity(after) != identity or _stat_identity(path_after) != identity:
+                raise OpportunityBriefError("semantic model file identity changed")
+        except OpportunityBriefError:
+            raise
+        except OSError as error:
+            raise OpportunityBriefError("semantic model file could not be read") from error
+        finally:
+            if descriptor is not None:
+                os.close(descriptor)
+        entries.append(
+            _ModelManifestEntry(
+                relative_path=relative,
+                kind="file",
+                identity=identity,
+                sha256=digest,
+            )
+        )
+
+
+def _walk_model_directory(
+    parent_descriptor: int,
+    name: str,
+    before: os.stat_result,
+    relative_parts: tuple[str, ...],
+    entries: list[_ModelManifestEntry],
+    budget: list[int],
+) -> None:
+    descriptor: int | None = None
+    try:
+        descriptor = os.open(
+            name,
+            os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW | os.O_CLOEXEC,
+            dir_fd=parent_descriptor,
+        )
+        opened = os.fstat(descriptor)
+        identity = _stat_identity(opened)
+        if identity != _stat_identity(before) or not stat.S_ISDIR(opened.st_mode):
+            raise OpportunityBriefError("semantic model directory identity changed")
+        _walk_model_manifest(descriptor, relative_parts, entries, budget)
+        after = os.fstat(descriptor)
+        path_after = os.stat(name, dir_fd=parent_descriptor, follow_symlinks=False)
+        if _stat_identity(after) != identity or _stat_identity(path_after) != identity:
+            raise OpportunityBriefError("semantic model directory identity changed")
+    except OpportunityBriefError:
+        raise
+    except OSError as error:
+        raise OpportunityBriefError("semantic model directory could not be read") from error
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+
+
+def _assert_artifacts_unchanged(
+    executable_descriptor: int,
+    executable: _FileArtifactSnapshot,
+    sidecar: _FileArtifactSnapshot,
+    model: _ModelArtifactSnapshot,
+) -> None:
+    current_executable = _snapshot_open_file(
+        executable_descriptor,
+        executable.path,
+        label="cam command",
+        byte_limit=MAX_COMMAND_BYTES,
+        require_executable=True,
+    )
+    current_sidecar = _snapshot_single_link_file(
+        sidecar.path,
+        label="sidecar",
+        byte_limit=MAX_SIDECAR_BYTES,
+    )
+    current_model = _snapshot_model_directory(model.path)
+    if current_executable != executable:
+        raise OpportunityBriefError("cam command identity or digest changed")
+    if current_sidecar != sidecar:
+        raise OpportunityBriefError("sidecar identity or digest changed")
+    if current_model != model:
+        raise OpportunityBriefError("semantic model identity or digest changed")
+
+
 def _query_environment() -> dict[str, str]:
     return {
         "HOME": "/var/empty",
@@ -1198,10 +1756,24 @@ def _query_environment() -> dict[str, str]:
     }
 
 
-def _run_query_bounded(argv: tuple[str, ...]) -> _GitResult:
+def _run_query_bounded(
+    argv: tuple[str, ...],
+    pinned_executable: _FileArtifactSnapshot,
+) -> _GitResult:
+    process: subprocess.Popen[bytes] | None = None
+    selector: selectors.BaseSelector | None = None
+    output = bytearray()
+    errors = bytearray()
     try:
+        if _snapshot_single_link_file(
+            pinned_executable.path,
+            label="pinned cam command copy",
+            byte_limit=MAX_COMMAND_BYTES,
+        ) != pinned_executable:
+            raise OpportunityBriefError("pinned cam command identity or digest changed")
         process = subprocess.Popen(
             list(argv),
+            executable=str(pinned_executable.path),
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -1210,71 +1782,77 @@ def _run_query_bounded(argv: tuple[str, ...]) -> _GitResult:
             close_fds=True,
             start_new_session=True,
         )
-    except OSError as error:
-        raise OpportunityBriefError("opportunity query could not start") from error
-    if process.stdout is None or process.stderr is None:
-        _stop_query_process(process)
-        raise OpportunityBriefError("opportunity query pipes were unavailable")
-
-    output = bytearray()
-    errors = bytearray()
-    selector = selectors.DefaultSelector()
-    selector.register(
-        process.stdout,
-        selectors.EVENT_READ,
-        (output, MAX_QUERY_RESPONSE_BYTES),
-    )
-    selector.register(
-        process.stderr,
-        selectors.EVENT_READ,
-        (errors, MAX_QUERY_ERROR_BYTES),
-    )
-    deadline = time.monotonic() + QUERY_TIMEOUT_SECONDS
-    try:
+        if process.stdout is None or process.stderr is None:
+            raise OpportunityBriefError("opportunity query pipes were unavailable")
+        selector = selectors.DefaultSelector()
+        selector.register(
+            process.stdout,
+            selectors.EVENT_READ,
+            (output, MAX_QUERY_RESPONSE_BYTES),
+        )
+        selector.register(
+            process.stderr,
+            selectors.EVENT_READ,
+            (errors, MAX_QUERY_ERROR_BYTES),
+        )
+        deadline = time.monotonic() + QUERY_TIMEOUT_SECONDS
         while selector.get_map():
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                _stop_query_process(process)
                 raise OpportunityBriefError("opportunity query timed out")
             events = selector.select(min(remaining, 0.1))
             if not events:
                 continue
             for key, _ in events:
                 buffer, limit = key.data
-                try:
-                    chunk = os.read(
-                        key.fileobj.fileno(),
-                        min(8_192, limit + 1 - len(buffer)),
-                    )
-                except OSError as error:
-                    _stop_query_process(process)
-                    raise OpportunityBriefError(
-                        "opportunity query output could not be read"
-                    ) from error
+                chunk = os.read(
+                    key.fileobj.fileno(),
+                    min(8_192, limit + 1 - len(buffer)),
+                )
                 if not chunk:
                     selector.unregister(key.fileobj)
                     key.fileobj.close()
                     continue
                 buffer.extend(chunk)
                 if len(buffer) > limit:
-                    _stop_query_process(process)
-                    raise OpportunityBriefError("opportunity query output exceeds its bound")
+                    raise OpportunityBriefError(
+                        "opportunity query output exceeds its bound"
+                    )
         remaining = deadline - time.monotonic()
         if remaining <= 0:
-            _stop_query_process(process)
             raise OpportunityBriefError("opportunity query timed out")
         try:
             returncode = process.wait(timeout=remaining)
         except subprocess.TimeoutExpired as error:
-            _stop_query_process(process)
             raise OpportunityBriefError("opportunity query timed out") from error
+        if _snapshot_single_link_file(
+            pinned_executable.path,
+            label="pinned cam command copy",
+            byte_limit=MAX_COMMAND_BYTES,
+        ) != pinned_executable:
+            raise OpportunityBriefError("pinned cam command identity or digest changed")
+        return _GitResult(
+            returncode=returncode,
+            stdout=bytes(output),
+            stderr=bytes(errors),
+        )
+    except OpportunityBriefError:
+        raise
+    except Exception as error:
+        raise OpportunityBriefError("opportunity query subprocess output failed") from error
     finally:
-        selector.close()
-        if process.stdout and not process.stdout.closed:
-            process.stdout.close()
-        if process.stderr and not process.stderr.closed:
-            process.stderr.close()
-    return _GitResult(returncode=returncode, stdout=bytes(output), stderr=bytes(errors))
+        if process is not None and process.poll() is None:
+            _stop_query_process(process)
+        if selector is not None:
+            try:
+                selector.close()
+            except Exception:
+                pass
+        if process is not None:
+            if process.stdout and not process.stdout.closed:
+                process.stdout.close()
+            if process.stderr and not process.stderr.closed:
+                process.stderr.close()
 
 
 def _stop_query_process(process: subprocess.Popen[bytes]) -> None:
@@ -1291,6 +1869,63 @@ def _stop_query_process(process: subprocess.Popen[bytes]) -> None:
         pass
 
 
+def _is_recoverable_query_failure(completed: _GitResult) -> bool:
+    if completed.returncode != 2 or completed.stderr:
+        return False
+    try:
+        envelope = _decode_strict_json(
+            completed.stdout,
+            label="opportunity query error envelope",
+        )
+    except OpportunityBriefError:
+        return False
+    return envelope == {
+        "status": "error",
+        "error": "opportunity query backend failed",
+    }
+
+
+def _decode_strict_json(raw: bytes, *, label: str) -> object:
+    def reject_constant(_value: str) -> object:
+        raise ValueError("non-finite JSON constants are unsupported")
+
+    def reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
+        result: dict[str, object] = {}
+        for key, value in pairs:
+            if key in result:
+                raise ValueError("duplicate JSON object key")
+            result[key] = value
+        return result
+
+    try:
+        decoded = raw.decode("utf-8")
+        value = json.loads(
+            decoded,
+            object_pairs_hook=reject_duplicate_keys,
+            parse_constant=reject_constant,
+        )
+    except (UnicodeError, ValueError, RecursionError) as error:
+        raise OpportunityBriefError(f"{label} is not strict JSON") from error
+    _validate_json_shape(value, label=label)
+    return value
+
+
+def _validate_json_shape(value: object, *, label: str) -> None:
+    stack: list[tuple[object, int]] = [(value, 1)]
+    nodes = 0
+    while stack:
+        item, depth = stack.pop()
+        nodes += 1
+        if nodes > MAX_JSON_NODES:
+            raise OpportunityBriefError(f"{label} exceeds its node bound")
+        if depth > MAX_JSON_DEPTH:
+            raise OpportunityBriefError(f"{label} exceeds its depth bound")
+        if type(item) is dict:
+            stack.extend((child, depth + 1) for child in item.values())
+        elif type(item) is list:
+            stack.extend((child, depth + 1) for child in item)
+
+
 def _validate_query_response(
     raw: bytes,
     *,
@@ -1298,11 +1933,7 @@ def _validate_query_response(
     target_repo_id: str,
     model_id: str,
 ) -> _ValidatedQueryResponse:
-    try:
-        decoded = raw.decode("utf-8")
-        value = json.loads(decoded)
-    except (UnicodeError, ValueError, RecursionError) as error:
-        raise OpportunityBriefError("opportunity query response is not valid JSON") from error
+    value = _decode_strict_json(raw, label="opportunity query response JSON")
     response = _exact_mapping(
         value,
         field="query response",
@@ -1366,6 +1997,27 @@ def _validate_query_response(
         except (TypeError, ValueError) as error:
             raise OpportunityBriefError("query result rank or RRF score is malformed") from error
         parsed_results.append((record_id, record, match))
+    for rank_name in ("fts_rank", "semantic_rank"):
+        ranks = [
+            getattr(match, rank_name)
+            for _record_id, _record, match in parsed_results
+            if getattr(match, rank_name) is not None
+        ]
+        if len(ranks) != len(set(ranks)):
+            raise OpportunityBriefError(f"query result {rank_name} values are not unique")
+    infinity = 1_001
+    expected_results = sorted(
+        parsed_results,
+        key=lambda item: (
+            -item[2].rrf_score,
+            min(item[2].fts_rank or infinity, item[2].semantic_rank or infinity),
+            item[2].fts_rank or infinity,
+            item[2].semantic_rank or infinity,
+            item[0],
+        ),
+    )
+    if parsed_results != expected_results:
+        raise OpportunityBriefError("query results are not in canonical result order")
 
     rejections_value = _bounded_json_list(
         response["rejections"],
@@ -1388,12 +2040,18 @@ def _validate_query_response(
             )
         except (TypeError, ValueError) as error:
             raise OpportunityBriefError("query rejection is malformed") from error
+        if parsed.reason != "source_repo_id equals target_repo_id":
+            raise OpportunityBriefError("query rejection reason is unsupported")
         if parsed.record_id in seen_rejections:
             raise OpportunityBriefError("query rejections repeat a record_id")
         if parsed.record_id in seen_results:
             raise OpportunityBriefError("a query record is both returned and rejected")
         seen_rejections.add(parsed.record_id)
         parsed_rejections.append(parsed)
+    if tuple(item.record_id for item in parsed_rejections) != tuple(
+        sorted(item.record_id for item in parsed_rejections)
+    ):
+        raise OpportunityBriefError("query rejections are not in canonical order")
     return _ValidatedQueryResponse(
         results=tuple(parsed_results),
         rejections=tuple(parsed_rejections),
@@ -1496,6 +2154,7 @@ def _parse_opportunity_record(
                     evidence["source_sha256"],
                     field="source_sha256",
                     item_limit=64,
+                    canonical=False,
                 ),
             ),
             evidence_state=record["evidence_state"],
@@ -1558,13 +2217,16 @@ def _canonical_json_string_tuple(
     field: str,
     item_limit: int,
     maximum: int = MAX_EVIDENCE_ITEMS,
+    canonical: bool = True,
 ) -> tuple[str, ...]:
     items = _bounded_json_list(value, field=field, maximum=maximum)
     result = tuple(
         _canonical_string(item, field=f"{field} item", limit=item_limit)
         for item in items
     )
-    if result != tuple(sorted(result)) or len(result) != len(set(result)):
+    if canonical and (
+        result != tuple(sorted(result)) or len(result) != len(set(result))
+    ):
         raise OpportunityBriefError(f"{field} must be sorted and unique")
     return result
 

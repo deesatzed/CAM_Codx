@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, replace
 import hashlib
 import importlib.util
 import json
@@ -1221,7 +1221,9 @@ def make_fake_cam(
     executable.write_text(
         f"#!{sys.executable}\n"
         "import json\n"
+        "import os\n"
         "import pathlib\n"
+        "import signal\n"
         "import sys\n"
         "import time\n"
         f"responses = json.loads({encoded_responses!r})\n"
@@ -1231,10 +1233,20 @@ def make_fake_cam(
         "entry = responses[sys.argv[2]]\n"
         "if isinstance(entry, dict) and 'sleep_seconds' in entry:\n"
         "    time.sleep(entry['sleep_seconds'])\n"
+        "if isinstance(entry, dict) and 'mutate_path' in entry:\n"
+        "    pathlib.Path(entry['mutate_path']).write_bytes(b'mutated')\n"
+        "if isinstance(entry, dict) and 'signal_number' in entry:\n"
+        "    os.kill(os.getpid(), entry['signal_number'])\n"
+        "if isinstance(entry, dict) and 'raw_stdout' in entry:\n"
+        "    sys.stdout.write(entry['raw_stdout'])\n"
+        "    raise SystemExit(entry.get('exit_code', 0))\n"
         "if isinstance(entry, dict) and 'exit_code' in entry:\n"
+        "    if 'stdout' in entry:\n"
+        "        sys.stdout.write(entry['stdout'])\n"
         "    sys.stderr.write(entry.get('stderr', ''))\n"
         "    raise SystemExit(entry['exit_code'])\n"
-        "sys.stdout.write(json.dumps(entry, sort_keys=True))\n",
+        "payload = entry.get('payload', entry) if isinstance(entry, dict) else entry\n"
+        "sys.stdout.write(json.dumps(payload, sort_keys=True))\n",
         encoding="utf-8",
     )
     executable.chmod(0o755)
@@ -1352,8 +1364,15 @@ def test_acquisition_preserves_empty_results_and_audits_nonzero_query_failure(
                 model_id=str(model_path.resolve()),
             ),
             failed_need.query_text: {
-                "exit_code": 7,
-                "stderr": "SECRET_BACKEND_DETAIL_9137",
+                "exit_code": 2,
+                "stderr": "",
+                "stdout": json.dumps(
+                    {
+                        "status": "error",
+                        "error": "opportunity query backend failed",
+                    },
+                    sort_keys=True,
+                ),
             },
         },
     )
@@ -1525,6 +1544,16 @@ def test_public_acquisition_receipts_reject_forged_call_and_relation_shapes(
 ) -> None:
     brief = load_module()
     need_id = canonical_need_id("blocker", "Bound invocation shape.")
+    identity = (1, 2, 1, 10, 3, 4)
+    digest = "a" * 64
+    binding = {
+        "executable_identity": identity,
+        "executable_sha256": digest,
+        "sidecar_identity": identity,
+        "sidecar_sha256": digest,
+        "semantic_model_identity": identity,
+        "semantic_model_sha256": digest,
+    }
     with pytest.raises((TypeError, ValueError), match="argv|invocation"):
         brief.AcquisitionCall(
             need_id=need_id,
@@ -1533,6 +1562,7 @@ def test_public_acquisition_receipts_reject_forged_call_and_relation_shapes(
             status="ok",
             result_count=0,
             rejection_count=0,
+            **binding,
         )
     forged_call = object.__new__(brief.AcquisitionCall)
     object.__setattr__(forged_call, "need_id", need_id)
@@ -1541,10 +1571,21 @@ def test_public_acquisition_receipts_reject_forged_call_and_relation_shapes(
     object.__setattr__(forged_call, "status", "ok")
     object.__setattr__(forged_call, "result_count", 0)
     object.__setattr__(forged_call, "rejection_count", 0)
+    for field, value in binding.items():
+        object.__setattr__(forged_call, field, value)
     with pytest.raises((TypeError, ValueError), match="call|argv|invocation"):
         brief.AcquisitionReceipt(
             target_repo_id="target-repo-01",
             model_id=str(tmp_path / "model"),
+            cam_command=tmp_path / "fake",
+            executable_identity=identity,
+            executable_sha256=digest,
+            sidecar=tmp_path / "sidecar.sqlite",
+            sidecar_identity=identity,
+            sidecar_sha256=digest,
+            semantic_model_path=tmp_path / "model",
+            semantic_model_identity=identity,
+            semantic_model_sha256=digest,
             calls=(forged_call,),
             candidates=(),
             rejections=(),
@@ -1583,3 +1624,488 @@ def test_acquisition_timeout_is_bounded_and_does_not_expose_backend_output(
             target_repo_id="target-repo-01",
         )
     assert "SECRET_TIMEOUT_DETAIL_4412" not in str(captured.value)
+
+
+def test_acquisition_pins_executable_and_rejects_atomic_path_replacement(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    brief = load_module()
+    need = make_need(brief, "Pin command identity.", "pin command")
+    sidecar = tmp_path / "opportunities.sqlite"
+    sidecar.write_bytes(b"fixture")
+    model_path = tmp_path / "semantic-model"
+    model_path.mkdir()
+    payload = make_query_payload(
+        need.query_text,
+        target_repo_id="target-repo-01",
+        model_id=str(model_path.resolve()),
+    )
+    fake_cam, original_log = make_fake_cam(tmp_path, {need.query_text: payload})
+    replacement_marker = tmp_path / "replacement-ran"
+    replacement = tmp_path / "replacement-cam"
+    replacement.write_text(
+        f"#!{sys.executable}\n"
+        "import json\n"
+        "from pathlib import Path\n"
+        f"Path({str(replacement_marker)!r}).write_text('ran', encoding='utf-8')\n"
+        f"print(json.dumps({payload!r}, sort_keys=True))\n",
+        encoding="utf-8",
+    )
+    replacement.chmod(0o755)
+    real_popen = brief.subprocess.Popen
+    replaced = False
+
+    def replacing_popen(arguments, *args, **kwargs):
+        nonlocal replaced
+        if not replaced:
+            os.replace(replacement, fake_cam)
+            replaced = True
+        return real_popen(arguments, *args, **kwargs)
+
+    monkeypatch.setattr(brief.subprocess, "Popen", replacing_popen)
+
+    with pytest.raises(brief.OpportunityBriefError, match="identity|changed"):
+        brief.acquire_opportunities(
+            needs=(need,),
+            cam_command=fake_cam,
+            sidecar=sidecar,
+            semantic_model_path=model_path,
+            target_repo_id="target-repo-01",
+        )
+    assert original_log.exists(), "the descriptor-pinned original must execute"
+    assert not replacement_marker.exists()
+
+
+@pytest.mark.parametrize("artifact_kind", ["command", "sidecar"])
+def test_acquisition_rejects_hardlinked_file_artifacts_before_spawn(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    artifact_kind: str,
+) -> None:
+    brief = load_module()
+    need = make_need(brief, "Reject ambiguous links.", "hardlink identity")
+    sidecar = tmp_path / "opportunities.sqlite"
+    sidecar.write_bytes(b"fixture")
+    model_path = tmp_path / "semantic-model"
+    model_path.mkdir()
+    fake_cam, _log = make_fake_cam(tmp_path, {})
+    if artifact_kind == "command":
+        alias = tmp_path / "hardlinked-cam"
+        os.link(fake_cam, alias)
+        fake_cam = alias
+    else:
+        alias = tmp_path / "hardlinked.sqlite"
+        os.link(sidecar, alias)
+        sidecar = alias
+
+    def forbidden_popen(*_args, **_kwargs):
+        raise AssertionError("hardlink rejection must precede process creation")
+
+    monkeypatch.setattr(brief.subprocess, "Popen", forbidden_popen)
+    with pytest.raises(brief.OpportunityBriefError, match="hard.?link|single.?link"):
+        brief.acquire_opportunities(
+            needs=(need,),
+            cam_command=fake_cam,
+            sidecar=sidecar,
+            semantic_model_path=model_path,
+            target_repo_id="target-repo-01",
+        )
+
+
+@pytest.mark.parametrize("artifact_kind", ["sidecar", "model"])
+def test_acquisition_rechecks_artifact_digests_between_every_query(
+    tmp_path: Path,
+    artifact_kind: str,
+) -> None:
+    brief = load_module()
+    first = make_need(brief, "First stable need.", "first stable query")
+    second = make_need(
+        brief,
+        "Second stable need.",
+        "second stable query",
+        category="risk",
+    )
+    sidecar = tmp_path / "opportunities.sqlite"
+    sidecar.write_bytes(b"original sidecar")
+    model_path = tmp_path / "semantic-model"
+    model_path.mkdir()
+    model_file = model_path / "config.json"
+    model_file.write_text("original model", encoding="utf-8")
+    target_repo_id = "target-repo-01"
+    mutate_path = sidecar if artifact_kind == "sidecar" else model_file
+    fake_cam, log_path = make_fake_cam(
+        tmp_path,
+        {
+            first.query_text: {
+                "mutate_path": str(mutate_path),
+                "payload": make_query_payload(
+                    first.query_text,
+                    target_repo_id=target_repo_id,
+                    model_id=str(model_path.resolve()),
+                ),
+            },
+            second.query_text: make_query_payload(
+                second.query_text,
+                target_repo_id=target_repo_id,
+                model_id=str(model_path.resolve()),
+            ),
+        },
+    )
+
+    with pytest.raises(brief.OpportunityBriefError, match="identity|changed|digest"):
+        brief.acquire_opportunities(
+            needs=(first, second),
+            cam_command=fake_cam,
+            sidecar=sidecar,
+            semantic_model_path=model_path,
+            target_repo_id=target_repo_id,
+        )
+    assert len(log_path.read_text(encoding="utf-8").splitlines()) == 1
+
+
+@pytest.mark.parametrize(
+    "source_sha256",
+    [
+        ("f" * 64, "0" * 64),
+        ("f" * 64, "f" * 64),
+    ],
+)
+def test_acquisition_preserves_positional_source_digest_pairing(
+    tmp_path: Path,
+    source_sha256: tuple[str, str],
+) -> None:
+    brief = load_module()
+    need = make_need(brief, "Keep evidence pairs.", "evidence pairs")
+    sidecar = tmp_path / "opportunities.sqlite"
+    sidecar.write_bytes(b"fixture")
+    model_path = tmp_path / "semantic-model"
+    model_path.mkdir()
+    record = make_record_mapping()
+    evidence = record["evidence"]
+    evidence["source_files"] = ["src/a.py", "src/b.py"]
+    evidence["source_sha256"] = list(source_sha256)
+    target_repo_id = "target-repo-01"
+    fake_cam, _log = make_fake_cam(
+        tmp_path,
+        {
+            need.query_text: make_query_payload(
+                need.query_text,
+                target_repo_id=target_repo_id,
+                model_id=str(model_path.resolve()),
+                record=record,
+            )
+        },
+    )
+
+    receipt = brief.acquire_opportunities(
+        needs=(need,),
+        cam_command=fake_cam,
+        sidecar=sidecar,
+        semantic_model_path=model_path,
+        target_repo_id=target_repo_id,
+    )
+
+    assert receipt.candidates[0].record.evidence.source_sha256 == source_sha256
+
+
+@pytest.mark.parametrize("protocol_case", ["duplicate-key", "constant", "depth"])
+def test_acquisition_rejects_noncanonical_json_protocol(
+    tmp_path: Path,
+    protocol_case: str,
+) -> None:
+    brief = load_module()
+    need = make_need(brief, "Reject ambiguous JSON.", "strict json")
+    sidecar = tmp_path / "opportunities.sqlite"
+    sidecar.write_bytes(b"fixture")
+    model_path = tmp_path / "semantic-model"
+    model_path.mkdir()
+    payload = make_query_payload(
+        need.query_text,
+        target_repo_id="target-repo-01",
+        model_id=str(model_path.resolve()),
+    )
+    if protocol_case == "duplicate-key":
+        raw = json.dumps(payload)[:-1] + f', "query": {json.dumps(need.query_text)}}}'
+    elif protocol_case == "constant":
+        raw = json.dumps(payload)[:-1] + ', "padding": NaN}'
+    else:
+        raw = json.dumps(payload)[:-1] + ', "padding": ' + "[" * 40 + "0" + "]" * 40 + "}"
+    fake_cam, _log = make_fake_cam(
+        tmp_path,
+        {need.query_text: {"raw_stdout": raw}},
+    )
+
+    with pytest.raises(brief.OpportunityBriefError, match="JSON|duplicate|constant|depth"):
+        brief.acquire_opportunities(
+            needs=(need,),
+            cam_command=fake_cam,
+            sidecar=sidecar,
+            semantic_model_path=model_path,
+            target_repo_id="target-repo-01",
+        )
+
+
+@pytest.mark.parametrize(
+    "protocol_case",
+    ["duplicate-rank", "result-order", "rejection-reason", "observed-semantics"],
+)
+def test_acquisition_rejects_noncanonical_result_protocol(
+    tmp_path: Path,
+    protocol_case: str,
+) -> None:
+    brief = load_module()
+    need = make_need(brief, "Validate result protocol.", "result protocol")
+    sidecar = tmp_path / "opportunities.sqlite"
+    sidecar.write_bytes(b"fixture")
+    model_path = tmp_path / "semantic-model"
+    model_path.mkdir()
+    target_repo_id = "target-repo-01"
+    first_record = make_record_mapping(source_repo_id="donor-repo-01")
+    second_record = make_record_mapping(source_repo_id="donor-repo-02")
+    second_record["problem"] = "A second bounded opportunity."
+    payload = make_query_payload(
+        need.query_text,
+        target_repo_id=target_repo_id,
+        model_id=str(model_path.resolve()),
+        record=first_record,
+    )
+    first_result = payload["results"][0]
+    if protocol_case in {"duplicate-rank", "result-order"}:
+        second_result = {
+            "record_id": record_id_for(second_record),
+            "record": second_record,
+            "fts_rank": 2,
+            "semantic_rank": 1,
+            "rrf_score": 1 / 62 + 1 / 61,
+        }
+        if protocol_case == "duplicate-rank":
+            second_result["fts_rank"] = 1
+            second_result["rrf_score"] = 2 / 61
+            payload["results"].append(second_result)
+        else:
+            first_result["fts_rank"] = 1
+            first_result["semantic_rank"] = 2
+            first_result["rrf_score"] = 1 / 61 + 1 / 62
+            payload["results"] = [second_result, first_result]
+    elif protocol_case == "rejection-reason":
+        payload["rejections"] = [
+            {
+                "record_id": "opp_" + "d" * 32,
+                "reason": "target source omitted",
+            }
+        ]
+    else:
+        first_record["observed_effect"] = {
+            "status": "observed",
+            "text": "Proposed outcome without observation.",
+        }
+        first_result["record_id"] = record_id_for(first_record)
+    fake_cam, _log = make_fake_cam(tmp_path, {need.query_text: payload})
+
+    with pytest.raises(
+        brief.OpportunityBriefError,
+        match="rank|order|rejection|observed|record",
+    ):
+        brief.acquire_opportunities(
+            needs=(need,),
+            cam_command=fake_cam,
+            sidecar=sidecar,
+            semantic_model_path=model_path,
+            target_repo_id=target_repo_id,
+        )
+
+
+@pytest.mark.parametrize(
+    "error_text",
+    [
+        "database is not a recognized opportunity sidecar",
+        "opportunity sidecar schema version is unsupported",
+        "local semantic model could not be loaded",
+        "encoder model_id does not match sidecar metadata",
+    ],
+)
+def test_acquisition_aborts_on_nonrecoverable_cam_error_envelopes(
+    tmp_path: Path,
+    error_text: str,
+) -> None:
+    brief = load_module()
+    need = make_need(brief, "Classify fatal query failures.", "fatal query")
+    sidecar = tmp_path / "opportunities.sqlite"
+    sidecar.write_bytes(b"fixture")
+    model_path = tmp_path / "semantic-model"
+    model_path.mkdir()
+    fake_cam, _log = make_fake_cam(
+        tmp_path,
+        {
+            need.query_text: {
+                "exit_code": 2,
+                "stdout": json.dumps(
+                    {"status": "error", "error": error_text},
+                    sort_keys=True,
+                ),
+            }
+        },
+    )
+
+    with pytest.raises(brief.OpportunityBriefError, match="non-recoverable|fatal"):
+        brief.acquire_opportunities(
+            needs=(need,),
+            cam_command=fake_cam,
+            sidecar=sidecar,
+            semantic_model_path=model_path,
+            target_repo_id="target-repo-01",
+        )
+
+
+@pytest.mark.parametrize("failure_kind", ["signal", "malformed", "wrong-exit", "stderr"])
+def test_acquisition_aborts_on_signal_or_malformed_recoverable_envelope(
+    tmp_path: Path,
+    failure_kind: str,
+) -> None:
+    brief = load_module()
+    need = make_need(brief, "Reject ambiguous failures.", "ambiguous failure")
+    sidecar = tmp_path / "opportunities.sqlite"
+    sidecar.write_bytes(b"fixture")
+    model_path = tmp_path / "semantic-model"
+    model_path.mkdir()
+    recoverable = json.dumps(
+        {"status": "error", "error": "opportunity query backend failed"},
+        sort_keys=True,
+    )
+    if failure_kind == "signal":
+        response = {"signal_number": 15}
+    elif failure_kind == "malformed":
+        response = {"exit_code": 2, "stdout": recoverable[:-1]}
+    elif failure_kind == "wrong-exit":
+        response = {"exit_code": 3, "stdout": recoverable}
+    else:
+        response = {
+            "exit_code": 2,
+            "stdout": recoverable,
+            "stderr": "unexpected stderr",
+        }
+    fake_cam, _log = make_fake_cam(tmp_path, {need.query_text: response})
+
+    with pytest.raises(brief.OpportunityBriefError, match="non-recoverable"):
+        brief.acquire_opportunities(
+            needs=(need,),
+            cam_command=fake_cam,
+            sidecar=sidecar,
+            semantic_model_path=model_path,
+            target_repo_id="target-repo-01",
+        )
+
+
+def test_acquisition_receipt_binds_all_artifact_digests_and_call_argv(
+    tmp_path: Path,
+) -> None:
+    brief = load_module()
+    need = make_need(brief, "Bind receipt artifacts.", "artifact binding")
+    sidecar = tmp_path / "opportunities.sqlite"
+    sidecar.write_bytes(b"fixture")
+    model_path = tmp_path / "semantic-model"
+    model_path.mkdir()
+    (model_path / "config.json").write_text("{}", encoding="utf-8")
+    fake_cam, _log = make_fake_cam(
+        tmp_path,
+        {
+            need.query_text: make_query_payload(
+                need.query_text,
+                target_repo_id="target-repo-01",
+                model_id=str(model_path.resolve()),
+            )
+        },
+    )
+
+    receipt = brief.acquire_opportunities(
+        needs=(need,),
+        cam_command=fake_cam,
+        sidecar=sidecar,
+        semantic_model_path=model_path,
+        target_repo_id="target-repo-01",
+    )
+
+    assert receipt.cam_command == fake_cam
+    assert receipt.sidecar == sidecar
+    assert receipt.semantic_model_path == model_path
+    assert receipt.executable_sha256 == sha256_path(fake_cam)
+    assert receipt.sidecar_sha256 == sha256_path(sidecar)
+    assert re.fullmatch(r"[0-9a-f]{64}", receipt.semantic_model_sha256)
+    call = receipt.calls[0]
+    assert call.executable_sha256 == receipt.executable_sha256
+    assert call.sidecar_sha256 == receipt.sidecar_sha256
+    assert call.semantic_model_sha256 == receipt.semantic_model_sha256
+    with pytest.raises((TypeError, ValueError), match="digest|identity|call"):
+        replace(receipt, executable_sha256="0" * 64)
+    with pytest.raises((TypeError, ValueError), match="digest|identity|call"):
+        replace(
+            receipt,
+            calls=(replace(call, sidecar_sha256="0" * 64),),
+        )
+
+
+@pytest.mark.parametrize("selector_failure", ["register", "select"])
+def test_acquisition_selector_failures_kill_and_reap_without_private_errors(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    selector_failure: str,
+) -> None:
+    brief = load_module()
+    need = make_need(brief, "Own subprocess cleanup.", "selector cleanup")
+    sidecar = tmp_path / "opportunities.sqlite"
+    sidecar.write_bytes(b"fixture")
+    model_path = tmp_path / "semantic-model"
+    model_path.mkdir()
+    fake_cam, _log = make_fake_cam(
+        tmp_path,
+        {need.query_text: {"sleep_seconds": 5, "exit_code": 2}},
+    )
+    processes: list[subprocess.Popen] = []
+    real_popen = brief.subprocess.Popen
+    real_selector_factory = brief.selectors.DefaultSelector
+
+    def recording_popen(arguments, *args, **kwargs):
+        process = real_popen(arguments, *args, **kwargs)
+        processes.append(process)
+        return process
+
+    class FailingSelector:
+        def __init__(self) -> None:
+            self.inner = real_selector_factory()
+
+        def register(self, *args, **kwargs):
+            if selector_failure == "register":
+                raise RuntimeError("SECRET_SELECTOR_REGISTER_6821")
+            return self.inner.register(*args, **kwargs)
+
+        def select(self, *_args, **_kwargs):
+            raise RuntimeError("SECRET_SELECTOR_SELECT_6821")
+
+        def get_map(self):
+            return self.inner.get_map()
+
+        def unregister(self, *args, **kwargs):
+            return self.inner.unregister(*args, **kwargs)
+
+        def close(self) -> None:
+            self.inner.close()
+
+    monkeypatch.setattr(brief.subprocess, "Popen", recording_popen)
+    monkeypatch.setattr(brief.selectors, "DefaultSelector", FailingSelector)
+    try:
+        with pytest.raises(brief.OpportunityBriefError, match="subprocess|output") as captured:
+            brief.acquire_opportunities(
+                needs=(need,),
+                cam_command=fake_cam,
+                sidecar=sidecar,
+                semantic_model_path=model_path,
+                target_repo_id="target-repo-01",
+            )
+        assert "SECRET_SELECTOR" not in str(captured.value)
+        assert processes and all(process.poll() is not None for process in processes)
+    finally:
+        for process in processes:
+            if process.poll() is None:
+                process.kill()
+                process.wait(timeout=1)
