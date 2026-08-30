@@ -1,5 +1,38 @@
 # Decisions
 
+## 2026-08-30: Scope boundary exclusions per need and withhold executable prose
+
+Decision: a candidate boundary is evaluated independently for every recorded
+need match. Explicit incompatibility forms such as `unrelated`, `inapplicable`,
+`does not apply`, `unsupported for`, or direct `not <need term>` exclude that
+need. Generic non-mutation boundaries such as `without modifying`, `does not
+write`, and `no mutation` do not. Ranking chooses the strongest relevant,
+non-conflicting matched need and rejects the candidate as `boundary_conflict`
+only when every relevant match conflicts. Need audits retain every acquisition
+match but attribute a selected record only to its chosen ranking need.
+
+Additivity now credits a novel discriminative mechanism term only when that
+same normalized term independently occurs in the exact need problem/query/span
+or the source problem/context. Adjacent filler receives no credit. Equivalent
+mechanism groups use deterministic complete-link containment: each new member
+must be equivalent to every existing group member, preventing a broad bridge
+record from joining two disjoint mechanisms.
+
+Reason: source limitations apply to specific target needs, while read-only
+safety statements are desirable constraints rather than incompatibilities.
+Independent term support is inspectable and cannot be manufactured by
+alternating filler. Complete-link grouping preserves padding resistance without
+transitive over-grouping.
+
+Safety: every dynamic record field is passed through one language-neutral,
+fail-closed renderer filter. Assignments, braces, semicolons, function calls,
+arrows, shell/SQL shapes, C/Rust/Go/Swift-like constructs, and numbered
+multi-step instructions are replaced with an explicit neutral withholding
+label. Evidence files and symbols are sanitized item by item; their display is
+bounded to `64 KiB` per aggregate with a deterministic omitted-item summary.
+All valid Task 5 item sizes remain accepted, and the fixed score formula and
+`0.48` threshold remain unchanged.
+
 ## 2026-08-30: Bind opportunity ranking and rendering to admitted evidence
 
 Decision: ranking accepts only the exact, recursively revalidated Task 5

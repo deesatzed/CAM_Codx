@@ -1158,7 +1158,10 @@ def make_record_mapping(*, source_repo_id: str = "donor-repo-01") -> dict[str, o
             "status": "observed",
             "text": "Relocated receipts retained a verifiable chain.",
         },
-        "context": "A local verification runner with disposable worktrees.",
+        "context": (
+            "A local verification runner uses append-only content digests "
+            "with disposable worktrees."
+        ),
         "boundary": "This does not establish scientific correctness.",
         "evidence": {
             "source_repo_id": source_repo_id,
@@ -1270,6 +1273,58 @@ def make_ranking_acquisition(brief, tmp_path: Path, needs, candidates):
         rejections=(),
         gaps=(),
     )
+
+
+def render_record_mapping(brief, ranker, tmp_path: Path, mapping: dict[str, object]) -> str:
+    problem = "Evidence receipts do not survive relocation."
+    need = make_need(brief, problem, "evidence receipt relocation verification")
+    record = brief._parse_opportunity_record(
+        mapping,
+        target_repo_id="target-repo-01",
+    )
+    candidate = brief.OpportunityCandidate(
+        record_id=record_id_for(mapping),
+        record=record,
+        matches=(
+            brief.CandidateMatch(
+                need_id=need.need_id,
+                fts_rank=1,
+                semantic_rank=1,
+                rrf_score=2 / 61,
+            ),
+        ),
+    )
+    acquired = make_ranking_acquisition(
+        brief,
+        tmp_path,
+        (need,),
+        (candidate,),
+    )
+    handoff_text = f"## Blockers\n\n- {problem}\n"
+    ranking = ranker.rank_and_select(
+        needs=(need,),
+        handoff_text=handoff_text,
+        acquired=acquired,
+    )
+    assert ranking.selected, "renderer fixture must meet the frozen threshold"
+    snapshot = brief.WipSnapshot(
+        target_path=tmp_path.absolute(),
+        target_revision="d" * 40,
+        target_repo_id="target-repo-01",
+        target_repo_id_is_exclusion_authoritative=True,
+        branch="feature/evidence",
+        dirty_entries=(),
+        handoff=brief.HandoffEvidence(
+            relative_path="HANDOFF_LATEST.md",
+            sha256=hashlib.sha256(handoff_text.encode()).hexdigest(),
+            text=handoff_text,
+        ),
+        truth_files=(),
+        visible_gaps=(),
+        conflicts=(),
+        verification_status="not_run",
+    )
+    return brief.render_opportunity_brief(snapshot, ranking)
 
 
 def make_query_payload(
@@ -2825,6 +2880,100 @@ def test_renderer_neutralizes_dynamic_commonmark_claims_and_source_excerpts(
     assert "source_excerpt" not in lowered
     assert "source statement withheld: ambiguous status language" in rendered
     assert not re.search(r"\b(?:sufficient|implemented|confirmed)\b", lowered)
+
+
+@pytest.mark.parametrize(
+    "payload",
+    (
+        "const value = compute();",
+        "int main() { return 0; }",
+        "go build ./cmd && ./app",
+        'fn main() { println!("x"); }',
+        "let value: Int = compute()",
+        "SELECT value FROM evidence;",
+        "name = execute()",
+        "run_task() -> Result",
+        "1. Install dependencies 2. Edit config 3. Deploy service",
+    ),
+)
+def test_renderer_withholds_language_neutral_code_and_multistep_excerpts(
+    tmp_path: Path,
+    payload: str,
+) -> None:
+    from tools import opportunity_brief as brief
+    from tools import opportunity_ranker as ranker
+
+    mapping = make_record_mapping()
+    observed_effect = mapping["observed_effect"]
+    assert isinstance(observed_effect, dict)
+    observed_effect["text"] = payload
+
+    rendered = render_record_mapping(brief, ranker, tmp_path, mapping)
+
+    assert payload not in rendered
+    assert "source statement withheld: code-shaped content" in rendered
+
+
+@pytest.mark.parametrize(
+    "field",
+    (
+        "problem",
+        "mechanism",
+        "observed_effect",
+        "context",
+        "boundary",
+        "source_repo_name",
+        "source_files",
+        "source_symbols",
+    ),
+)
+def test_renderer_applies_code_filter_to_every_dynamic_record_field(
+    tmp_path: Path,
+    field: str,
+) -> None:
+    from tools import opportunity_brief as brief
+    from tools import opportunity_ranker as ranker
+
+    payload = "const private_value = source_call();"
+    mapping = make_record_mapping()
+    if field in {"problem", "mechanism", "context", "boundary"}:
+        mapping[field] = f"{mapping[field]} {payload}"
+    elif field == "observed_effect":
+        observed_effect = mapping["observed_effect"]
+        assert isinstance(observed_effect, dict)
+        observed_effect["text"] = payload
+    else:
+        evidence = mapping["evidence"]
+        assert isinstance(evidence, dict)
+        if field == "source_repo_name":
+            evidence[field] = f"donor {payload}"
+        elif field == "source_files":
+            evidence[field] = [f"src/{payload}.txt"]
+        else:
+            evidence[field] = [payload]
+
+    rendered = render_record_mapping(brief, ranker, tmp_path, mapping)
+
+    assert payload not in rendered
+    assert "source statement withheld: code-shaped content" in rendered
+
+
+def test_renderer_accepts_valid_maximum_length_evidence_path_aggregate(
+    tmp_path: Path,
+) -> None:
+    from tools import opportunity_brief as brief
+    from tools import opportunity_ranker as ranker
+
+    mapping = make_record_mapping()
+    evidence = mapping["evidence"]
+    assert isinstance(evidence, dict)
+    paths = tuple(f"src/{index:02d}-{'a' * 890}.py" for index in range(5))
+    evidence["source_files"] = list(paths)
+    evidence["source_sha256"] = [f"{index:x}" * 64 for index in range(1, 6)]
+
+    rendered = render_record_mapping(brief, ranker, tmp_path, mapping)
+
+    assert all(path in rendered for path in paths)
 
 
 def test_renderer_labels_selected_negative_evidence_as_a_negative_lesson(

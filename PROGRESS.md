@@ -1,5 +1,33 @@
 # Progress
 
+## 2026-08-30 per-need boundaries and fail-closed brief prose
+
+- Boundary conflicts are now computed per matched need. Ranking selects the
+  best relevant non-conflicting match, preserves all acquisition matches for
+  audit, and associates selection only with the chosen need. Explicit
+  incompatibility language rejects; generic read-only/no-mutation limits do
+  not.
+- Additivity uses exact independently supported terms from the need or source
+  problem/context; the former adjacency credit path was removed. Equivalent
+  mechanisms use deterministic complete-link grouping, preventing a bridge
+  mechanism from merging disjoint groups.
+- Every dynamic record field uses a shared language-neutral code/step filter.
+  C/Rust/Go/Swift, shell, SQL, assignment, brace, semicolon, call, arrow, and
+  numbered multi-step fixtures are withheld rather than quoted. Evidence file
+  and symbol items are sanitized individually, and a bounded aggregate accepts
+  five valid 900-character paths without exposing executable prose.
+- Initial TDD RED was `6 failed, 2 passed` for per-need boundary, explicit
+  incompatibility, independent additivity, and complete-link cases; a stronger
+  no-write overlap control was separately RED at `1 failed`. Renderer RED was
+  `17 failed, 1 passed`. The expanded opportunity surface is `136 passed`.
+  Development Brief/method-resolver compatibility remains `403 passed`. The
+  comparable `PYTHONPATH=.` full run is `727 passed, 3 skipped, 2 failed`;
+  both failures remain the existing absent-sibling `CAM_CAM` path dependency
+  in `test_cam_control_plane_e2e.py` and `test_cam_documentation_contract.py`.
+  Direct Ruff and `git diff --check` pass.
+- No CAM query, provider, mining, database, target, donor, configuration, or
+  profile operation was performed.
+
 ## 2026-08-30 hardened opportunity evidence binding
 
 - Rank input now requires the exact recursively valid Task 5 acquisition

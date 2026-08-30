@@ -72,6 +72,7 @@ MAX_INTERPRETER_LINKS = 16
 HASH_PHASE_TIMEOUT_SECONDS = 15.0
 MAX_JSON_DEPTH = 16
 MAX_JSON_NODES = 50_000
+MAX_BRIEF_EVIDENCE_AGGREGATE = 64 * 1024
 
 _HASH_DEADLINE: ContextVar[float | None] = ContextVar(
     "opportunity_brief_hash_deadline",
@@ -4369,8 +4370,11 @@ def render_opportunity_brief(snapshot: WipSnapshot, ranking: object) -> str:
             "negative": "Negative",
         }[record.observed_effect.status]
         evidence = record.evidence
-        files = ", ".join(evidence.source_files)
-        symbols = ", ".join(evidence.source_symbols)
+        files = _brief_evidence_items(evidence.source_files, item_limit=1_024)
+        symbols = _brief_evidence_items(
+            evidence.source_symbols,
+            item_limit=MAX_OPPORTUNITY_TEXT,
+        )
         negative = record.observed_effect.status == "negative"
         title_prefix = "Negative lesson: " if negative else ""
         inference_label = (
@@ -4393,8 +4397,8 @@ def render_opportunity_brief(snapshot: WipSnapshot, ranking: object) -> str:
                 (
                     f"- Evidence: {_brief_scalar(evidence.source_repo_name)}@"
                     f"{_brief_scalar(evidence.source_revision)}; "
-                    f"files: {_brief_scalar(files)}; "
-                    f"symbols: {_brief_scalar(symbols)}; "
+                    f"files: {files}; "
+                    f"symbols: {symbols}; "
                     f"{_brief_scalar(evidence.license_type)}"
                 ),
                 "",
@@ -4419,10 +4423,10 @@ def render_opportunity_brief(snapshot: WipSnapshot, ranking: object) -> str:
     return rendered
 
 
-def _brief_scalar(value: str) -> str:
+def _brief_scalar(value: str, *, limit: int = MAX_PUBLIC_TEXT) -> str:
     """Keep record prose inside one Markdown field without adding source text."""
 
-    checked = _checked_string(value, field="brief field", limit=MAX_PUBLIC_TEXT)
+    checked = _checked_string(value, field="brief field", limit=limit)
     collapsed = " ".join(checked.split())
     if re.search(r"\b(?:sufficient|implemented|confirmed)\b", collapsed, re.I):
         collapsed = "source statement withheld: ambiguous status language"
@@ -4433,23 +4437,59 @@ def _brief_scalar(value: str) -> str:
 
 
 def _looks_code_shaped(value: str) -> bool:
+    if len(re.findall(r"\b\d+[.)]\s*[A-Za-z]", value)) >= 2:
+        return True
     return bool(
-        re.search(
-            r"(?:```|~~~|source[_ -]?excerpt|"
+        ";" in value
+        or "{" in value
+        or "}" in value
+        or re.search(
+            r"(?:```|~~~|source[_ -]?excerpt|&&|\|\||->|=>|:=|"
             r"<\s*/?\s*(?:script|style|pre|code)\b|"
-            r"(?:^|\s)(?:def|class|function|import)\s+[A-Za-z_]|"
-            r"(?:^|\s)return\s+|=>|:=)",
+            r"(?:^|\s)(?:def|class|function|fn|func|import|return)\s+[A-Za-z_]|"
+            r"\b(?:select\s+.+\s+from|insert\s+into|update\s+\w+\s+set|"
+            r"delete\s+from|create\s+table)\b|"
+            r"(?:^|[\s,(])(?:const\s+|let\s+|var\s+|"
+            r"(?:int|float|double|bool|string)\s+)?[A-Za-z_]\w*"
+            r"(?:\s*:\s*[A-Za-z_]\w*)?\s*=(?!=)|"
+            r"\b[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*\s*\([^)]*\)|"
+            r"(?:^|\s)(?:sudo|sh|bash|zsh|fish|chmod|chown|rm|mv|cp|curl|"
+            r"wget|git|npm|pnpm|yarn|cargo|go)\s+)",
             value,
             re.I,
         )
     )
 
 
+def _brief_evidence_items(values: tuple[str, ...], *, item_limit: int) -> str:
+    encoded = tuple(_brief_scalar(value, limit=item_limit) for value in values)
+    visible: list[str] = []
+    used = 0
+    for item in encoded:
+        separator = 2 if visible else 0
+        if used + separator + len(item) > MAX_BRIEF_EVIDENCE_AGGREGATE:
+            break
+        visible.append(item)
+        used += separator + len(item)
+    omitted = len(encoded) - len(visible)
+    if omitted:
+        visible.append(f"{omitted} additional items withheld by display bound")
+    return ", ".join(visible)
+
+
 def _validate_rendered_brief(rendered: str) -> None:
     lowered = rendered.casefold()
     if re.search(r"\b(?:sufficient|implemented|confirmed)\b", lowered):
         raise OpportunityBriefError("brief contains ambiguous CAM status language")
-    if _looks_code_shaped(rendered):
+    if re.search(
+        r"(?:```|~~~|source[_ -]?excerpt|&&|\|\||->|=>|:=|"
+        r"<\s*/?\s*(?:script|style|pre|code)\b|"
+        r"\b(?:const|let|var)\s+[A-Za-z_]\w*\s*=|"
+        r"\b(?:fn|func|int\s+main)\s*\(|"
+        r"\bselect\s+.+\s+from\b)",
+        rendered,
+        re.I,
+    ):
         raise OpportunityBriefError("brief contains code-shaped source content")
     if re.search(r"(?<!\\)!?\[[^\]\n]*\]\([^\n)]*\)", rendered):
         raise OpportunityBriefError("brief contains an unsafe dynamic Markdown link")

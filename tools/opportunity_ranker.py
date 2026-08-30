@@ -53,16 +53,10 @@ _MECHANISM_ID_PATTERN = re.compile(r"mechanism_[0-9a-f]{24}")
 _DIGEST_PATTERN = re.compile(r"[0-9a-f]{64}")
 _BOUNDARY_CONFLICT_CUES = frozenset(
     {
-        "cannot",
-        "exclude",
-        "exclud",
         "inapplicable",
-        "never",
-        "no",
         "not",
-        "outside",
         "unrelat",
-        "without",
+        "unsupport",
     }
 )
 _STOP_TOKENS = frozenset(
@@ -130,6 +124,7 @@ class RankedOpportunity:
     record_id: str
     record: OpportunityRecordReceipt
     matched_need_ids: tuple[str, ...]
+    ranking_need_id: str
     equivalent_mechanism_id: str
     components: ScoreComponents
     ranking_score: float
@@ -153,6 +148,8 @@ class RankedOpportunity:
             for need_id in self.matched_need_ids
         ):
             raise ValueError("matched_need_ids are malformed")
+        if self.ranking_need_id not in self.matched_need_ids:
+            raise ValueError("ranking_need_id must identify a matched need")
         if _MECHANISM_ID_PATTERN.fullmatch(self.equivalent_mechanism_id) is None:
             raise ValueError("equivalent_mechanism_id is malformed")
         if type(self.components) is not ScoreComponents:
@@ -177,6 +174,7 @@ class RankedOpportunity:
                 record_id=self.record_id,
                 record=self.record,
                 matched_need_ids=self.matched_need_ids,
+                ranking_need_id=self.ranking_need_id,
                 mechanism_id=self.equivalent_mechanism_id,
                 components=self.components,
                 score=self.ranking_score,
@@ -367,7 +365,7 @@ class RankingResult:
 class _ScoredCandidate:
     candidate: object
     matched_need_ids: tuple[str, ...]
-    best_need: object | None
+    best_need: NeedTheme
     mechanism_id: str
     components: ScoreComponents
     score: float
@@ -476,20 +474,29 @@ def _score_candidate(
         )
     )
     match_by_need = {match.need_id: match for match in candidate.matches}
-    ranked_need_scores: list[tuple[float, int, NeedTheme, frozenset[str]]] = []
-    conflicts: set[str] = set()
+    ranked_need_scores: list[
+        tuple[float, int, NeedTheme, frozenset[str], bool]
+    ] = []
     for index, need in enumerate(matched_needs):
         need_terms = _need_terms(need)
         overlap = need_terms & positive_terms
         discriminative = overlap - GENERIC_MATCH_TOKENS
         denominator = max(1, min(len(need_terms - GENERIC_MATCH_TOKENS), 8))
         relevance = _bounded(len(discriminative) / denominator)
-        ranked_need_scores.append((relevance, -index, need, overlap))
-        if _boundary_conflicts(candidate.record.boundary, need_terms):
-            conflicts.add(need.need_id)
-    _relevance, _order, best_need, overlap = max(
-        ranked_need_scores,
-        default=(0.0, 0, None, frozenset()),
+        ranked_need_scores.append(
+            (
+                relevance,
+                -index,
+                need,
+                overlap,
+                _boundary_conflicts(candidate.record.boundary, need_terms),
+            )
+        )
+    relevant_scores = tuple(item for item in ranked_need_scores if item[0] > 0.0)
+    nonconflicting_scores = tuple(item for item in relevant_scores if not item[4])
+    available_scores = nonconflicting_scores or relevant_scores or tuple(ranked_need_scores)
+    _relevance, _order, best_need, overlap, _chosen_conflict = max(
+        available_scores,
         key=lambda item: (item[0], item[1]),
     )
     relevance = float(_relevance)
@@ -498,16 +505,11 @@ def _score_candidate(
         _need_terms(best_need)
         | _token_set(candidate.record.problem)
         | _token_set(candidate.record.context)
-        if best_need is not None
-        else frozenset()
     )
-    source_supported = _source_supported_mechanism_terms(
-        candidate.record.mechanism,
-        support_terms,
-    )
+    source_supported = mechanism_terms & support_terms
     novel_supported = source_supported - handoff_terms
     additive = _bounded(
-        relevance * len(novel_supported) / max(1, len(mechanism_terms))
+        relevance * len(novel_supported) / max(1, len(source_supported))
     )
     redundancy = max(
         (
@@ -519,10 +521,10 @@ def _score_candidate(
         default=0.0,
     )
     generic_penalty = 1.0 if overlap and not (overlap - GENERIC_MATCH_TOKENS) else 0.0
-    conflict = bool(conflicts)
+    conflict = bool(relevant_scores) and not nonconflicting_scores
     transfer = 0.0 if conflict else relevance
-    match = match_by_need.get(best_need.need_id) if best_need is not None else None
-    normalized_rrf = 0.0 if match is None else _bounded(match.rrf_score / MAXIMUM_RRF)
+    match = match_by_need[best_need.need_id]
+    normalized_rrf = _bounded(match.rrf_score / MAXIMUM_RRF)
     components = ScoreComponents(
         normalized_rrf=float(normalized_rrf),
         need_relevance=float(relevance),
@@ -622,11 +624,7 @@ def _to_ranked(
     disposition: Disposition,
     reason: DispositionReason,
 ) -> RankedOpportunity:
-    need_problem = (
-        "the recorded WIP need"
-        if item.best_need is None
-        else item.best_need.problem
-    )
+    need_problem = item.best_need.problem
     if item.candidate.record.observed_effect.status == "negative":
         inference = (
             f"The source-grounded negative lesson overlaps the need '{need_problem}'. "
@@ -641,6 +639,7 @@ def _to_ranked(
         record_id=item.candidate.record_id,
         record=item.candidate.record,
         matched_need_ids=item.matched_need_ids,
+        ranking_need_id=item.best_need.need_id,
         mechanism_id=item.mechanism_id,
         components=item.components,
         score=item.score,
@@ -652,6 +651,7 @@ def _to_ranked(
         record_id=item.candidate.record_id,
         record=item.candidate.record,
         matched_need_ids=item.matched_need_ids,
+        ranking_need_id=item.best_need.need_id,
         equivalent_mechanism_id=item.mechanism_id,
         components=item.components,
         ranking_score=item.score,
@@ -732,7 +732,7 @@ def _need_audit(
                 sorted(
                     item.candidate.record_id
                     for item in scored
-                    if need.need_id in item.matched_need_ids
+                    if item.best_need.need_id == need.need_id
                     and item.candidate.record_id in selected_ids
                 )
             ),
@@ -806,7 +806,6 @@ def _validate_need_audit_relations(result: RankingResult) -> None:
     }
     if not disposition_need_ids.issubset(audit_by_id):
         raise ValueError("need audit omits a candidate need")
-    selected_ids = {item.record_id for item in result.selected}
     for audit in result.need_audit:
         expected_candidates = tuple(
             sorted(
@@ -816,9 +815,11 @@ def _validate_need_audit_relations(result: RankingResult) -> None:
             )
         )
         expected_selected = tuple(
-            record_id
-            for record_id in expected_candidates
-            if record_id in selected_ids
+            sorted(
+                item.record_id
+                for item in result.selected
+                if item.ranking_need_id == audit.need_id
+            )
         )
         if (
             audit.candidate_record_ids != expected_candidates
@@ -837,6 +838,7 @@ def _ranked_integrity(
     record_id: str,
     record: OpportunityRecordReceipt,
     matched_need_ids: tuple[str, ...],
+    ranking_need_id: str,
     mechanism_id: str,
     components: ScoreComponents,
     score: float,
@@ -849,6 +851,7 @@ def _ranked_integrity(
         "disposition": disposition,
         "inference": inference,
         "matched_need_ids": list(matched_need_ids),
+        "ranking_need_id": ranking_need_id,
         "mechanism_id": mechanism_id,
         "ranking_score": score,
         "reason": reason,
@@ -989,34 +992,27 @@ def _group_equivalent_mechanisms(
         _token_set(item.candidate.record.mechanism) - GENERIC_MATCH_TOKENS
         for item in scored
     )
-    parents = list(range(len(scored)))
-
-    def root(index: int) -> int:
-        while parents[index] != index:
-            parents[index] = parents[parents[index]]
-            index = parents[index]
-        return index
-
-    def union(left: int, right: int) -> None:
-        left_root = root(left)
-        right_root = root(right)
-        if left_root != right_root:
-            parents[right_root] = left_root
-
-    for left in range(len(scored)):
-        for right in range(left + 1, len(scored)):
-            smaller, larger = sorted(
-                (term_sets[left], term_sets[right]),
-                key=lambda terms: (len(terms), tuple(sorted(terms))),
-            )
-            if len(smaller) >= 3 and smaller.issubset(larger):
-                union(left, right)
-
-    groups: dict[int, list[int]] = {}
-    for index in range(len(scored)):
-        groups.setdefault(root(index), []).append(index)
+    ordered_indexes = sorted(
+        range(len(scored)),
+        key=lambda index: (
+            len(term_sets[index]),
+            tuple(sorted(term_sets[index])),
+            scored[index].candidate.record_id,
+        ),
+    )
+    groups: list[list[int]] = []
+    for index in ordered_indexes:
+        for group in groups:
+            if all(
+                _mechanism_terms_equivalent(term_sets[index], term_sets[member])
+                for member in group
+            ):
+                group.append(index)
+                break
+        else:
+            groups.append([index])
     mechanism_ids: dict[int, str] = {}
-    for indexes in groups.values():
+    for indexes in groups:
         canonical_terms = min(
             (term_sets[index] for index in indexes),
             key=lambda terms: (len(terms), tuple(sorted(terms))),
@@ -1031,27 +1027,15 @@ def _group_equivalent_mechanisms(
     )
 
 
-def _source_supported_mechanism_terms(
-    mechanism: str,
-    support_terms: frozenset[str],
-) -> frozenset[str]:
-    sequence = _token_sequence(mechanism)
-    supported_positions = {
-        index
-        for index, token in enumerate(sequence)
-        if token in support_terms and token not in GENERIC_MATCH_TOKENS
-    }
-    admitted_positions = {
-        nearby
-        for position in supported_positions
-        for nearby in (position - 1, position, position + 1)
-        if 0 <= nearby < len(sequence)
-    }
-    return frozenset(
-        sequence[index]
-        for index in admitted_positions
-        if sequence[index] not in GENERIC_MATCH_TOKENS
+def _mechanism_terms_equivalent(
+    left: frozenset[str],
+    right: frozenset[str],
+) -> bool:
+    smaller, larger = sorted(
+        (left, right),
+        key=lambda terms: (len(terms), tuple(sorted(terms))),
     )
+    return len(smaller) >= 3 and smaller.issubset(larger)
 
 
 def _handoff_term_spans(handoff: str) -> tuple[frozenset[str], ...]:
@@ -1079,17 +1063,34 @@ def _boundary_conflicts(boundary: str, need_terms: frozenset[str]) -> bool:
         }
         if not overlap_positions:
             continue
-        cue_positions = {
-            index
-            for index, token in enumerate(sequence)
-            if token in _BOUNDARY_CONFLICT_CUES
-        }
-        if any(
-            abs(cue - overlap) <= 2
-            for cue in cue_positions
-            for overlap in overlap_positions
-        ):
-            return True
+        for cue, token in enumerate(sequence):
+            if token in {"unrelat", "inapplicable", "unsupport"} and any(
+                0 < overlap - cue <= 4 for overlap in overlap_positions
+            ):
+                return True
+            if token == "not" and cue + 1 in overlap_positions:
+                previous = sequence[cue - 1] if cue else ""
+                following = sequence[cue + 1]
+                if previous not in {"do", "does", "did"} and following not in {
+                    "change",
+                    "modify",
+                    "mutate",
+                    "mutation",
+                    "writ",
+                    "write",
+                }:
+                    return True
+        for index in range(len(sequence) - 2):
+            if (
+                sequence[index] in {"do", "does", "did"}
+                and sequence[index + 1] == "not"
+                and sequence[index + 2] == "apply"
+                and any(
+                    0 < overlap - (index + 2) <= 4
+                    for overlap in overlap_positions
+                )
+            ):
+                return True
     return False
 
 

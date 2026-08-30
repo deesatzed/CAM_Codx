@@ -275,7 +275,7 @@ def test_evidence_need_selects_only_imbora_with_exact_inspection_formula(
         "not_relevant_to_need",
         "not_additive_to_handoff",
     }
-    assert result.rejected_by_source["GenericAgent"].reason == "boundary_conflict"
+    assert result.rejected_by_source["GenericAgent"].reason == "not_relevant_to_need"
     for item in result.dispositions:
         components = item.components
         assert all(
@@ -338,14 +338,14 @@ def test_handoff_duplicate_and_equivalent_mechanisms_are_audited(
     )
     first = make_record(
         source="source-a",
-        problem="Evidence receipts need content identity.",
+        problem="Evidence receipts need append-only hash-chain manifest identity.",
         mechanism="Append-only hash-chained evidence receipt manifest.",
         context="Evidence replay after process failure.",
         boundary="Does not copy artifacts off device.",
     )
     equivalent = make_record(
         source="source-b",
-        problem="Evidence receipts need content identity.",
+        problem="Evidence receipts need append-only hash-chain manifest identity.",
         mechanism="Hash-chained append-only manifest for evidence receipts.",
         context="Evidence replay after process failure.",
         boundary="Does not copy artifacts off device.",
@@ -600,6 +600,151 @@ def test_boundary_conflict_is_a_hard_rejection(tmp_path: Path) -> None:
     assert result.rejected[0].components.cross_context_transfer == 0.0
 
 
+def test_boundary_conflict_is_scoped_to_each_matched_need(tmp_path: Path) -> None:
+    replay_need = make_need(
+        "Preserve evidence replay receipts.",
+        "preserve evidence replay receipts",
+    )
+    integrity_need = make_need(
+        "Detect artifact integrity drift with content digests.",
+        "artifact integrity drift content digests",
+        category="risk",
+    )
+    record = make_record(
+        source="mixed-boundary",
+        problem="Artifact integrity and evidence replay lack digest receipts.",
+        mechanism="Bind artifact integrity receipts to content digests for evidence replay.",
+        context="Artifact integrity checks across replay workspaces.",
+        boundary=(
+            "This mechanism is unrelated to evidence replay; "
+            "it supports artifact integrity checks."
+        ),
+    )
+    acquired = make_receipt(
+        tmp_path,
+        (replay_need, integrity_need),
+        (make_candidate(record, (replay_need, integrity_need), rank=1),),
+    )
+
+    result = ranker.rank_and_select(
+        needs=(replay_need, integrity_need),
+        handoff_text="## Risks\n\n- Keep artifacts trustworthy.\n",
+        acquired=acquired,
+    )
+
+    assert len(result.selected) == 1
+    assert integrity_need.problem in result.selected[0].inference
+    audits = {audit.need_id: audit for audit in result.need_audit}
+    assert audits[replay_need.need_id].selected_record_ids == ()
+    assert audits[integrity_need.need_id].selected_record_ids == (record_id(record),)
+
+
+def test_generic_no_write_boundary_does_not_create_need_conflict(tmp_path: Path) -> None:
+    need = make_need(
+        "Write target state safely while preserving evidence replay receipts.",
+        "write target state evidence replay receipts",
+    )
+    record = make_record(
+        source="read-only-source",
+        problem="Target state evidence replay lacks durable receipts.",
+        mechanism=(
+            "Bind target state evidence replay receipts to immutable artifact digests."
+        ),
+        context="Evidence replay verification after workspace relocation.",
+        boundary=(
+            "Works without modifying evidence, does not write target state, "
+            "and performs no mutation."
+        ),
+    )
+    acquired = make_receipt(
+        tmp_path,
+        (need,),
+        (make_candidate(record, (need,), rank=1),),
+    )
+
+    result = ranker.rank_and_select(
+        needs=(need,),
+        handoff_text="## Blockers\n\n- Preserve evidence integrity.\n",
+        acquired=acquired,
+    )
+
+    assert len(result.selected) == 1
+    assert result.selected[0].components.cross_context_transfer > 0.0
+
+
+@pytest.mark.parametrize(
+    "boundary",
+    (
+        "This mechanism is unrelated to evidence replay.",
+        "This mechanism is inapplicable to evidence replay.",
+        "This mechanism does not apply to evidence replay.",
+        "This mechanism is unsupported for evidence replay.",
+    ),
+)
+def test_explicit_need_incompatibility_is_a_boundary_conflict(
+    tmp_path: Path,
+    boundary: str,
+) -> None:
+    need = make_need(
+        "Preserve evidence replay receipts.",
+        "preserve evidence replay receipts",
+    )
+    record = make_record(
+        source=hashlib.sha256(boundary.encode()).hexdigest()[:12],
+        problem="Evidence replay lacks durable receipts.",
+        mechanism="Bind evidence replay receipts to immutable artifact digests.",
+        context="Evidence replay verification after workspace relocation.",
+        boundary=boundary,
+    )
+    acquired = make_receipt(
+        tmp_path,
+        (need,),
+        (make_candidate(record, (need,), rank=1),),
+    )
+
+    result = ranker.rank_and_select(
+        needs=(need,),
+        handoff_text="## Blockers\n\n- Preserve evidence integrity.\n",
+        acquired=acquired,
+    )
+
+    assert result.selected == ()
+    assert result.rejected[0].reason == "boundary_conflict"
+
+
+def test_alternating_filler_terms_earn_no_additivity_credit(tmp_path: Path) -> None:
+    need = make_need(
+        "Preserve evidence replay receipts after relocation.",
+        "preserve evidence replay receipts relocation",
+    )
+    record = make_record(
+        source="alternating-filler",
+        problem="Evidence replay receipts fail after relocation.",
+        mechanism=(
+            "Evidence ornamentzero replay ornamentone receipts ornamenttwo "
+            "relocation ornamentthree."
+        ),
+        context="Evidence replay receipts after relocation.",
+        boundary="Does not provide off-device recovery.",
+    )
+    acquired = make_receipt(
+        tmp_path,
+        (need,),
+        (make_candidate(record, (need,), rank=1),),
+    )
+
+    result = ranker.rank_and_select(
+        needs=(need,),
+        handoff_text=(
+            "## Blockers\n\n- Preserve evidence replay receipts after relocation.\n"
+        ),
+        acquired=acquired,
+    )
+
+    assert result.dispositions[0].components.additive_beyond_handoff == 0.0
+    assert result.rejected[0].reason == "not_additive_to_handoff"
+
+
 def test_padding_cannot_hide_handoff_redundancy_or_invent_additivity(
     tmp_path: Path,
 ) -> None:
@@ -690,6 +835,56 @@ def test_equivalent_mechanism_grouping_ignores_unrelated_padding(
         record_id(first),
         record_id(padded),
     }
+
+
+def test_equivalent_mechanism_groups_use_complete_link_not_bridge_chaining(
+    tmp_path: Path,
+) -> None:
+    need = make_need(
+        "Compare alpha beta gamma delta epsilon zeta mechanisms.",
+        "alpha beta gamma delta epsilon zeta",
+    )
+    left = make_record(
+        source="left",
+        problem="Alpha beta gamma mechanism comparison.",
+        mechanism="Alpha beta gamma.",
+        context="Alpha beta gamma evaluation.",
+        boundary="Does not mutate the target.",
+    )
+    bridge = make_record(
+        source="bridge",
+        problem="Alpha beta gamma delta epsilon zeta mechanism comparison.",
+        mechanism="Alpha beta gamma delta epsilon zeta.",
+        context="Alpha beta gamma delta epsilon zeta evaluation.",
+        boundary="Does not mutate the target.",
+    )
+    right = make_record(
+        source="right",
+        problem="Delta epsilon zeta mechanism comparison.",
+        mechanism="Delta epsilon zeta.",
+        context="Delta epsilon zeta evaluation.",
+        boundary="Does not mutate the target.",
+    )
+    acquired = make_receipt(
+        tmp_path,
+        (need,),
+        tuple(
+            make_candidate(record, (need,), rank=index)
+            for index, record in enumerate((left, bridge, right), start=1)
+        ),
+    )
+
+    result = ranker.rank_and_select(
+        needs=(need,),
+        handoff_text="## Open Questions\n\n- Compare candidate mechanisms.\n",
+        acquired=acquired,
+    )
+
+    assert len(result.mechanism_audit) == 2
+    assert not any(
+        {record_id(left), record_id(right)}.issubset(group.record_ids)
+        for group in result.mechanism_audit
+    )
 
 
 def test_public_ranking_receipts_reject_replace_forgery(tmp_path: Path) -> None:
