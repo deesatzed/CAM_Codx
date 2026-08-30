@@ -9,10 +9,13 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 import hashlib
+import json
+import math
 import os
 from pathlib import Path, PurePosixPath
 import re
 import selectors
+import signal
 import shutil
 import stat
 import subprocess
@@ -23,6 +26,9 @@ import unicodedata
 
 VerificationStatus = Literal["not_run"]
 NeedCategory = Literal["blocker", "risk", "next_action", "open_question"]
+QueryStatus = Literal["ok", "query_failed"]
+EffectStatus = Literal["observed", "intended", "negative"]
+SourceRevisionRole = Literal["historical_mined", "selection_time"]
 DirectoryIdentity = tuple[int, int, int, int, int, int]
 
 MAX_HANDOFF_BYTES = 256 * 1024
@@ -40,6 +46,16 @@ MAX_MARKDOWN_LINES = 16_384
 MAX_PUBLIC_TEXT = 4_096
 MAX_REPO_ID_CHARS = 256
 GIT_TIMEOUT_SECONDS = 5.0
+QUERY_TIMEOUT_SECONDS = 30.0
+MAX_QUERY_RESPONSE_BYTES = 12 * 1024 * 1024
+MAX_QUERY_ERROR_BYTES = 16 * 1024
+MAX_QUERY_RESULTS = 20
+MAX_QUERY_REJECTIONS = 1_000
+MAX_ACQUISITION_NEEDS = 7
+MAX_OPPORTUNITY_TEXT = 4_096
+MAX_OPPORTUNITY_RECORD_BYTES = 512 * 1024
+MAX_EVIDENCE_ITEMS = 128
+MAX_METHODOLOGY_IDS = 64
 
 TRUTH_FILE_NAMES = (
     "GOAL.md",
@@ -128,6 +144,37 @@ _RAW_HTML_OPEN_PATTERN = re.compile(
 _HEX_DIGEST_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 _REVISION_PATTERN = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
 _NEED_ID_PATTERN = re.compile(r"^need_[A-Za-z0-9._-]{4,64}$")
+_RECORD_ID_PATTERN = re.compile(r"^opp_[0-9a-f]{32}$")
+_SOURCE_REVISION_PATTERN = re.compile(
+    r"^(?:[0-9a-f]{40}|[0-9a-f]{64}|git:(?:[0-9a-f]{40}|[0-9a-f]{64})|"
+    r"sha256:[0-9a-f]{64})$"
+)
+_KNOWN_LICENSES = frozenset(
+    {
+        "0BSD",
+        "AGPL-3.0-only",
+        "AGPL-3.0-or-later",
+        "Apache-2.0",
+        "BSD-2-Clause",
+        "BSD-3-Clause",
+        "BSL-1.0",
+        "CC0-1.0",
+        "EPL-2.0",
+        "GPL-2.0-only",
+        "GPL-2.0-or-later",
+        "GPL-3.0-only",
+        "GPL-3.0-or-later",
+        "ISC",
+        "LGPL-2.1-only",
+        "LGPL-2.1-or-later",
+        "LGPL-3.0-only",
+        "LGPL-3.0-or-later",
+        "MIT",
+        "MPL-2.0",
+        "Unlicense",
+        "Zlib",
+    }
+)
 
 _SECTION_CATEGORIES: dict[str, NeedCategory] = {
     "blocker": "blocker",
@@ -180,6 +227,18 @@ def _checked_string(
     if _contains_unsafe_text(value, multiline=multiline):
         raise ValueError(f"{field} contains unsafe controls")
     return value
+
+
+def _checked_canonical_string(
+    value: object,
+    *,
+    field: str,
+    limit: int = MAX_PUBLIC_TEXT,
+) -> str:
+    checked = _checked_string(value, field=field, limit=limit)
+    if checked != checked.strip():
+        raise ValueError(f"{field} must not have surrounding whitespace")
+    return checked
 
 
 def _contains_unsafe_text(value: str, *, multiline: bool = False) -> bool:
@@ -346,6 +405,476 @@ class NeedTheme:
 
 
 @dataclass(frozen=True, slots=True)
+class OpportunityEffect:
+    """Validated observed-effect projection from an opportunity record."""
+
+    status: EffectStatus
+    text: str
+
+    def __post_init__(self) -> None:
+        if type(self.status) is not str or self.status not in {
+            "observed",
+            "intended",
+            "negative",
+        }:
+            raise ValueError("observed effect status is unsupported")
+        _checked_canonical_string(
+            self.text,
+            field="observed effect text",
+            limit=MAX_OPPORTUNITY_TEXT,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class OpportunityEvidence:
+    """Immutable, complete provenance and license evidence for a candidate."""
+
+    source_repo_id: str
+    source_repo_name: str
+    source_revision: str
+    source_revision_role: SourceRevisionRole
+    license_type: str
+    license_sha256: str
+    source_files: tuple[str, ...]
+    source_symbols: tuple[str, ...]
+    source_sha256: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        _checked_canonical_string(self.source_repo_id, field="source_repo_id", limit=256)
+        _checked_canonical_string(
+            self.source_repo_name,
+            field="source_repo_name",
+            limit=256,
+        )
+        revision = _checked_canonical_string(
+            self.source_revision,
+            field="source_revision",
+            limit=80,
+        )
+        if _SOURCE_REVISION_PATTERN.fullmatch(revision) is None:
+            raise ValueError("source_revision is not an immutable identity")
+        if type(self.source_revision_role) is not str or self.source_revision_role not in {
+            "historical_mined",
+            "selection_time",
+        }:
+            raise ValueError("source_revision_role is unsupported")
+        license_type = _checked_canonical_string(
+            self.license_type,
+            field="license_type",
+            limit=64,
+        )
+        if license_type not in _KNOWN_LICENSES:
+            raise ValueError("license_type is unsupported")
+        license_digest = _checked_canonical_string(
+            self.license_sha256,
+            field="license_sha256",
+            limit=64,
+        )
+        if _HEX_DIGEST_PATTERN.fullmatch(license_digest) is None:
+            raise ValueError("license_sha256 must be a lowercase SHA-256 digest")
+        _validate_evidence_tuple(
+            self.source_files,
+            field="source_files",
+            limit=1_024,
+        )
+        _validate_evidence_tuple(
+            self.source_symbols,
+            field="source_symbols",
+            limit=512,
+        )
+        _validate_evidence_tuple(
+            self.source_sha256,
+            field="source_sha256",
+            limit=64,
+        )
+        if not self.source_files or not self.source_symbols or not self.source_sha256:
+            raise ValueError("admitted opportunity evidence must be complete")
+        if len(self.source_sha256) != len(self.source_files):
+            raise ValueError("source_sha256 must correspond to source_files")
+        for source_file in self.source_files:
+            _checked_relative_path(source_file, field="source_files item")
+        if any(_HEX_DIGEST_PATTERN.fullmatch(item) is None for item in self.source_sha256):
+            raise ValueError("source_sha256 contains a malformed digest")
+
+
+@dataclass(frozen=True, slots=True)
+class OpportunityRecordReceipt:
+    """The complete six-part opportunity plus its admission provenance."""
+
+    problem: str
+    mechanism: str
+    observed_effect: OpportunityEffect
+    context: str
+    boundary: str
+    evidence: OpportunityEvidence
+    evidence_state: Literal["admitted"]
+    source_methodology_ids: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        for field_name in ("problem", "mechanism", "context", "boundary"):
+            _checked_canonical_string(
+                getattr(self, field_name),
+                field=field_name,
+                limit=MAX_OPPORTUNITY_TEXT,
+            )
+        if type(self.observed_effect) is not OpportunityEffect:
+            raise TypeError("observed_effect must be an OpportunityEffect")
+        if type(self.evidence) is not OpportunityEvidence:
+            raise TypeError("evidence must be OpportunityEvidence")
+        if type(self.evidence_state) is not str or self.evidence_state != "admitted":
+            raise ValueError("query candidates must be admitted records")
+        _validate_evidence_tuple(
+            self.source_methodology_ids,
+            field="source_methodology_ids",
+            limit=256,
+            maximum=MAX_METHODOLOGY_IDS,
+        )
+        if not self.source_methodology_ids:
+            raise ValueError("source_methodology_ids must not be empty")
+
+    def to_mapping(self) -> dict[str, object]:
+        """Return the canonical Task 2 record projection."""
+
+        return {
+            "problem": self.problem,
+            "mechanism": self.mechanism,
+            "observed_effect": {
+                "status": self.observed_effect.status,
+                "text": self.observed_effect.text,
+            },
+            "context": self.context,
+            "boundary": self.boundary,
+            "evidence": {
+                "source_repo_id": self.evidence.source_repo_id,
+                "source_repo_name": self.evidence.source_repo_name,
+                "source_revision": self.evidence.source_revision,
+                "source_revision_role": self.evidence.source_revision_role,
+                "license_type": self.evidence.license_type,
+                "license_sha256": self.evidence.license_sha256,
+                "source_files": list(self.evidence.source_files),
+                "source_symbols": list(self.evidence.source_symbols),
+                "source_sha256": list(self.evidence.source_sha256),
+            },
+            "evidence_state": self.evidence_state,
+            "source_methodology_ids": list(self.source_methodology_ids),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class CandidateMatch:
+    """Per-need query ranks retained for a deduplicated candidate."""
+
+    need_id: str
+    fts_rank: int | None
+    semantic_rank: int | None
+    rrf_score: float
+
+    def __post_init__(self) -> None:
+        need_id = _checked_string(self.need_id, field="need_id", limit=69)
+        if _NEED_ID_PATTERN.fullmatch(need_id) is None:
+            raise ValueError("need_id has an invalid format")
+        for name in ("fts_rank", "semantic_rank"):
+            rank = getattr(self, name)
+            if rank is not None and (
+                isinstance(rank, bool) or type(rank) is not int or not 1 <= rank <= 1_000
+            ):
+                raise ValueError(f"{name} is outside its rank bound")
+        if self.fts_rank is None and self.semantic_rank is None:
+            raise ValueError("a candidate must have at least one component rank")
+        if type(self.rrf_score) is not float:
+            raise TypeError("rrf_score must be a float")
+        expected = sum(
+            1.0 / (60 + rank)
+            for rank in (self.fts_rank, self.semantic_rank)
+            if rank is not None
+        )
+        if not math.isfinite(float(self.rrf_score)) or not math.isclose(
+            float(self.rrf_score),
+            expected,
+            rel_tol=0.0,
+            abs_tol=1e-15,
+        ):
+            raise ValueError("rrf_score does not match the component ranks")
+
+
+@dataclass(frozen=True, slots=True)
+class OpportunityCandidate:
+    """A cross-need deduplicated, source-grounded opportunity candidate."""
+
+    record_id: str
+    record: OpportunityRecordReceipt
+    matches: tuple[CandidateMatch, ...]
+
+    def __post_init__(self) -> None:
+        record_id = _checked_string(self.record_id, field="record_id", limit=36)
+        if _RECORD_ID_PATTERN.fullmatch(record_id) is None:
+            raise ValueError("record_id has an invalid format")
+        if type(self.record) is not OpportunityRecordReceipt:
+            raise TypeError("record must be an OpportunityRecordReceipt")
+        if type(self.matches) is not tuple or not self.matches:
+            raise ValueError("matches must be a non-empty tuple")
+        if any(type(match) is not CandidateMatch for match in self.matches):
+            raise TypeError("matches must contain CandidateMatch values")
+        if len({match.need_id for match in self.matches}) != len(self.matches):
+            raise ValueError("matches must not repeat a need_id")
+        if record_id != _record_id(self.record):
+            raise ValueError("record_id does not match the canonical record")
+
+
+@dataclass(frozen=True, slots=True)
+class AcquisitionCall:
+    """Auditable query invocation without subprocess output or secrets."""
+
+    need_id: str
+    query: str
+    argv: tuple[str, ...]
+    status: QueryStatus
+    result_count: int
+    rejection_count: int
+
+    def __post_init__(self) -> None:
+        if _NEED_ID_PATTERN.fullmatch(
+            _checked_string(self.need_id, field="need_id", limit=69)
+        ) is None:
+            raise ValueError("need_id has an invalid format")
+        _checked_canonical_string(self.query, field="query", limit=MAX_PUBLIC_TEXT)
+        _validate_evidence_tuple(
+            self.argv,
+            field="argv",
+            limit=4_096,
+            maximum=12,
+            canonical=False,
+        )
+        if (
+            len(self.argv) != 12
+            or not Path(self.argv[0]).is_absolute()
+            or self.argv[1] != "opportunity-query"
+            or self.argv[2] != self.query
+            or self.argv[3] != "--db"
+            or not Path(self.argv[4]).is_absolute()
+            or self.argv[5] != "--target-repo-id"
+            or not self.argv[6]
+            or self.argv[7] != "--semantic-model-path"
+            or not Path(self.argv[8]).is_absolute()
+            or self.argv[9:] != ("--limit", "20", "--json")
+        ):
+            raise ValueError("argv is not the supported opportunity-query invocation")
+        if self.status not in {"ok", "query_failed"}:
+            raise ValueError("query call status is unsupported")
+        for name, maximum in (
+            ("result_count", MAX_QUERY_RESULTS),
+            ("rejection_count", MAX_QUERY_REJECTIONS),
+        ):
+            value = getattr(self, name)
+            if isinstance(value, bool) or type(value) is not int or not 0 <= value <= maximum:
+                raise ValueError(f"{name} is outside its bound")
+        if self.status == "query_failed" and (self.result_count or self.rejection_count):
+            raise ValueError("failed query calls cannot claim results or rejections")
+
+
+@dataclass(frozen=True, slots=True)
+class AcquisitionGap:
+    """Stable, sanitized record of one bounded query failure."""
+
+    need_id: str
+    reason: Literal["query_failed"]
+
+    def __post_init__(self) -> None:
+        if _NEED_ID_PATTERN.fullmatch(
+            _checked_string(self.need_id, field="need_id", limit=69)
+        ) is None:
+            raise ValueError("need_id has an invalid format")
+        if self.reason != "query_failed":
+            raise ValueError("acquisition gap reason is unsupported")
+
+
+@dataclass(frozen=True, slots=True)
+class AcquisitionRejection:
+    """Auditable rejection emitted by the read-only query command."""
+
+    need_id: str
+    record_id: str
+    reason: str
+
+    def __post_init__(self) -> None:
+        if _NEED_ID_PATTERN.fullmatch(
+            _checked_string(self.need_id, field="need_id", limit=69)
+        ) is None:
+            raise ValueError("need_id has an invalid format")
+        if _RECORD_ID_PATTERN.fullmatch(
+            _checked_string(self.record_id, field="record_id", limit=36)
+        ) is None:
+            raise ValueError("rejection record_id has an invalid format")
+        _checked_canonical_string(
+            self.reason,
+            field="rejection reason",
+            limit=MAX_PUBLIC_TEXT,
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class AcquisitionReceipt:
+    """Frozen receipt for bounded, local-only opportunity acquisition."""
+
+    target_repo_id: str
+    model_id: str
+    calls: tuple[AcquisitionCall, ...]
+    candidates: tuple[OpportunityCandidate, ...]
+    rejections: tuple[AcquisitionRejection, ...]
+    gaps: tuple[AcquisitionGap, ...]
+    provider_calls: Literal[0] = 0
+    mining_calls: Literal[0] = 0
+
+    def __post_init__(self) -> None:
+        _checked_repo_id(self.target_repo_id)
+        model_id = _checked_canonical_string(
+            self.model_id,
+            field="model_id",
+            limit=1_024,
+        )
+        if not Path(model_id).is_absolute():
+            raise ValueError("model_id must be an absolute local path")
+        _validate_typed_tuple(
+            self.calls,
+            field="calls",
+            item_type=AcquisitionCall,
+            maximum=MAX_ACQUISITION_NEEDS,
+        )
+        _validate_typed_tuple(
+            self.candidates,
+            field="candidates",
+            item_type=OpportunityCandidate,
+            maximum=MAX_ACQUISITION_NEEDS * MAX_QUERY_RESULTS,
+        )
+        _validate_typed_tuple(
+            self.rejections,
+            field="rejections",
+            item_type=AcquisitionRejection,
+            maximum=MAX_ACQUISITION_NEEDS * MAX_QUERY_REJECTIONS,
+        )
+        _validate_typed_tuple(
+            self.gaps,
+            field="gaps",
+            item_type=AcquisitionGap,
+            maximum=MAX_ACQUISITION_NEEDS,
+        )
+        for call in self.calls:
+            call.__post_init__()
+        for candidate in self.candidates:
+            candidate.__post_init__()
+            candidate.record.__post_init__()
+            candidate.record.observed_effect.__post_init__()
+            candidate.record.evidence.__post_init__()
+            for match in candidate.matches:
+                match.__post_init__()
+        for rejection in self.rejections:
+            rejection.__post_init__()
+        for gap in self.gaps:
+            gap.__post_init__()
+        call_ids = tuple(call.need_id for call in self.calls)
+        if len(call_ids) != len(set(call_ids)):
+            raise ValueError("calls must not repeat a need_id")
+        if len({candidate.record_id for candidate in self.candidates}) != len(
+            self.candidates
+        ):
+            raise ValueError("candidates must not repeat a record_id")
+        call_status = {call.need_id: call.status for call in self.calls}
+        call_order = {call.need_id: index for index, call in enumerate(self.calls)}
+        if any(call.argv[6] != self.target_repo_id for call in self.calls):
+            raise ValueError("query call target identity does not match the receipt")
+        if any(
+            candidate.record.evidence.source_repo_id == self.target_repo_id
+            for candidate in self.candidates
+        ):
+            raise ValueError("candidate source identity must not equal the target")
+        if any(
+            match.need_id not in call_status or call_status[match.need_id] != "ok"
+            for candidate in self.candidates
+            for match in candidate.matches
+        ):
+            raise ValueError("candidate matches must identify successful query calls")
+        if any(
+            tuple(call_order[match.need_id] for match in candidate.matches)
+            != tuple(sorted(call_order[match.need_id] for match in candidate.matches))
+            for candidate in self.candidates
+        ):
+            raise ValueError("candidate matches must preserve query-call order")
+        if any(
+            rejection.need_id not in call_status
+            or call_status[rejection.need_id] != "ok"
+            for rejection in self.rejections
+        ):
+            raise ValueError("rejections must identify successful query calls")
+        gap_ids = tuple(gap.need_id for gap in self.gaps)
+        if len(gap_ids) != len(set(gap_ids)) or any(
+            call_status.get(gap_id) != "query_failed" for gap_id in gap_ids
+        ):
+            raise ValueError("gaps must identify unique failed query calls")
+        failed_ids = {
+            call.need_id for call in self.calls if call.status == "query_failed"
+        }
+        if failed_ids != set(gap_ids):
+            raise ValueError("each failed query call must have one query_failed gap")
+        for call in self.calls:
+            candidate_count = sum(
+                call.need_id in {match.need_id for match in candidate.matches}
+                for candidate in self.candidates
+            )
+            rejection_count = sum(
+                rejection.need_id == call.need_id for rejection in self.rejections
+            )
+            if (
+                candidate_count != call.result_count
+                or rejection_count != call.rejection_count
+            ):
+                raise ValueError("query call counts do not match receipt contents")
+        if (
+            type(self.provider_calls) is not int
+            or type(self.mining_calls) is not int
+            or self.provider_calls != 0
+            or self.mining_calls != 0
+        ):
+            raise ValueError("acquisition must not use providers or mining")
+
+
+def _validate_evidence_tuple(
+    value: object,
+    *,
+    field: str,
+    limit: int,
+    maximum: int = MAX_EVIDENCE_ITEMS,
+    canonical: bool = True,
+) -> None:
+    if type(value) is not tuple:
+        raise TypeError(f"{field} must be a tuple")
+    if len(value) > maximum:
+        raise ValueError(f"{field} exceeds its item bound")
+    checked = tuple(
+        _checked_canonical_string(item, field=f"{field} item", limit=limit)
+        for item in value
+    )
+    if canonical and (
+        checked != tuple(sorted(checked)) or len(checked) != len(set(checked))
+    ):
+        raise ValueError(f"{field} must be sorted and unique")
+
+
+def _validate_typed_tuple(
+    value: object,
+    *,
+    field: str,
+    item_type: type,
+    maximum: int,
+) -> None:
+    if type(value) is not tuple:
+        raise TypeError(f"{field} must be a tuple")
+    if len(value) > maximum:
+        raise ValueError(f"{field} exceeds its item bound")
+    if any(type(item) is not item_type for item in value):
+        raise TypeError(f"{field} contains an invalid item")
+
+
+@dataclass(frozen=True, slots=True)
 class _Candidate:
     category: NeedCategory
     priority: int
@@ -480,6 +1009,575 @@ def extract_need_themes(
             f"handoff must contain at least {minimum} unique needs in allowed sections"
         )
     return tuple(_to_need_theme(candidate) for candidate in selected)
+
+
+@dataclass(frozen=True, slots=True)
+class _ValidatedQueryResponse:
+    results: tuple[tuple[str, OpportunityRecordReceipt, CandidateMatch], ...]
+    rejections: tuple[AcquisitionRejection, ...]
+
+
+def acquire_opportunities(
+    needs: tuple[NeedTheme, ...],
+    *,
+    cam_command: Path,
+    sidecar: Path,
+    semantic_model_path: Path,
+    target_repo_id: str,
+) -> AcquisitionReceipt:
+    """Acquire local sidecar candidates once for each stable unique need.
+
+    ``target_repo_id`` is deliberately required. Callers may pass an identity
+    supplied to :func:`inspect_wip_repository` with
+    ``require_exclusion_identity=True``, or another explicitly validated shared
+    identity. This function never accepts or trusts a snapshot authority flag.
+    """
+
+    unique_needs = _unique_acquisition_needs(needs)
+    target = _checked_repo_id(target_repo_id)
+    command = _validate_acquisition_path(
+        cam_command,
+        field="cam command",
+        kind="executable",
+    )
+    database = _validate_acquisition_path(sidecar, field="sidecar", kind="file")
+    if database.name.casefold() == "claw.db":
+        raise OpportunityBriefError("refusing to query canonical claw.db")
+    model_path = _validate_acquisition_path(
+        semantic_model_path,
+        field="semantic model path",
+        kind="directory",
+    )
+    try:
+        model_id = str(model_path.resolve(strict=True))
+    except (OSError, RuntimeError, ValueError) as error:
+        raise OpportunityBriefError("semantic model path identity is unavailable") from error
+
+    calls: list[AcquisitionCall] = []
+    gaps: list[AcquisitionGap] = []
+    rejections: list[AcquisitionRejection] = []
+    candidates: list[OpportunityCandidate] = []
+    candidate_indexes: dict[str, int] = {}
+    for need in unique_needs:
+        argv = (
+            str(command),
+            "opportunity-query",
+            need.query_text,
+            "--db",
+            str(database),
+            "--target-repo-id",
+            target,
+            "--semantic-model-path",
+            str(model_path),
+            "--limit",
+            "20",
+            "--json",
+        )
+        completed = _run_query_bounded(argv)
+        if completed.returncode != 0:
+            calls.append(
+                AcquisitionCall(
+                    need_id=need.need_id,
+                    query=need.query_text,
+                    argv=argv,
+                    status="query_failed",
+                    result_count=0,
+                    rejection_count=0,
+                )
+            )
+            gaps.append(AcquisitionGap(need_id=need.need_id, reason="query_failed"))
+            continue
+        response = _validate_query_response(
+            completed.stdout,
+            need=need,
+            target_repo_id=target,
+            model_id=model_id,
+        )
+        calls.append(
+            AcquisitionCall(
+                need_id=need.need_id,
+                query=need.query_text,
+                argv=argv,
+                status="ok",
+                result_count=len(response.results),
+                rejection_count=len(response.rejections),
+            )
+        )
+        rejections.extend(response.rejections)
+        for record_id, record, match in response.results:
+            prior_index = candidate_indexes.get(record_id)
+            if prior_index is None:
+                candidate_indexes[record_id] = len(candidates)
+                candidates.append(
+                    OpportunityCandidate(
+                        record_id=record_id,
+                        record=record,
+                        matches=(match,),
+                    )
+                )
+                continue
+            prior = candidates[prior_index]
+            if prior.record != record:
+                raise OpportunityBriefError(
+                    "query responses disagree about a candidate record"
+                )
+            candidates[prior_index] = OpportunityCandidate(
+                record_id=prior.record_id,
+                record=prior.record,
+                matches=(*prior.matches, match),
+            )
+    return AcquisitionReceipt(
+        target_repo_id=target,
+        model_id=model_id,
+        calls=tuple(calls),
+        candidates=tuple(candidates),
+        rejections=tuple(rejections),
+        gaps=tuple(gaps),
+    )
+
+
+def _unique_acquisition_needs(needs: object) -> tuple[NeedTheme, ...]:
+    if type(needs) is not tuple:
+        raise TypeError("needs must be a tuple")
+    if len(needs) > MAX_ACQUISITION_NEEDS:
+        raise OpportunityBriefError("needs exceed the acquisition bound")
+    unique: list[NeedTheme] = []
+    by_id: dict[str, NeedTheme] = {}
+    for need in needs:
+        if type(need) is not NeedTheme:
+            raise TypeError("needs must contain NeedTheme values")
+        prior = by_id.get(need.need_id)
+        if prior is None:
+            by_id[need.need_id] = need
+            unique.append(need)
+        elif prior != need:
+            raise OpportunityBriefError("duplicate need_id has conflicting content")
+    return tuple(unique)
+
+
+def _validate_acquisition_path(path: object, *, field: str, kind: str) -> Path:
+    if not isinstance(path, Path):
+        raise TypeError(f"{field} must be a pathlib.Path")
+    try:
+        _checked_string(str(path), field=field, limit=4_096)
+    except (TypeError, ValueError) as error:
+        raise OpportunityBriefError(f"{field} contains unsafe controls") from error
+    if not path.is_absolute():
+        raise OpportunityBriefError(f"{field} must be absolute")
+    current = Path(path.anchor)
+    try:
+        for component in path.parts[1:]:
+            current /= component
+            identity = os.lstat(current)
+            if stat.S_ISLNK(identity.st_mode):
+                raise OpportunityBriefError(f"{field} must not contain a symlink")
+        identity = os.lstat(path)
+    except OpportunityBriefError:
+        raise
+    except OSError as error:
+        raise OpportunityBriefError(f"{field} must exist") from error
+    if kind == "directory":
+        if not stat.S_ISDIR(identity.st_mode):
+            raise OpportunityBriefError(f"{field} must be a directory")
+    elif not stat.S_ISREG(identity.st_mode):
+        raise OpportunityBriefError(f"{field} must be a regular file")
+    if kind == "executable" and not os.access(path, os.X_OK):
+        raise OpportunityBriefError(f"{field} must be executable")
+    return path
+
+
+def _query_environment() -> dict[str, str]:
+    return {
+        "HOME": "/var/empty",
+        "LANG": "C",
+        "LC_ALL": "C",
+        "PATH": os.defpath,
+        "PYTHONNOUSERSITE": "1",
+        "XDG_CACHE_HOME": "/var/empty",
+        "XDG_CONFIG_HOME": "/var/empty",
+    }
+
+
+def _run_query_bounded(argv: tuple[str, ...]) -> _GitResult:
+    try:
+        process = subprocess.Popen(
+            list(argv),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            shell=False,
+            env=_query_environment(),
+            close_fds=True,
+            start_new_session=True,
+        )
+    except OSError as error:
+        raise OpportunityBriefError("opportunity query could not start") from error
+    if process.stdout is None or process.stderr is None:
+        _stop_query_process(process)
+        raise OpportunityBriefError("opportunity query pipes were unavailable")
+
+    output = bytearray()
+    errors = bytearray()
+    selector = selectors.DefaultSelector()
+    selector.register(
+        process.stdout,
+        selectors.EVENT_READ,
+        (output, MAX_QUERY_RESPONSE_BYTES),
+    )
+    selector.register(
+        process.stderr,
+        selectors.EVENT_READ,
+        (errors, MAX_QUERY_ERROR_BYTES),
+    )
+    deadline = time.monotonic() + QUERY_TIMEOUT_SECONDS
+    try:
+        while selector.get_map():
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                _stop_query_process(process)
+                raise OpportunityBriefError("opportunity query timed out")
+            events = selector.select(min(remaining, 0.1))
+            if not events:
+                continue
+            for key, _ in events:
+                buffer, limit = key.data
+                try:
+                    chunk = os.read(
+                        key.fileobj.fileno(),
+                        min(8_192, limit + 1 - len(buffer)),
+                    )
+                except OSError as error:
+                    _stop_query_process(process)
+                    raise OpportunityBriefError(
+                        "opportunity query output could not be read"
+                    ) from error
+                if not chunk:
+                    selector.unregister(key.fileobj)
+                    key.fileobj.close()
+                    continue
+                buffer.extend(chunk)
+                if len(buffer) > limit:
+                    _stop_query_process(process)
+                    raise OpportunityBriefError("opportunity query output exceeds its bound")
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            _stop_query_process(process)
+            raise OpportunityBriefError("opportunity query timed out")
+        try:
+            returncode = process.wait(timeout=remaining)
+        except subprocess.TimeoutExpired as error:
+            _stop_query_process(process)
+            raise OpportunityBriefError("opportunity query timed out") from error
+    finally:
+        selector.close()
+        if process.stdout and not process.stdout.closed:
+            process.stdout.close()
+        if process.stderr and not process.stderr.closed:
+            process.stderr.close()
+    return _GitResult(returncode=returncode, stdout=bytes(output), stderr=bytes(errors))
+
+
+def _stop_query_process(process: subprocess.Popen[bytes]) -> None:
+    if process.poll() is None:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        except OSError:
+            process.kill()
+    try:
+        process.wait(timeout=1)
+    except subprocess.TimeoutExpired:
+        pass
+
+
+def _validate_query_response(
+    raw: bytes,
+    *,
+    need: NeedTheme,
+    target_repo_id: str,
+    model_id: str,
+) -> _ValidatedQueryResponse:
+    try:
+        decoded = raw.decode("utf-8")
+        value = json.loads(decoded)
+    except (UnicodeError, ValueError, RecursionError) as error:
+        raise OpportunityBriefError("opportunity query response is not valid JSON") from error
+    response = _exact_mapping(
+        value,
+        field="query response",
+        keys={
+            "schema_version",
+            "scope",
+            "query",
+            "target_repo_id",
+            "model_id",
+            "results",
+            "rejections",
+        },
+    )
+    if type(response["schema_version"]) is not int or response["schema_version"] != 1:
+        raise OpportunityBriefError("opportunity query response schema is unsupported")
+    if response["scope"] != "opportunity_sidecar":
+        raise OpportunityBriefError("opportunity query response scope is unsupported")
+    if response["query"] != need.query_text:
+        raise OpportunityBriefError("opportunity query response query does not match")
+    if response["target_repo_id"] != target_repo_id:
+        raise OpportunityBriefError("opportunity query response target does not match")
+    if response["model_id"] != model_id:
+        raise OpportunityBriefError("opportunity query response model does not match")
+
+    results_value = _bounded_json_list(
+        response["results"],
+        field="query results",
+        maximum=MAX_QUERY_RESULTS,
+    )
+    parsed_results: list[tuple[str, OpportunityRecordReceipt, CandidateMatch]] = []
+    seen_results: set[str] = set()
+    for value in results_value:
+        result = _exact_mapping(
+            value,
+            field="query result",
+            keys={"record_id", "record", "fts_rank", "semantic_rank", "rrf_score"},
+        )
+        record_id = _canonical_string(
+            result["record_id"],
+            field="result record_id",
+            limit=36,
+        )
+        if _RECORD_ID_PATTERN.fullmatch(record_id) is None:
+            raise OpportunityBriefError("query result record_id is malformed")
+        if record_id in seen_results:
+            raise OpportunityBriefError("query results repeat a record_id")
+        seen_results.add(record_id)
+        record = _parse_opportunity_record(
+            result["record"],
+            target_repo_id=target_repo_id,
+        )
+        if record_id != _record_id(record):
+            raise OpportunityBriefError("query result record identity is inconsistent")
+        try:
+            match = CandidateMatch(
+                need_id=need.need_id,
+                fts_rank=result["fts_rank"],
+                semantic_rank=result["semantic_rank"],
+                rrf_score=result["rrf_score"],
+            )
+        except (TypeError, ValueError) as error:
+            raise OpportunityBriefError("query result rank or RRF score is malformed") from error
+        parsed_results.append((record_id, record, match))
+
+    rejections_value = _bounded_json_list(
+        response["rejections"],
+        field="query rejections",
+        maximum=MAX_QUERY_REJECTIONS,
+    )
+    parsed_rejections: list[AcquisitionRejection] = []
+    seen_rejections: set[str] = set()
+    for value in rejections_value:
+        rejection = _exact_mapping(
+            value,
+            field="query rejection",
+            keys={"record_id", "reason"},
+        )
+        try:
+            parsed = AcquisitionRejection(
+                need_id=need.need_id,
+                record_id=rejection["record_id"],
+                reason=rejection["reason"],
+            )
+        except (TypeError, ValueError) as error:
+            raise OpportunityBriefError("query rejection is malformed") from error
+        if parsed.record_id in seen_rejections:
+            raise OpportunityBriefError("query rejections repeat a record_id")
+        if parsed.record_id in seen_results:
+            raise OpportunityBriefError("a query record is both returned and rejected")
+        seen_rejections.add(parsed.record_id)
+        parsed_rejections.append(parsed)
+    return _ValidatedQueryResponse(
+        results=tuple(parsed_results),
+        rejections=tuple(parsed_rejections),
+    )
+
+
+def _parse_opportunity_record(
+    value: object,
+    *,
+    target_repo_id: str,
+) -> OpportunityRecordReceipt:
+    record = _exact_mapping(
+        value,
+        field="opportunity record",
+        keys={
+            "problem",
+            "mechanism",
+            "observed_effect",
+            "context",
+            "boundary",
+            "evidence",
+            "evidence_state",
+            "source_methodology_ids",
+        },
+    )
+    effect = _exact_mapping(
+        record["observed_effect"],
+        field="observed_effect",
+        keys={"status", "text"},
+    )
+    evidence = _exact_mapping(
+        record["evidence"],
+        field="evidence",
+        keys={
+            "source_repo_id",
+            "source_repo_name",
+            "source_revision",
+            "source_revision_role",
+            "license_type",
+            "license_sha256",
+            "source_files",
+            "source_symbols",
+            "source_sha256",
+        },
+    )
+    source_repo_id = _canonical_string(
+        evidence["source_repo_id"],
+        field="source_repo_id",
+        limit=256,
+    )
+    if source_repo_id == target_repo_id:
+        raise OpportunityBriefError("query result source_repo_id identifies the target")
+    try:
+        parsed = OpportunityRecordReceipt(
+            problem=_canonical_string(record["problem"], field="problem"),
+            mechanism=_canonical_string(record["mechanism"], field="mechanism"),
+            observed_effect=OpportunityEffect(
+                status=effect["status"],
+                text=_canonical_string(
+                    effect["text"],
+                    field="observed effect text",
+                ),
+            ),
+            context=_canonical_string(record["context"], field="context"),
+            boundary=_canonical_string(record["boundary"], field="boundary"),
+            evidence=OpportunityEvidence(
+                source_repo_id=source_repo_id,
+                source_repo_name=_canonical_string(
+                    evidence["source_repo_name"],
+                    field="source_repo_name",
+                    limit=256,
+                ),
+                source_revision=_canonical_string(
+                    evidence["source_revision"],
+                    field="source_revision",
+                    limit=80,
+                ),
+                source_revision_role=evidence["source_revision_role"],
+                license_type=_canonical_string(
+                    evidence["license_type"],
+                    field="license_type",
+                    limit=64,
+                ),
+                license_sha256=_canonical_string(
+                    evidence["license_sha256"],
+                    field="license_sha256",
+                    limit=64,
+                ),
+                source_files=_canonical_json_string_tuple(
+                    evidence["source_files"],
+                    field="source_files",
+                    item_limit=1_024,
+                ),
+                source_symbols=_canonical_json_string_tuple(
+                    evidence["source_symbols"],
+                    field="source_symbols",
+                    item_limit=512,
+                ),
+                source_sha256=_canonical_json_string_tuple(
+                    evidence["source_sha256"],
+                    field="source_sha256",
+                    item_limit=64,
+                ),
+            ),
+            evidence_state=record["evidence_state"],
+            source_methodology_ids=_canonical_json_string_tuple(
+                record["source_methodology_ids"],
+                field="source_methodology_ids",
+                item_limit=256,
+                maximum=MAX_METHODOLOGY_IDS,
+            ),
+        )
+    except (TypeError, ValueError) as error:
+        raise OpportunityBriefError("opportunity record is malformed") from error
+    try:
+        encoded = json.dumps(
+            parsed.to_mapping(),
+            ensure_ascii=False,
+            allow_nan=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    except (TypeError, ValueError, UnicodeError, RecursionError) as error:
+        raise OpportunityBriefError("opportunity record is malformed") from error
+    if len(encoded) > MAX_OPPORTUNITY_RECORD_BYTES:
+        raise OpportunityBriefError("opportunity record exceeds its byte bound")
+    return parsed
+
+
+def _exact_mapping(value: object, *, field: str, keys: set[str]) -> dict[str, object]:
+    if type(value) is not dict or set(value) != keys:
+        raise OpportunityBriefError(f"{field} has an unsupported schema")
+    return value
+
+
+def _bounded_json_list(value: object, *, field: str, maximum: int) -> list[object]:
+    if type(value) is not list:
+        raise OpportunityBriefError(f"{field} must be a JSON array")
+    if len(value) > maximum:
+        raise OpportunityBriefError(f"{field} exceed their item bound")
+    return value
+
+
+def _canonical_string(
+    value: object,
+    *,
+    field: str,
+    limit: int = MAX_OPPORTUNITY_TEXT,
+) -> str:
+    try:
+        checked = _checked_string(value, field=field, limit=limit)
+    except (TypeError, ValueError) as error:
+        raise OpportunityBriefError(f"{field} is malformed") from error
+    if checked != checked.strip():
+        raise OpportunityBriefError(f"{field} is not canonical text")
+    return checked
+
+
+def _canonical_json_string_tuple(
+    value: object,
+    *,
+    field: str,
+    item_limit: int,
+    maximum: int = MAX_EVIDENCE_ITEMS,
+) -> tuple[str, ...]:
+    items = _bounded_json_list(value, field=field, maximum=maximum)
+    result = tuple(
+        _canonical_string(item, field=f"{field} item", limit=item_limit)
+        for item in items
+    )
+    if result != tuple(sorted(result)) or len(result) != len(set(result)):
+        raise OpportunityBriefError(f"{field} must be sorted and unique")
+    return result
+
+
+def _record_id(record: OpportunityRecordReceipt) -> str:
+    canonical = json.dumps(
+        record.to_mapping(),
+        ensure_ascii=False,
+        allow_nan=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return f"opp_{hashlib.sha256(canonical.encode('utf-8')).hexdigest()[:32]}"
 
 
 def _directory_identity(result: os.stat_result) -> DirectoryIdentity:
@@ -1363,10 +2461,20 @@ def _to_need_theme(candidate: _Candidate) -> NeedTheme:
 
 
 __all__ = [
+    "AcquisitionCall",
+    "AcquisitionGap",
+    "AcquisitionReceipt",
+    "AcquisitionRejection",
+    "CandidateMatch",
     "HandoffEvidence",
     "NeedTheme",
+    "OpportunityCandidate",
     "OpportunityBriefError",
+    "OpportunityEffect",
+    "OpportunityEvidence",
+    "OpportunityRecordReceipt",
     "WipSnapshot",
+    "acquire_opportunities",
     "extract_need_themes",
     "inspect_wip_repository",
 ]

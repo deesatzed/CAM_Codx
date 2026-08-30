@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import FrozenInstanceError
 import hashlib
 import importlib.util
+import json
 import os
 from pathlib import Path
 import re
@@ -1129,3 +1130,456 @@ def test_public_snapshot_truth_and_conflict_cardinality_are_bounded(tmp_path: Pa
             truth_files=(),
             conflicts=tuple(f"conflict {index}" for index in range(65)),
         )
+
+
+def make_need(brief, problem: str, query: str, *, category: str = "blocker"):
+    return brief.NeedTheme(
+        need_id=canonical_need_id(category, problem),
+        category=category,
+        problem=problem,
+        desired_improvement="Attach a transferable evidence mechanism.",
+        existing_evidence="The handoff records the unresolved need.",
+        gap="Independent source evidence is absent.",
+        query_text=query,
+        handoff_span=problem,
+    )
+
+
+def make_record_mapping(*, source_repo_id: str = "donor-repo-01") -> dict[str, object]:
+    return {
+        "problem": "Evidence receipts do not survive relocation.",
+        "mechanism": "Bind append-only receipts to content digests.",
+        "observed_effect": {
+            "status": "observed",
+            "text": "Relocated receipts retained a verifiable chain.",
+        },
+        "context": "A local verification runner with disposable worktrees.",
+        "boundary": "This does not establish scientific correctness.",
+        "evidence": {
+            "source_repo_id": source_repo_id,
+            "source_repo_name": "donor",
+            "source_revision": "a" * 40,
+            "source_revision_role": "historical_mined",
+            "license_type": "MIT",
+            "license_sha256": "b" * 64,
+            "source_files": ["src/receipt.py"],
+            "source_symbols": ["ReceiptChain"],
+            "source_sha256": ["c" * 64],
+        },
+        "evidence_state": "admitted",
+        "source_methodology_ids": ["method-receipt-chain"],
+    }
+
+
+def record_id_for(mapping: dict[str, object]) -> str:
+    canonical = json.dumps(
+        mapping,
+        ensure_ascii=False,
+        allow_nan=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return f"opp_{hashlib.sha256(canonical.encode('utf-8')).hexdigest()[:32]}"
+
+
+def make_query_payload(
+    query: str,
+    *,
+    target_repo_id: str,
+    model_id: str,
+    record: dict[str, object] | None = None,
+) -> dict[str, object]:
+    results: list[dict[str, object]] = []
+    if record is not None:
+        results.append(
+            {
+                "record_id": record_id_for(record),
+                "record": record,
+                "fts_rank": 1,
+                "semantic_rank": 1,
+                "rrf_score": 2 / 61,
+            }
+        )
+    return {
+        "schema_version": 1,
+        "scope": "opportunity_sidecar",
+        "query": query,
+        "target_repo_id": target_repo_id,
+        "model_id": model_id,
+        "results": results,
+        "rejections": [],
+    }
+
+
+def make_fake_cam(
+    tmp_path: Path,
+    responses: dict[str, object],
+) -> tuple[Path, Path]:
+    log_path = tmp_path / "fake-cam-calls.jsonl"
+    executable = tmp_path / "fake-cam"
+    encoded_responses = json.dumps(responses, sort_keys=True)
+    executable.write_text(
+        f"#!{sys.executable}\n"
+        "import json\n"
+        "import pathlib\n"
+        "import sys\n"
+        "import time\n"
+        f"responses = json.loads({encoded_responses!r})\n"
+        f"log_path = pathlib.Path({str(log_path)!r})\n"
+        "with log_path.open('a', encoding='utf-8') as stream:\n"
+        "    stream.write(json.dumps(sys.argv[1:], sort_keys=True) + '\\n')\n"
+        "entry = responses[sys.argv[2]]\n"
+        "if isinstance(entry, dict) and 'sleep_seconds' in entry:\n"
+        "    time.sleep(entry['sleep_seconds'])\n"
+        "if isinstance(entry, dict) and 'exit_code' in entry:\n"
+        "    sys.stderr.write(entry.get('stderr', ''))\n"
+        "    raise SystemExit(entry['exit_code'])\n"
+        "sys.stdout.write(json.dumps(entry, sort_keys=True))\n",
+        encoding="utf-8",
+    )
+    executable.chmod(0o755)
+    return executable, log_path
+
+
+def test_acquisition_calls_once_per_unique_need_with_exact_offline_argv(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    brief = load_module()
+    evidence_need = make_need(brief, "Receipt continuity is missing.", "receipt continuity")
+    environment_need = make_need(
+        brief,
+        "Environment identity is missing.",
+        "environment identity",
+        category="risk",
+    )
+    sidecar = tmp_path / "opportunities.sqlite"
+    sidecar.write_bytes(b"sidecar fixture is never opened by the fake")
+    model_path = tmp_path / "semantic-model"
+    model_path.mkdir()
+    target_repo_id = "target-repo-01"
+    record = make_record_mapping()
+    responses = {
+        evidence_need.query_text: make_query_payload(
+            evidence_need.query_text,
+            target_repo_id=target_repo_id,
+            model_id=str(model_path.resolve()),
+            record=record,
+        ),
+        environment_need.query_text: make_query_payload(
+            environment_need.query_text,
+            target_repo_id=target_repo_id,
+            model_id=str(model_path.resolve()),
+            record=record,
+        ),
+    }
+    fake_cam, log_path = make_fake_cam(tmp_path, responses)
+    popen_calls: list[tuple[tuple[str, ...], dict[str, object]]] = []
+    real_popen = brief.subprocess.Popen
+
+    def recording_popen(arguments, *args, **kwargs):
+        popen_calls.append((tuple(arguments), dict(kwargs)))
+        return real_popen(arguments, *args, **kwargs)
+
+    monkeypatch.setenv("OPENAI_API_KEY", "private-provider-key")
+    monkeypatch.setenv("GIT_TRACE", str(tmp_path / "must-not-be-used"))
+    monkeypatch.setattr(brief.subprocess, "Popen", recording_popen)
+
+    receipt = brief.acquire_opportunities(
+        needs=(evidence_need, evidence_need, environment_need),
+        cam_command=fake_cam,
+        sidecar=sidecar,
+        semantic_model_path=model_path,
+        target_repo_id=target_repo_id,
+    )
+
+    assert [call.need_id for call in receipt.calls] == [
+        evidence_need.need_id,
+        environment_need.need_id,
+    ]
+    logged = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines()]
+    assert logged == [
+        [
+            "opportunity-query",
+            need.query_text,
+            "--db",
+            str(sidecar),
+            "--target-repo-id",
+            target_repo_id,
+            "--semantic-model-path",
+            str(model_path),
+            "--limit",
+            "20",
+            "--json",
+        ]
+        for need in (evidence_need, environment_need)
+    ]
+    assert all(call[1]["shell"] is False for call in popen_calls)
+    assert all("OPENAI_API_KEY" not in call[1]["env"] for call in popen_calls)
+    assert all("GIT_TRACE" not in call[1]["env"] for call in popen_calls)
+    assert receipt.provider_calls == 0
+    assert receipt.mining_calls == 0
+    assert len(receipt.candidates) == 1
+    assert [match.need_id for match in receipt.candidates[0].matches] == [
+        evidence_need.need_id,
+        environment_need.need_id,
+    ]
+    assert receipt.gaps == ()
+
+
+def test_acquisition_preserves_empty_results_and_audits_nonzero_query_failure(
+    tmp_path: Path,
+) -> None:
+    brief = load_module()
+    empty_need = make_need(brief, "No relevant source may exist.", "empty query")
+    failed_need = make_need(
+        brief,
+        "A bounded query may fail.",
+        "failed query",
+        category="risk",
+    )
+    sidecar = tmp_path / "opportunities.sqlite"
+    sidecar.write_bytes(b"fixture")
+    model_path = tmp_path / "semantic-model"
+    model_path.mkdir()
+    target_repo_id = "target-repo-01"
+    fake_cam, _log = make_fake_cam(
+        tmp_path,
+        {
+            empty_need.query_text: make_query_payload(
+                empty_need.query_text,
+                target_repo_id=target_repo_id,
+                model_id=str(model_path.resolve()),
+            ),
+            failed_need.query_text: {
+                "exit_code": 7,
+                "stderr": "SECRET_BACKEND_DETAIL_9137",
+            },
+        },
+    )
+
+    receipt = brief.acquire_opportunities(
+        needs=(empty_need, failed_need),
+        cam_command=fake_cam,
+        sidecar=sidecar,
+        semantic_model_path=model_path,
+        target_repo_id=target_repo_id,
+    )
+
+    assert receipt.candidates == ()
+    assert [call.status for call in receipt.calls] == ["ok", "query_failed"]
+    assert receipt.calls[0].result_count == 0
+    assert receipt.gaps == (
+        brief.AcquisitionGap(
+            need_id=failed_need.need_id,
+            reason="query_failed",
+        ),
+    )
+    assert "SECRET_BACKEND_DETAIL_9137" not in repr(receipt)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "error_match"),
+    (
+        (lambda payload: payload.update(schema_version=2), "schema"),
+        (lambda payload: payload.update(scope="canonical_database"), "scope"),
+        (lambda payload: payload.update(query="different query"), "query"),
+        (lambda payload: payload.update(target_repo_id="another-target"), "target"),
+        (lambda payload: payload.update(model_id="another-model"), "model"),
+        (lambda payload: payload["results"][0].update(fts_rank=True), "rank"),
+        (lambda payload: payload["results"][0].update(rrf_score=0.5), "rank|RRF"),
+        (lambda payload: payload["results"][0]["record"].pop("boundary"), "record"),
+        (
+            lambda payload: payload["results"][0]["record"]["observed_effect"].update(
+                status="claimed"
+            ),
+            "record",
+        ),
+        (
+            lambda payload: payload["results"][0]["record"]["evidence"].update(
+                license_type="Unknown-License"
+            ),
+            "record",
+        ),
+        (
+            lambda payload: payload["results"][0]["record"].update(
+                evidence_state="exploratory"
+            ),
+            "record",
+        ),
+        (
+            lambda payload: payload["results"][0]["record"].update(
+                source_methodology_ids=[]
+            ),
+            "record",
+        ),
+        (
+            lambda payload: payload["results"][0]["record"]["evidence"].update(
+                source_repo_id="target-repo-01"
+            ),
+            "target|source",
+        ),
+        (lambda payload: payload.update(rejections=[{"record_id": "bad"}]), "rejection"),
+    ),
+)
+def test_acquisition_fails_closed_on_corrupt_or_mismatched_query_response(
+    tmp_path: Path,
+    mutation,
+    error_match: str,
+) -> None:
+    brief = load_module()
+    need = make_need(brief, "Receipt validation is incomplete.", "validate receipt")
+    sidecar = tmp_path / "opportunities.sqlite"
+    sidecar.write_bytes(b"fixture")
+    model_path = tmp_path / "semantic-model"
+    model_path.mkdir()
+    target_repo_id = "target-repo-01"
+    payload = make_query_payload(
+        need.query_text,
+        target_repo_id=target_repo_id,
+        model_id=str(model_path.resolve()),
+        record=make_record_mapping(),
+    )
+    mutation(payload)
+    fake_cam, _log = make_fake_cam(tmp_path, {need.query_text: payload})
+
+    with pytest.raises(brief.OpportunityBriefError, match=error_match):
+        brief.acquire_opportunities(
+            needs=(need,),
+            cam_command=fake_cam,
+            sidecar=sidecar,
+            semantic_model_path=model_path,
+            target_repo_id=target_repo_id,
+        )
+
+
+def test_acquisition_bounds_output_sanitizes_errors_and_requires_explicit_identity(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    brief = load_module()
+    need = make_need(brief, "Bound query output.", "bounded output")
+    sidecar = tmp_path / "opportunities.sqlite"
+    sidecar.write_bytes(b"fixture")
+    model_path = tmp_path / "semantic-model"
+    model_path.mkdir()
+    target = tmp_path / "target"
+    target.mkdir()
+    (target / "HANDOFF_LATEST.md").write_text(HANDOFF_TEXT, encoding="utf-8")
+    with pytest.raises(brief.OpportunityBriefError, match="explicit.*target_repo_id"):
+        brief.inspect_wip_repository(target, require_exclusion_identity=True)
+    authoritative = brief.inspect_wip_repository(
+        target,
+        target_repo_id="target-repo-01",
+        require_exclusion_identity=True,
+    )
+    payload = make_query_payload(
+        need.query_text,
+        target_repo_id=authoritative.target_repo_id,
+        model_id=str(model_path.resolve()),
+    )
+    payload["padding"] = "private" * 100
+    fake_cam, _log = make_fake_cam(tmp_path, {need.query_text: payload})
+    monkeypatch.setattr(brief, "MAX_QUERY_RESPONSE_BYTES", 64)
+
+    with pytest.raises(brief.OpportunityBriefError, match="output.*bound") as captured:
+        brief.acquire_opportunities(
+            needs=(need,),
+            cam_command=fake_cam,
+            sidecar=sidecar,
+            semantic_model_path=model_path,
+            target_repo_id=authoritative.target_repo_id,
+        )
+    assert "private" not in str(captured.value)
+
+
+def test_acquisition_rejects_canonical_database_name_before_spawning(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    brief = load_module()
+    need = make_need(brief, "Never query canonical state.", "canonical state")
+    canonical = tmp_path / "claw.db"
+    canonical.write_bytes(b"must remain untouched")
+    model_path = tmp_path / "semantic-model"
+    model_path.mkdir()
+    fake_cam, _log = make_fake_cam(tmp_path, {})
+
+    def forbidden_popen(*_args, **_kwargs):
+        raise AssertionError("canonical rejection must happen before process creation")
+
+    monkeypatch.setattr(brief.subprocess, "Popen", forbidden_popen)
+    with pytest.raises(brief.OpportunityBriefError, match="canonical|claw.db"):
+        brief.acquire_opportunities(
+            needs=(need,),
+            cam_command=fake_cam,
+            sidecar=canonical,
+            semantic_model_path=model_path,
+            target_repo_id="target-repo-01",
+        )
+    assert canonical.read_bytes() == b"must remain untouched"
+
+
+def test_public_acquisition_receipts_reject_forged_call_and_relation_shapes(
+    tmp_path: Path,
+) -> None:
+    brief = load_module()
+    need_id = canonical_need_id("blocker", "Bound invocation shape.")
+    with pytest.raises((TypeError, ValueError), match="argv|invocation"):
+        brief.AcquisitionCall(
+            need_id=need_id,
+            query="bounded query",
+            argv=("/absolute/fake", "mine"),
+            status="ok",
+            result_count=0,
+            rejection_count=0,
+        )
+    forged_call = object.__new__(brief.AcquisitionCall)
+    object.__setattr__(forged_call, "need_id", need_id)
+    object.__setattr__(forged_call, "query", "bounded query")
+    object.__setattr__(forged_call, "argv", ("/absolute/fake", "mine"))
+    object.__setattr__(forged_call, "status", "ok")
+    object.__setattr__(forged_call, "result_count", 0)
+    object.__setattr__(forged_call, "rejection_count", 0)
+    with pytest.raises((TypeError, ValueError), match="call|argv|invocation"):
+        brief.AcquisitionReceipt(
+            target_repo_id="target-repo-01",
+            model_id=str(tmp_path / "model"),
+            calls=(forged_call,),
+            candidates=(),
+            rejections=(),
+            gaps=(brief.AcquisitionGap(need_id=need_id, reason="query_failed"),),
+        )
+
+
+def test_acquisition_timeout_is_bounded_and_does_not_expose_backend_output(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    brief = load_module()
+    need = make_need(brief, "Bound query duration.", "slow bounded query")
+    sidecar = tmp_path / "opportunities.sqlite"
+    sidecar.write_bytes(b"fixture")
+    model_path = tmp_path / "semantic-model"
+    model_path.mkdir()
+    fake_cam, _log = make_fake_cam(
+        tmp_path,
+        {
+            need.query_text: {
+                "sleep_seconds": 1,
+                "exit_code": 9,
+                "stderr": "SECRET_TIMEOUT_DETAIL_4412",
+            }
+        },
+    )
+    monkeypatch.setattr(brief, "QUERY_TIMEOUT_SECONDS", 0.05)
+
+    with pytest.raises(brief.OpportunityBriefError, match="timed out") as captured:
+        brief.acquire_opportunities(
+            needs=(need,),
+            cam_command=fake_cam,
+            sidecar=sidecar,
+            semantic_model_path=model_path,
+            target_repo_id="target-repo-01",
+        )
+    assert "SECRET_TIMEOUT_DETAIL_4412" not in str(captured.value)
