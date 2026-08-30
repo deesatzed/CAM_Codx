@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import ast
 from contextvars import ContextVar
-from dataclasses import dataclass
+from dataclasses import dataclass, field as dataclass_field
 from datetime import date
 import errno
 import hashlib
@@ -22,7 +22,6 @@ import signal
 import shutil
 import stat
 import subprocess
-import sys
 import tempfile
 import time
 from typing import Literal
@@ -164,6 +163,8 @@ _RAW_HTML_OPEN_PATTERN = re.compile(
 )
 _HEX_DIGEST_PATTERN = re.compile(r"^[0-9a-f]{64}$")
 _REVISION_PATTERN = re.compile(r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")
+_PYTHON_LAUNCHER_NAME_PATTERN = re.compile(r"^python(?:3(?:\.\d+)?)?$")
+_PYTHON_TERMINAL_NAME_PATTERN = re.compile(r"^python(?P<version>3\.\d+)$")
 _NEED_ID_PATTERN = re.compile(r"^need_[A-Za-z0-9._-]{4,64}$")
 _RECORD_ID_PATTERN = re.compile(r"^opp_[0-9a-f]{32}$")
 _SOURCE_REVISION_PATTERN = re.compile(
@@ -647,63 +648,173 @@ class OpportunityCandidate:
 
 
 @dataclass(frozen=True, slots=True)
+class InterpreterSymlinkReceipt:
+    """One lexical link in the absolute Python-interpreter chain."""
+
+    path: Path
+    identity: DirectoryIdentity
+    target: str
+
+    def __post_init__(self) -> None:
+        _validate_absolute_path(self.path, field="interpreter symlink path")
+        _validate_identity(self.identity, field="interpreter symlink")
+        _checked_canonical_string(
+            self.target,
+            field="interpreter symlink target",
+            limit=4_096,
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class ExecutionClosureReceipt:
     """Auditable binding for the launcher and every executable CAM dependency."""
 
     launcher_kind: Literal["python", "native"]
+    launcher_path: Path
+    launcher_identity: DirectoryIdentity
+    launcher_sha256: str
     interpreter_path: Path | None
+    interpreter_symlink_chain: tuple[InterpreterSymlinkReceipt, ...]
+    resolved_interpreter_path: Path | None
+    resolved_interpreter_identity: DirectoryIdentity | None
     interpreter_sha256: str | None
+    python_home: Path | None
+    python_home_identity: DirectoryIdentity | None
+    python_runtime_library_path: Path | None
+    python_runtime_library_identity: DirectoryIdentity | None
+    python_runtime_library_sha256: str | None
+    editable_site_packages: Path | None
+    editable_site_packages_identity: DirectoryIdentity | None
     editable_metadata_sha256: str | None
     cam_source_root: Path | None
+    cam_source_root_identity: DirectoryIdentity | None
     cam_source_revision: str | None
     cam_source_branch: str | None
     cam_source_dirty_entries: tuple[str, ...]
     cam_source_sha256: str | None
-    sha256: str
+    sha256: str = dataclass_field(init=False)
 
     def __post_init__(self) -> None:
         if self.launcher_kind not in {"python", "native"}:
             raise ValueError("execution closure launcher kind is unsupported")
-        _validate_digest(self.sha256, field="execution closure digest")
+        _validate_absolute_path(self.launcher_path, field="execution closure launcher")
+        _validate_artifact_binding(
+            self.launcher_identity,
+            self.launcher_sha256,
+            field="execution closure launcher",
+            require_single_link=True,
+        )
+        _validate_typed_tuple(
+            self.interpreter_symlink_chain,
+            field="interpreter symlink chain",
+            item_type=InterpreterSymlinkReceipt,
+            maximum=MAX_INTERPRETER_LINKS,
+        )
+        for link in self.interpreter_symlink_chain:
+            link.__post_init__()
         if type(self.cam_source_dirty_entries) is not tuple:
             raise TypeError("CAM source dirty entries must be a tuple")
         if len(self.cam_source_dirty_entries) > MAX_DIRTY_ENTRIES:
             raise ValueError("CAM source dirty entries exceed their bound")
         for entry in self.cam_source_dirty_entries:
             _checked_canonical_string(entry, field="CAM source dirty entry", limit=4_096)
+        if self.cam_source_dirty_entries != tuple(
+            sorted(set(self.cam_source_dirty_entries))
+        ):
+            raise ValueError("CAM source dirty entries must be sorted and unique")
         if self.launcher_kind == "native":
             if any(
                 value is not None
                 for value in (
                     self.interpreter_path,
+                    self.resolved_interpreter_path,
+                    self.resolved_interpreter_identity,
                     self.interpreter_sha256,
+                    self.python_home,
+                    self.python_home_identity,
+                    self.python_runtime_library_path,
+                    self.python_runtime_library_identity,
+                    self.python_runtime_library_sha256,
+                    self.editable_site_packages,
+                    self.editable_site_packages_identity,
                     self.editable_metadata_sha256,
                     self.cam_source_root,
+                    self.cam_source_root_identity,
                     self.cam_source_revision,
                     self.cam_source_branch,
                     self.cam_source_sha256,
                 )
-            ) or self.cam_source_dirty_entries:
+            ) or self.interpreter_symlink_chain or self.cam_source_dirty_entries:
                 raise ValueError("native execution closures cannot claim Python artifacts")
-            return
-        if not isinstance(self.interpreter_path, Path) or not self.interpreter_path.is_absolute():
-            raise ValueError("Python execution closure requires an absolute interpreter path")
-        _validate_digest(self.interpreter_sha256, field="interpreter digest")
-        if self.editable_metadata_sha256 is not None:
+        else:
+            self._validate_python_closure()
+        object.__setattr__(self, "sha256", _execution_closure_public_digest(self))
+
+    def _validate_python_closure(self) -> None:
+        _validate_absolute_path(self.interpreter_path, field="Python interpreter path")
+        _validate_absolute_path(
+            self.resolved_interpreter_path,
+            field="resolved Python interpreter path",
+        )
+        _validate_artifact_binding(
+            self.resolved_interpreter_identity,
+            self.interpreter_sha256,
+            field="resolved Python interpreter",
+            require_single_link=True,
+        )
+        runtime_values = (
+            self.python_home,
+            self.python_home_identity,
+            self.python_runtime_library_path,
+            self.python_runtime_library_identity,
+            self.python_runtime_library_sha256,
+        )
+        if any(value is not None for value in runtime_values):
+            if not all(value is not None for value in runtime_values):
+                raise ValueError("Python runtime closure fields must be complete")
+            _validate_absolute_path(self.python_home, field="Python runtime home")
+            _validate_identity(self.python_home_identity, field="Python runtime home")
+            _validate_absolute_path(
+                self.python_runtime_library_path,
+                field="Python runtime library",
+            )
+            _validate_artifact_binding(
+                self.python_runtime_library_identity,
+                self.python_runtime_library_sha256,
+                field="Python runtime library",
+                require_single_link=True,
+            )
+        metadata_values = (
+            self.editable_site_packages,
+            self.editable_site_packages_identity,
+            self.editable_metadata_sha256,
+        )
+        if any(value is not None for value in metadata_values):
+            if not all(value is not None for value in metadata_values):
+                raise ValueError("editable CAM metadata closure fields must be complete")
+            _validate_absolute_path(
+                self.editable_site_packages,
+                field="editable CAM site-packages",
+            )
+            _validate_identity(
+                self.editable_site_packages_identity,
+                field="editable CAM site-packages",
+            )
             _validate_digest(
                 self.editable_metadata_sha256,
                 field="editable metadata digest",
             )
         source_values = (
             self.cam_source_root,
+            self.cam_source_root_identity,
             self.cam_source_revision,
             self.cam_source_sha256,
         )
         if any(value is not None for value in source_values):
             if not all(value is not None for value in source_values):
                 raise ValueError("CAM source closure fields must be complete")
-            if not isinstance(self.cam_source_root, Path) or not self.cam_source_root.is_absolute():
-                raise ValueError("CAM source root must be an absolute pathlib.Path")
+            _validate_absolute_path(self.cam_source_root, field="CAM source root")
+            _validate_identity(self.cam_source_root_identity, field="CAM source root")
             if (
                 type(self.cam_source_revision) is not str
                 or _REVISION_PATTERN.fullmatch(self.cam_source_revision) is None
@@ -1077,6 +1188,19 @@ def _validate_artifact_binding(
         raise ValueError(f"{field} digest must be a lowercase SHA-256 digest")
 
 
+def _validate_identity(identity: object, *, field: str) -> None:
+    if type(identity) is not tuple or len(identity) != 6:
+        raise TypeError(f"{field} identity must be a six-integer tuple")
+    if any(type(item) is not int or item < 0 for item in identity):
+        raise ValueError(f"{field} identity is malformed")
+
+
+def _validate_absolute_path(path: object, *, field: str) -> None:
+    if not isinstance(path, Path) or not path.is_absolute():
+        raise ValueError(f"{field} must be an absolute pathlib.Path")
+    _checked_canonical_string(str(path), field=field, limit=4_096)
+
+
 def _validate_typed_tuple(
     value: object,
     *,
@@ -1141,8 +1265,17 @@ class _SymlinkSnapshot:
 
 @dataclass(frozen=True, slots=True)
 class _MetadataSnapshot:
+    site_packages: Path
+    site_packages_identity: DirectoryIdentity
     files: tuple[_FileArtifactSnapshot, ...]
     sha256: str
+
+
+@dataclass(frozen=True, slots=True)
+class _PythonRuntimeSnapshot:
+    home: Path
+    home_identity: DirectoryIdentity
+    library: _FileArtifactSnapshot
 
 
 @dataclass(frozen=True, slots=True)
@@ -1156,8 +1289,10 @@ class _CamSourceSnapshot:
 @dataclass(frozen=True, slots=True)
 class _ExecutionClosureSnapshot:
     receipt: ExecutionClosureReceipt
+    lexical_interpreter: Path | None
     interpreter_links: tuple[_SymlinkSnapshot, ...]
     interpreter: _FileArtifactSnapshot | None
+    runtime: _PythonRuntimeSnapshot | None
     metadata: _MetadataSnapshot | None
     source: _CamSourceSnapshot | None
 
@@ -1166,6 +1301,9 @@ class _ExecutionClosureSnapshot:
 class _PinnedCommandSnapshot:
     launcher: _FileArtifactSnapshot
     interpreter: _FileArtifactSnapshot | None
+    runtime_library: _FileArtifactSnapshot | None
+    python_home: Path | None
+    python_path: tuple[Path, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -1583,15 +1721,19 @@ def _snapshot_execution_closure(
         receipt = _execution_closure_receipt(
             launcher_kind="native",
             launcher=launcher,
+            lexical_interpreter=None,
             interpreter=None,
+            runtime=None,
             links=(),
             metadata=None,
             source=None,
         )
         return _ExecutionClosureSnapshot(
             receipt=receipt,
+            lexical_interpreter=None,
             interpreter_links=(),
             interpreter=None,
+            runtime=None,
             metadata=None,
             source=None,
         )
@@ -1606,31 +1748,34 @@ def _snapshot_execution_closure(
         or not Path(shebang).is_absolute()
     ):
         raise OpportunityBriefError("CAM launcher shebang must name one absolute interpreter")
-    links, interpreter = _snapshot_interpreter_chain(Path(shebang))
-    known_python = _snapshot_single_link_file(
-        Path(sys.executable).resolve(strict=True),
-        label="known Python interpreter",
-        byte_limit=MAX_COMMAND_BYTES,
-    )
-    if interpreter.sha256 != known_python.sha256:
-        raise OpportunityBriefError("CAM launcher interpreter is not the known Python runtime")
+    lexical_interpreter = Path(shebang)
+    if _PYTHON_LAUNCHER_NAME_PATTERN.fullmatch(lexical_interpreter.name) is None:
+        raise OpportunityBriefError("CAM launcher interpreter name is unsupported")
+    links, interpreter = _snapshot_interpreter_chain(lexical_interpreter)
+    if _PYTHON_TERMINAL_NAME_PATTERN.fullmatch(interpreter.path.name) is None:
+        raise OpportunityBriefError("CAM launcher terminal interpreter is unsupported")
+    runtime = _snapshot_python_runtime(interpreter)
     source_root = _launcher_source_marker(raw)
     metadata: _MetadataSnapshot | None = None
     if source_root is None and re.search(rb"(?:from|import)\s+claw(?:\.|\s|$)", raw):
-        metadata, source_root = _snapshot_editable_metadata(interpreter.path)
+        metadata, source_root = _snapshot_editable_metadata(lexical_interpreter)
     source = _snapshot_cam_source(source_root) if source_root is not None else None
     receipt = _execution_closure_receipt(
         launcher_kind="python",
         launcher=launcher,
+        lexical_interpreter=lexical_interpreter,
         interpreter=interpreter,
+        runtime=runtime,
         links=links,
         metadata=metadata,
         source=source,
     )
     return _ExecutionClosureSnapshot(
         receipt=receipt,
+        lexical_interpreter=lexical_interpreter,
         interpreter_links=links,
         interpreter=interpreter,
+        runtime=runtime,
         metadata=metadata,
         source=source,
     )
@@ -1674,7 +1819,7 @@ def _snapshot_interpreter_chain(
     path: Path,
 ) -> tuple[tuple[_SymlinkSnapshot, ...], _FileArtifactSnapshot]:
     links: list[_SymlinkSnapshot] = []
-    current = path
+    current = Path(os.path.normpath(path))
     seen: set[tuple[int, int]] = set()
     for _index in range(MAX_INTERPRETER_LINKS + 1):
         try:
@@ -1706,8 +1851,62 @@ def _snapshot_interpreter_chain(
             )
         )
         target_path = Path(target)
-        current = target_path if target_path.is_absolute() else current.parent / target_path
+        current = Path(
+            os.path.normpath(
+                target_path if target_path.is_absolute() else current.parent / target_path
+            )
+        )
     raise OpportunityBriefError("CAM interpreter symlink chain is unsupported")
+
+
+def _snapshot_python_runtime(
+    interpreter: _FileArtifactSnapshot,
+) -> _PythonRuntimeSnapshot | None:
+    match = _PYTHON_TERMINAL_NAME_PATTERN.fullmatch(interpreter.path.name)
+    if match is None:
+        return None
+    home = interpreter.path.parent.parent
+    validated_home = _validate_acquisition_path(
+        home,
+        field="Python runtime home",
+        kind="directory",
+    )
+    try:
+        home_status = os.lstat(validated_home)
+    except OSError as error:
+        raise OpportunityBriefError("Python runtime home could not be inspected") from error
+    version = match.group("version")
+    candidates: list[Path] = []
+    for name in (
+        f"libpython{version}.dylib",
+        f"libpython{version}.so.1.0",
+        f"libpython{version}.so",
+    ):
+        candidate = validated_home / "lib" / name
+        try:
+            candidate_status = os.lstat(candidate)
+        except FileNotFoundError:
+            continue
+        except OSError as error:
+            raise OpportunityBriefError("Python runtime library could not be inspected") from error
+        if stat.S_ISREG(candidate_status.st_mode):
+            candidates.append(candidate)
+        elif not stat.S_ISLNK(candidate_status.st_mode):
+            raise OpportunityBriefError("Python runtime library is unsupported")
+    if not candidates:
+        return None
+    if len(candidates) != 1:
+        raise OpportunityBriefError("Python runtime library is ambiguous")
+    library = _snapshot_single_link_file(
+        candidates[0],
+        label="Python runtime library",
+        byte_limit=MAX_COMMAND_BYTES,
+    )
+    return _PythonRuntimeSnapshot(
+        home=validated_home,
+        home_identity=_stat_identity(home_status),
+        library=library,
+    )
 
 
 def _launcher_source_marker(raw: bytes) -> Path | None:
@@ -1733,13 +1932,16 @@ def _materialize_pinned_executable(
     closure: _ExecutionClosureSnapshot,
 ) -> tuple[Path, _PinnedCommandSnapshot]:
     directory = Path(tempfile.mkdtemp(prefix="cam-opportunity-command-"))
-    destination = directory / "cam-command"
+    bin_directory = directory / "bin"
+    destination = bin_directory / "cam-command"
     completed = False
     try:
+        bin_directory.mkdir(mode=0o700)
         raw = _read_open_file(descriptor, expected.identity[3], label="CAM launcher")
         pinned_interpreter: _FileArtifactSnapshot | None = None
+        pinned_runtime_library: _FileArtifactSnapshot | None = None
         if closure.interpreter is not None:
-            interpreter_path = directory / "python-interpreter"
+            interpreter_path = bin_directory / "python-interpreter"
             _copy_snapshot_file(closure.interpreter, interpreter_path, mode=0o500)
             pinned_interpreter = _snapshot_single_link_file(
                 interpreter_path,
@@ -1749,7 +1951,22 @@ def _materialize_pinned_executable(
             first, separator, remainder = raw.partition(b"\n")
             if not separator or not first.startswith(b"#!"):
                 raise OpportunityBriefError("CAM Python launcher shebang changed")
-            raw = b"#!" + os.fsencode(interpreter_path) + b"\n" + remainder
+            raw = b"#!" + os.fsencode(interpreter_path) + b" -S\n" + remainder
+        if closure.runtime is not None:
+            lib_directory = directory / "lib"
+            lib_directory.mkdir(mode=0o700)
+            runtime_library_path = lib_directory / closure.runtime.library.path.name
+            _copy_snapshot_file(
+                closure.runtime.library,
+                runtime_library_path,
+                mode=0o400,
+            )
+            pinned_runtime_library = _snapshot_single_link_file(
+                runtime_library_path,
+                label="pinned Python runtime library",
+                byte_limit=MAX_COMMAND_BYTES,
+            )
+            os.chmod(lib_directory, 0o500)
         _write_private_file(destination, raw, mode=0o500)
         copied = _snapshot_single_link_file(
             destination,
@@ -1761,11 +1978,20 @@ def _materialize_pinned_executable(
         ):
             raise OpportunityBriefError("pinned cam command copy digest is inconsistent")
         os.lseek(descriptor, 0, os.SEEK_SET)
+        os.chmod(bin_directory, 0o500)
         os.chmod(directory, 0o500)
         completed = True
+        python_path: tuple[Path, ...] = ()
+        if closure.source is not None:
+            python_path = (closure.source.root / "src",)
+        if closure.metadata is not None:
+            python_path = (*python_path, closure.metadata.site_packages)
         return directory, _PinnedCommandSnapshot(
             launcher=copied,
             interpreter=pinned_interpreter,
+            runtime_library=pinned_runtime_library,
+            python_home=None if closure.runtime is None else closure.runtime.home,
+            python_path=python_path,
         )
     except OpportunityBriefError:
         raise
@@ -1838,6 +2064,10 @@ def _cleanup_pinned_command(directory: Path) -> None:
     try:
         if os.path.lexists(directory):
             os.chmod(directory, 0o700)
+            for current, directories, _files in os.walk(directory):
+                os.chmod(current, 0o700)
+                for child in directories:
+                    os.chmod(Path(current) / child, 0o700)
             shutil.rmtree(directory)
         if os.path.lexists(directory):
             raise OpportunityBriefError("private command cleanup could not be verified")
@@ -1848,10 +2078,10 @@ def _cleanup_pinned_command(directory: Path) -> None:
 
 
 def _snapshot_editable_metadata(
-    interpreter: Path,
+    lexical_interpreter: Path,
 ) -> tuple[_MetadataSnapshot, Path]:
-    prefix = interpreter.parent.parent
-    candidates: list[tuple[Path, Path, Path]] = []
+    prefix = lexical_interpreter.parent.parent
+    candidates: list[tuple[Path, Path, Path, Path]] = []
     try:
         site_directories = sorted((prefix / "lib").glob("python*/site-packages"))
         for site in site_directories:
@@ -1859,12 +2089,20 @@ def _snapshot_editable_metadata(
             finder_files = sorted(site.glob("__editable___claw_*_finder.py"))
             dist_directories = sorted(site.glob("claw-*.dist-info"))
             if len(pth_files) == len(finder_files) == len(dist_directories) == 1:
-                candidates.append((pth_files[0], finder_files[0], dist_directories[0]))
+                candidates.append(
+                    (site, pth_files[0], finder_files[0], dist_directories[0])
+                )
     except OSError as error:
         raise OpportunityBriefError("editable CAM metadata could not be inspected") from error
     if len(candidates) != 1:
         raise OpportunityBriefError("editable CAM metadata is missing or ambiguous")
-    pth_path, finder_path, dist_directory = candidates[0]
+    site_packages, pth_path, finder_path, dist_directory = candidates[0]
+    try:
+        site_identity = os.lstat(site_packages)
+    except OSError as error:
+        raise OpportunityBriefError("editable CAM site-packages could not be inspected") from error
+    if not stat.S_ISDIR(site_identity.st_mode):
+        raise OpportunityBriefError("editable CAM site-packages is unsupported")
     metadata_paths = [pth_path, finder_path]
     try:
         dist_entries = sorted(dist_directory.iterdir(), key=lambda item: item.name)
@@ -1915,7 +2153,15 @@ def _snapshot_editable_metadata(
     if not source_root.is_absolute() or mapping_root != source_root / "src" / "claw":
         raise OpportunityBriefError("editable CAM mapping does not match its source root")
     aggregate = _metadata_digest(tuple(snapshots))
-    return _MetadataSnapshot(files=tuple(snapshots), sha256=aggregate), source_root
+    return (
+        _MetadataSnapshot(
+            site_packages=site_packages,
+            site_packages_identity=_stat_identity(site_identity),
+            files=tuple(snapshots),
+            sha256=aggregate,
+        ),
+        source_root,
+    )
 
 
 def _parse_editable_claw_mapping(text: str) -> Path:
@@ -2014,47 +2260,121 @@ def _execution_closure_receipt(
     *,
     launcher_kind: Literal["python", "native"],
     launcher: _FileArtifactSnapshot,
+    lexical_interpreter: Path | None,
     interpreter: _FileArtifactSnapshot | None,
+    runtime: _PythonRuntimeSnapshot | None,
     links: tuple[_SymlinkSnapshot, ...],
     metadata: _MetadataSnapshot | None,
     source: _CamSourceSnapshot | None,
 ) -> ExecutionClosureReceipt:
-    payload = {
-        "launcher": [str(launcher.path), list(launcher.identity), launcher.sha256],
-        "launcher_kind": launcher_kind,
-        "interpreter": None
-        if interpreter is None
-        else [str(interpreter.path), list(interpreter.identity), interpreter.sha256],
-        "interpreter_links": [
-            [str(link.path), list(link.identity), link.target] for link in links
-        ],
-        "editable_metadata_sha256": None if metadata is None else metadata.sha256,
-        "cam_source": None
-        if source is None
-        else {
-            "root": str(source.root),
-            "root_identity": list(source.root_identity),
-            "revision": source.git.revision,
-            "branch": source.git.branch,
-            "dirty_entries": list(source.git.dirty_entries),
-            "manifest_sha256": source.manifest.sha256,
-        },
-    }
-    digest = hashlib.sha256(
-        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-    ).hexdigest()
     return ExecutionClosureReceipt(
         launcher_kind=launcher_kind,
-        interpreter_path=None if interpreter is None else interpreter.path,
+        launcher_path=launcher.path,
+        launcher_identity=launcher.identity,
+        launcher_sha256=launcher.sha256,
+        interpreter_path=lexical_interpreter,
+        interpreter_symlink_chain=tuple(
+            InterpreterSymlinkReceipt(
+                path=link.path,
+                identity=link.identity,
+                target=link.target,
+            )
+            for link in links
+        ),
+        resolved_interpreter_path=None if interpreter is None else interpreter.path,
+        resolved_interpreter_identity=None if interpreter is None else interpreter.identity,
         interpreter_sha256=None if interpreter is None else interpreter.sha256,
+        python_home=None if runtime is None else runtime.home,
+        python_home_identity=None if runtime is None else runtime.home_identity,
+        python_runtime_library_path=None if runtime is None else runtime.library.path,
+        python_runtime_library_identity=(
+            None if runtime is None else runtime.library.identity
+        ),
+        python_runtime_library_sha256=(
+            None if runtime is None else runtime.library.sha256
+        ),
+        editable_site_packages=None if metadata is None else metadata.site_packages,
+        editable_site_packages_identity=(
+            None if metadata is None else metadata.site_packages_identity
+        ),
         editable_metadata_sha256=None if metadata is None else metadata.sha256,
         cam_source_root=None if source is None else source.root,
+        cam_source_root_identity=None if source is None else source.root_identity,
         cam_source_revision=None if source is None else source.git.revision,
         cam_source_branch=None if source is None else source.git.branch,
         cam_source_dirty_entries=() if source is None else source.git.dirty_entries,
         cam_source_sha256=None if source is None else source.manifest.sha256,
-        sha256=digest,
     )
+
+
+def _execution_closure_public_digest(receipt: ExecutionClosureReceipt) -> str:
+    payload = {
+        "launcher_kind": receipt.launcher_kind,
+        "launcher_path": str(receipt.launcher_path),
+        "launcher_identity": list(receipt.launcher_identity),
+        "launcher_sha256": receipt.launcher_sha256,
+        "interpreter_path": (
+            None if receipt.interpreter_path is None else str(receipt.interpreter_path)
+        ),
+        "interpreter_symlink_chain": [
+            [str(link.path), list(link.identity), link.target]
+            for link in receipt.interpreter_symlink_chain
+        ],
+        "resolved_interpreter_path": (
+            None
+            if receipt.resolved_interpreter_path is None
+            else str(receipt.resolved_interpreter_path)
+        ),
+        "resolved_interpreter_identity": (
+            None
+            if receipt.resolved_interpreter_identity is None
+            else list(receipt.resolved_interpreter_identity)
+        ),
+        "interpreter_sha256": receipt.interpreter_sha256,
+        "python_home": None if receipt.python_home is None else str(receipt.python_home),
+        "python_home_identity": (
+            None
+            if receipt.python_home_identity is None
+            else list(receipt.python_home_identity)
+        ),
+        "python_runtime_library_path": (
+            None
+            if receipt.python_runtime_library_path is None
+            else str(receipt.python_runtime_library_path)
+        ),
+        "python_runtime_library_identity": (
+            None
+            if receipt.python_runtime_library_identity is None
+            else list(receipt.python_runtime_library_identity)
+        ),
+        "python_runtime_library_sha256": receipt.python_runtime_library_sha256,
+        "editable_site_packages": (
+            None
+            if receipt.editable_site_packages is None
+            else str(receipt.editable_site_packages)
+        ),
+        "editable_site_packages_identity": (
+            None
+            if receipt.editable_site_packages_identity is None
+            else list(receipt.editable_site_packages_identity)
+        ),
+        "editable_metadata_sha256": receipt.editable_metadata_sha256,
+        "cam_source_root": (
+            None if receipt.cam_source_root is None else str(receipt.cam_source_root)
+        ),
+        "cam_source_root_identity": (
+            None
+            if receipt.cam_source_root_identity is None
+            else list(receipt.cam_source_root_identity)
+        ),
+        "cam_source_revision": receipt.cam_source_revision,
+        "cam_source_branch": receipt.cam_source_branch,
+        "cam_source_dirty_entries": list(receipt.cam_source_dirty_entries),
+        "cam_source_sha256": receipt.cam_source_sha256,
+    }
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
 
 
 def _snapshot_single_link_file(
@@ -2345,6 +2665,11 @@ def _assert_acquisition_identities_unchanged(
     _assert_file_identity(pinned.launcher, label="pinned cam command copy")
     if pinned.interpreter is not None:
         _assert_file_identity(pinned.interpreter, label="pinned Python interpreter")
+    if pinned.runtime_library is not None:
+        _assert_file_identity(
+            pinned.runtime_library,
+            label="pinned Python runtime library",
+        )
 
 
 def _assert_acquisition_artifacts_unchanged(
@@ -2397,6 +2722,15 @@ def _assert_acquisition_artifacts_unchanged(
             label="pinned Python interpreter",
             byte_limit=MAX_COMMAND_BYTES,
         ),
+        runtime_library=None
+        if pinned.runtime_library is None
+        else _snapshot_single_link_file(
+            pinned.runtime_library.path,
+            label="pinned Python runtime library",
+            byte_limit=MAX_COMMAND_BYTES,
+        ),
+        python_home=pinned.python_home,
+        python_path=pinned.python_path,
     )
     if current_pinned != pinned:
         raise OpportunityBriefError("pinned CAM execution closure changed")
@@ -2495,7 +2829,34 @@ def _assert_execution_closure_identity(closure: _ExecutionClosureSnapshot) -> No
             raise OpportunityBriefError("CAM interpreter closure identity changed")
     if closure.interpreter is not None:
         _assert_file_identity(closure.interpreter, label="CAM interpreter closure")
+    if closure.runtime is not None:
+        try:
+            runtime_home = os.lstat(closure.runtime.home)
+        except OSError as error:
+            raise OpportunityBriefError("Python runtime closure identity changed") from error
+        if (
+            not stat.S_ISDIR(runtime_home.st_mode)
+            or _stat_identity(runtime_home) != closure.runtime.home_identity
+        ):
+            raise OpportunityBriefError("Python runtime closure identity changed")
+        _assert_file_identity(
+            closure.runtime.library,
+            label="Python runtime library closure",
+        )
     if closure.metadata is not None:
+        try:
+            site_packages = os.lstat(closure.metadata.site_packages)
+        except OSError as error:
+            raise OpportunityBriefError(
+                "editable CAM site-packages closure identity changed"
+            ) from error
+        if (
+            not stat.S_ISDIR(site_packages.st_mode)
+            or _stat_identity(site_packages) != closure.metadata.site_packages_identity
+        ):
+            raise OpportunityBriefError(
+                "editable CAM site-packages closure identity changed"
+            )
         for item in closure.metadata.files:
             _assert_file_identity(item, label="editable CAM metadata closure")
     if closure.source is not None:
@@ -2515,16 +2876,26 @@ def _assert_execution_closure_identity(closure: _ExecutionClosureSnapshot) -> No
             os.close(root_descriptor)
 
 
-def _query_environment() -> dict[str, str]:
-    return {
+def _query_environment(
+    python_path: tuple[Path, ...] = (),
+    *,
+    python_home: Path | None = None,
+) -> dict[str, str]:
+    environment = {
         "HOME": "/var/empty",
         "LANG": "C",
         "LC_ALL": "C",
         "PATH": os.defpath,
+        "PYTHONDONTWRITEBYTECODE": "1",
         "PYTHONNOUSERSITE": "1",
         "XDG_CACHE_HOME": "/var/empty",
         "XDG_CONFIG_HOME": "/var/empty",
     }
+    if python_path:
+        environment["PYTHONPATH"] = os.pathsep.join(str(path) for path in python_path)
+    if python_home is not None:
+        environment["PYTHONHOME"] = str(python_home)
+    return environment
 
 
 def _run_query_bounded(
@@ -2547,6 +2918,11 @@ def _run_query_bounded(
                 pinned_executable.interpreter,
                 label="pinned Python interpreter",
             )
+        if pinned_executable.runtime_library is not None:
+            _assert_file_identity(
+                pinned_executable.runtime_library,
+                label="pinned Python runtime library",
+            )
         process = subprocess.Popen(
             list(argv),
             executable=str(pinned_executable.launcher.path),
@@ -2554,7 +2930,10 @@ def _run_query_bounded(
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             shell=False,
-            env=_query_environment(),
+            env=_query_environment(
+                pinned_executable.python_path,
+                python_home=pinned_executable.python_home,
+            ),
             close_fds=True,
             start_new_session=True,
         )
@@ -2619,6 +2998,11 @@ def _run_query_bounded(
             _assert_file_identity(
                 pinned_executable.interpreter,
                 label="pinned Python interpreter",
+            )
+        if pinned_executable.runtime_library is not None:
+            _assert_file_identity(
+                pinned_executable.runtime_library,
+                label="pinned Python runtime library",
             )
         return _GitResult(
             returncode=returncode,
@@ -3430,7 +3814,11 @@ def _parse_git_status(raw: bytes) -> _GitSnapshot:
         dirty.append(f"{status_code} {_display_filesystem_path(raw_path)}")
     if not saw_revision or not saw_branch:
         raise OpportunityBriefError("Git status snapshot is missing branch metadata")
-    return _GitSnapshot(revision=revision, branch=branch, dirty_entries=tuple(dirty))
+    return _GitSnapshot(
+        revision=revision,
+        branch=branch,
+        dirty_entries=tuple(sorted(set(dirty))),
+    )
 
 
 def _parse_status_entry(record: bytes) -> tuple[str, bytes]:
@@ -3944,7 +4332,9 @@ __all__ = [
     "AcquisitionReceipt",
     "AcquisitionRejection",
     "CandidateMatch",
+    "ExecutionClosureReceipt",
     "HandoffEvidence",
+    "InterpreterSymlinkReceipt",
     "NeedTheme",
     "OpportunityCandidate",
     "OpportunityBriefError",

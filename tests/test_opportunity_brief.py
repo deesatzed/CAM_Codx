@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import FrozenInstanceError, replace
+from dataclasses import FrozenInstanceError, fields, replace
 import hashlib
 import importlib.util
 import json
@@ -1273,6 +1273,93 @@ def make_fake_cam(
     return executable, log_path
 
 
+def make_editable_venv_cam(
+    tmp_path: Path,
+    responses: dict[str, object],
+    *,
+    terminal_interpreter: Path,
+) -> tuple[Path, Path, Path]:
+    implementation = tmp_path / "cam-source"
+    package = implementation / "src" / "claw"
+    package.mkdir(parents=True)
+    (package / "__init__.py").write_text(
+        "FIXTURE_IDENTITY = 'editable-cam-source'\n",
+        encoding="utf-8",
+    )
+    subprocess.run(["git", "init", "-q", "-b", "main", str(implementation)], check=True)
+    subprocess.run(["git", "-C", str(implementation), "add", "."], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(implementation),
+            "-c",
+            "user.name=Opportunity Brief Test",
+            "-c",
+            "user.email=opportunity-brief@example.invalid",
+            "commit",
+            "-qm",
+            "fixture editable CAM source",
+        ],
+        check=True,
+    )
+
+    venv = tmp_path / "production-venv"
+    bin_directory = venv / "bin"
+    site_packages = venv / "lib" / "python3.9" / "site-packages"
+    bin_directory.mkdir(parents=True)
+    site_packages.mkdir(parents=True)
+    lexical_interpreter = bin_directory / "python"
+    lexical_interpreter.symlink_to(terminal_interpreter)
+    finder_name = "__editable___claw_1_0_0_finder"
+    (site_packages / f"{finder_name}.py").write_text(
+        f"MAPPING = {{'claw': {str(package)!r}}}\n"
+        "def install():\n"
+        "    return None\n",
+        encoding="utf-8",
+    )
+    (site_packages / "__editable__.claw-1.0.0.pth").write_text(
+        f"import {finder_name}; {finder_name}.install()\n",
+        encoding="utf-8",
+    )
+    distribution = site_packages / "claw-1.0.0.dist-info"
+    distribution.mkdir()
+    (distribution / "direct_url.json").write_text(
+        json.dumps(
+            {
+                "url": implementation.as_uri(),
+                "dir_info": {"editable": True},
+            },
+            sort_keys=True,
+        ),
+        encoding="utf-8",
+    )
+    (distribution / "METADATA").write_text(
+        "Metadata-Version: 2.1\nName: claw\nVersion: 1.0.0\n",
+        encoding="utf-8",
+    )
+
+    log_path = tmp_path / "editable-cam-calls.jsonl"
+    launcher = bin_directory / "cam"
+    launcher.write_text(
+        f"#!{lexical_interpreter}\n"
+        "import claw\n"
+        "import json\n"
+        "import pathlib\n"
+        "import sys\n"
+        f"responses = json.loads({json.dumps(responses, sort_keys=True)!r})\n"
+        f"log_path = pathlib.Path({str(log_path)!r})\n"
+        "assert claw.FIXTURE_IDENTITY == 'editable-cam-source'\n"
+        "assert sys.flags.no_site == 1\n"
+        "with log_path.open('a', encoding='utf-8') as stream:\n"
+        "    stream.write(json.dumps(sys.argv[1:], sort_keys=True) + '\\n')\n"
+        "sys.stdout.write(json.dumps(responses[sys.argv[2]], sort_keys=True))\n",
+        encoding="utf-8",
+    )
+    launcher.chmod(0o755)
+    return launcher, implementation, log_path
+
+
 def test_acquisition_calls_once_per_unique_need_with_exact_offline_argv(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1609,15 +1696,28 @@ def test_public_acquisition_receipts_reject_forged_call_and_relation_shapes(
             semantic_model_sha256=digest,
             execution_closure=brief.ExecutionClosureReceipt(
                 launcher_kind="native",
+                launcher_path=tmp_path / "fake",
+                launcher_identity=identity,
+                launcher_sha256=digest,
                 interpreter_path=None,
+                interpreter_symlink_chain=(),
+                resolved_interpreter_path=None,
+                resolved_interpreter_identity=None,
                 interpreter_sha256=None,
+                python_home=None,
+                python_home_identity=None,
+                python_runtime_library_path=None,
+                python_runtime_library_identity=None,
+                python_runtime_library_sha256=None,
+                editable_site_packages=None,
+                editable_site_packages_identity=None,
                 editable_metadata_sha256=None,
                 cam_source_root=None,
+                cam_source_root_identity=None,
                 cam_source_revision=None,
                 cam_source_branch=None,
                 cam_source_dirty_entries=(),
                 cam_source_sha256=None,
-                sha256=digest,
             ),
             calls=(forged_call,),
             candidates=(),
@@ -2154,12 +2254,12 @@ def test_acquisition_pins_python_interpreter_chain_before_spawn(
     sidecar.write_bytes(b"fixture")
     model_path = tmp_path / "semantic-model"
     model_path.mkdir()
-    interpreter = tmp_path / "python-copy"
+    interpreter = tmp_path / "python3.13"
     shutil.copy2(Path(sys.executable).resolve(), interpreter)
     interpreter.chmod(0o755)
     second_link = tmp_path / "python-link-2"
     second_link.symlink_to(interpreter)
-    first_link = tmp_path / "python-link-1"
+    first_link = tmp_path / "python3"
     first_link.symlink_to(second_link)
     target_repo_id = "target-repo-01"
     payload = make_query_payload(
@@ -2431,4 +2531,225 @@ def test_acquisition_rejects_unsupported_launcher_shebangs_before_spawn(
             sidecar=sidecar,
             semantic_model_path=model_path,
             target_repo_id="target-repo-01",
+        )
+
+
+def test_acquisition_rejects_python_named_link_to_non_python_terminal(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    brief = load_module()
+    need = make_need(brief, "Reject false Python launchers.", "python identity")
+    sidecar = tmp_path / "opportunities.sqlite"
+    sidecar.write_bytes(b"fixture")
+    model_path = tmp_path / "semantic-model"
+    model_path.mkdir()
+    lexical_interpreter = tmp_path / "python"
+    lexical_interpreter.symlink_to("/bin/sh")
+    launcher = tmp_path / "fake-cam"
+    launcher.write_text(
+        f"#!{lexical_interpreter}\nraise SystemExit(0)\n",
+        encoding="utf-8",
+    )
+    launcher.chmod(0o755)
+    spawned = False
+
+    def forbidden_popen(*_args, **_kwargs):
+        nonlocal spawned
+        spawned = True
+        raise AssertionError("non-Python terminal must fail before spawn")
+
+    monkeypatch.setattr(brief.subprocess, "Popen", forbidden_popen)
+    with pytest.raises(brief.OpportunityBriefError, match="interpreter|Python|unsupported"):
+        brief.acquire_opportunities(
+            needs=(need,),
+            cam_command=launcher,
+            sidecar=sidecar,
+            semantic_model_path=model_path,
+            target_repo_id="target-repo-01",
+        )
+    assert not spawned
+
+
+def test_production_style_editable_venv_launcher_works_with_different_caller_python(
+    tmp_path: Path,
+) -> None:
+    brief = load_module()
+    caller_interpreter = Path(sys.executable).resolve(strict=True)
+    production_launcher = Path(
+        "/Volumes/WS4TB/WS4TBr/CAM_Codx/CAM_CAM/.venv/bin/cam"
+    )
+    if not production_launcher.is_file():
+        pytest.skip("production CAM virtualenv is not available")
+    terminal_interpreter = Path(
+        production_launcher.read_text(encoding="utf-8").splitlines()[0][2:]
+    ).resolve(strict=True)
+    assert sha256_path(terminal_interpreter) != sha256_path(caller_interpreter)
+    need = make_need(brief, "Use the production CAM venv.", "production venv query")
+    sidecar = tmp_path / "opportunities.sqlite"
+    sidecar.write_bytes(b"fixture")
+    model_path = tmp_path / "semantic-model"
+    model_path.mkdir()
+    target_repo_id = "target-repo-01"
+    launcher, implementation, log_path = make_editable_venv_cam(
+        tmp_path,
+        {
+            need.query_text: make_query_payload(
+                need.query_text,
+                target_repo_id=target_repo_id,
+                model_id=str(model_path.resolve()),
+            )
+        },
+        terminal_interpreter=terminal_interpreter,
+    )
+    before_source = tuple(
+        (path.relative_to(implementation), path.read_bytes())
+        for path in sorted((implementation / "src").rglob("*"))
+        if path.is_file()
+    )
+
+    receipt = brief.acquire_opportunities(
+        needs=(need,),
+        cam_command=launcher,
+        sidecar=sidecar,
+        semantic_model_path=model_path,
+        target_repo_id=target_repo_id,
+    )
+
+    closure = receipt.execution_closure
+    lexical_interpreter = launcher.parent / "python"
+    assert closure.launcher_path == launcher
+    assert closure.launcher_identity == receipt.executable_identity
+    assert closure.launcher_sha256 == receipt.executable_sha256
+    assert closure.interpreter_path == lexical_interpreter
+    assert closure.interpreter_symlink_chain[0].path == lexical_interpreter
+    assert closure.resolved_interpreter_path == terminal_interpreter
+    assert closure.interpreter_sha256 == sha256_path(terminal_interpreter)
+    assert closure.python_home == terminal_interpreter.parent.parent
+    assert closure.python_home_identity is not None
+    assert closure.python_runtime_library_path is not None
+    assert closure.python_runtime_library_identity is not None
+    assert closure.python_runtime_library_sha256 is not None
+    assert closure.editable_site_packages == (
+        launcher.parent.parent / "lib" / "python3.9" / "site-packages"
+    )
+    assert closure.editable_site_packages_identity is not None
+    assert closure.cam_source_root == implementation
+    assert closure.cam_source_root_identity is not None
+    assert closure.cam_source_dirty_entries == ()
+    assert tuple(call.status for call in receipt.calls) == ("ok",)
+    assert log_path.is_file()
+    after_source = tuple(
+        (path.relative_to(implementation), path.read_bytes())
+        for path in sorted((implementation / "src").rglob("*"))
+        if path.is_file()
+    )
+    assert after_source == before_source
+    assert not tuple((implementation / "src").rglob("__pycache__"))
+    assert not tuple((implementation / "src").rglob("*.pyc"))
+    status = subprocess.run(
+        ["git", "-C", str(implementation), "status", "--porcelain"],
+        check=True,
+        capture_output=True,
+    )
+    assert status.stdout == b""
+
+
+def test_query_environment_disables_python_bytecode_writes() -> None:
+    brief = load_module()
+
+    assert brief._query_environment()["PYTHONDONTWRITEBYTECODE"] == "1"
+
+
+def test_execution_closure_digest_is_derived_from_every_public_input() -> None:
+    brief = load_module()
+    identity = (1, 2, 1, 10, 3, 4)
+    other_identity = (1, 3, 1, 11, 5, 6)
+    link = brief.InterpreterSymlinkReceipt(
+        path=Path("/opt/cam/.venv/bin/python"),
+        identity=identity,
+        target="/usr/bin/python3",
+    )
+    closure = brief.ExecutionClosureReceipt(
+        launcher_kind="python",
+        launcher_path=Path("/opt/cam/.venv/bin/cam"),
+        launcher_identity=identity,
+        launcher_sha256="1" * 64,
+        interpreter_path=Path("/opt/cam/.venv/bin/python"),
+        interpreter_symlink_chain=(link,),
+        resolved_interpreter_path=Path("/usr/bin/python3"),
+        resolved_interpreter_identity=other_identity,
+        interpreter_sha256="2" * 64,
+        python_home=Path("/opt/python/3.12"),
+        python_home_identity=identity,
+        python_runtime_library_path=Path("/opt/python/3.12/lib/libpython3.12.dylib"),
+        python_runtime_library_identity=other_identity,
+        python_runtime_library_sha256="6" * 64,
+        editable_site_packages=Path("/opt/cam/.venv/lib/python3.9/site-packages"),
+        editable_site_packages_identity=identity,
+        editable_metadata_sha256="3" * 64,
+        cam_source_root=Path("/opt/cam/source"),
+        cam_source_root_identity=identity,
+        cam_source_revision="4" * 40,
+        cam_source_branch="main",
+        cam_source_dirty_entries=("? src/claw/new.py",),
+        cam_source_sha256="5" * 64,
+    )
+
+    assert next(field for field in fields(closure) if field.name == "sha256").init is False
+    with pytest.raises(TypeError, match="sha256"):
+        brief.ExecutionClosureReceipt(
+            **{
+                field.name: getattr(closure, field.name)
+                for field in fields(closure)
+                if field.name != "sha256"
+            },
+            sha256="0" * 64,
+        )
+    variants = (
+        replace(closure, launcher_path=Path("/opt/cam/.venv/bin/cam-other")),
+        replace(closure, launcher_identity=other_identity),
+        replace(closure, launcher_sha256="a" * 64),
+        replace(closure, interpreter_path=Path("/opt/cam/.venv/bin/python3")),
+        replace(
+            closure,
+            interpreter_symlink_chain=(replace(link, identity=other_identity),),
+        ),
+        replace(closure, resolved_interpreter_path=Path("/usr/bin/python3-other")),
+        replace(closure, resolved_interpreter_identity=identity),
+        replace(closure, interpreter_sha256="b" * 64),
+        replace(closure, python_home=Path("/opt/python/3.12-other")),
+        replace(closure, python_home_identity=other_identity),
+        replace(
+            closure,
+            python_runtime_library_path=Path(
+                "/opt/python/3.12/lib/libpython3.12-other.dylib"
+            ),
+        ),
+        replace(closure, python_runtime_library_identity=identity),
+        replace(closure, python_runtime_library_sha256="f" * 64),
+        replace(
+            closure,
+            editable_site_packages=Path("/opt/cam/.venv/lib/python3.10/site-packages"),
+        ),
+        replace(closure, editable_site_packages_identity=other_identity),
+        replace(closure, editable_metadata_sha256="c" * 64),
+        replace(closure, cam_source_root=Path("/opt/cam/other-source")),
+        replace(closure, cam_source_root_identity=other_identity),
+        replace(closure, cam_source_revision="d" * 40),
+        replace(closure, cam_source_branch="release"),
+        replace(closure, cam_source_dirty_entries=("? src/claw/other.py",)),
+        replace(closure, cam_source_sha256="e" * 64),
+    )
+    assert all(variant.sha256 != closure.sha256 for variant in variants)
+    assert replace(closure).sha256 == closure.sha256
+    with pytest.raises(ValueError, match="sorted|unique"):
+        replace(
+            closure,
+            cam_source_dirty_entries=("? src/claw/z.py", "? src/claw/a.py"),
+        )
+    with pytest.raises(ValueError, match="sorted|unique"):
+        replace(
+            closure,
+            cam_source_dirty_entries=("? src/claw/a.py", "? src/claw/a.py"),
         )
