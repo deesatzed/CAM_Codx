@@ -2915,6 +2915,83 @@ def test_renderer_withholds_language_neutral_code_and_multistep_excerpts(
 
 
 @pytest.mark.parametrize(
+    "payload",
+    (
+        "Ｃｏｎｆｉｒｍｅｄ result.",
+        "ｃｏｎｓｔ value ＝ compute（）；",
+    ),
+)
+def test_renderer_normalizes_fullwidth_text_before_safety_analysis(
+    tmp_path: Path,
+    payload: str,
+) -> None:
+    from tools import opportunity_brief as brief
+    from tools import opportunity_ranker as ranker
+
+    mapping = make_record_mapping()
+    observed_effect = mapping["observed_effect"]
+    assert isinstance(observed_effect, dict)
+    observed_effect["text"] = payload
+
+    rendered = render_record_mapping(brief, ranker, tmp_path, mapping)
+
+    assert payload not in rendered
+    assert "source statement withheld:" in rendered
+
+
+def test_renderer_preserves_parenthetical_and_semicolon_prose(tmp_path: Path) -> None:
+    from tools import opportunity_brief as brief
+    from tools import opportunity_ranker as ranker
+
+    mapping = make_record_mapping()
+    evidence = mapping["evidence"]
+    observed_effect = mapping["observed_effect"]
+    assert isinstance(evidence, dict)
+    assert isinstance(observed_effect, dict)
+    evidence["source_repo_name"] = "Donor (archived)"
+    observed_effect["text"] = "A donor was archived; evidence remained inspectable."
+
+    rendered = render_record_mapping(brief, ranker, tmp_path, mapping)
+
+    assert "Donor (archived)" in rendered
+    assert "A donor was archived; evidence remained inspectable." in rendered
+
+
+def test_renderer_withholds_generic_shell_command_shape(tmp_path: Path) -> None:
+    from tools import opportunity_brief as brief
+    from tools import opportunity_ranker as ranker
+
+    mapping = make_record_mapping()
+    observed_effect = mapping["observed_effect"]
+    assert isinstance(observed_effect, dict)
+    observed_effect["text"] = "cat /private/tmp/evidence.txt"
+
+    rendered = render_record_mapping(brief, ranker, tmp_path, mapping)
+
+    assert "cat /private/tmp/evidence.txt" not in rendered
+    assert "source statement withheld: code-shaped content" in rendered
+
+
+def test_renderer_withholds_procedure_distributed_across_record_fields(
+    tmp_path: Path,
+) -> None:
+    from tools import opportunity_brief as brief
+    from tools import opportunity_ranker as ranker
+
+    mapping = make_record_mapping()
+    mapping["problem"] += " 1. Install dependencies."
+    mapping["mechanism"] += " 2. Edit configuration."
+    mapping["context"] += " 3. Deploy service."
+
+    rendered = render_record_mapping(brief, ranker, tmp_path, mapping)
+
+    assert "1. Install dependencies." not in rendered
+    assert "2. Edit configuration." not in rendered
+    assert "3. Deploy service." not in rendered
+    assert rendered.count("source statement withheld: code-shaped content") >= 3
+
+
+@pytest.mark.parametrize(
     "field",
     (
         "problem",
@@ -2974,6 +3051,31 @@ def test_renderer_accepts_valid_maximum_length_evidence_path_aggregate(
     rendered = render_record_mapping(brief, ranker, tmp_path, mapping)
 
     assert all(path in rendered for path in paths)
+
+
+def test_renderer_reserves_space_for_evidence_omission_summary(tmp_path: Path) -> None:
+    from tools import opportunity_brief as brief
+    from tools import opportunity_ranker as ranker
+
+    mapping = make_record_mapping()
+    evidence = mapping["evidence"]
+    assert isinstance(evidence, dict)
+    paths = tuple(
+        f"src/{index:03d}-{'a' * 506}"
+        for index in range(brief.MAX_EVIDENCE_ITEMS)
+    )
+    assert all(len(path) == 514 for path in paths)
+    evidence["source_files"] = list(paths)
+    evidence["source_sha256"] = [
+        hashlib.sha256(str(index).encode()).hexdigest()
+        for index in range(brief.MAX_EVIDENCE_ITEMS)
+    ]
+
+    rendered = render_record_mapping(brief, ranker, tmp_path, mapping)
+    file_segment = rendered.split("files: ", 1)[1].split("; symbols:", 1)[0]
+
+    assert len(file_segment) <= brief.MAX_BRIEF_EVIDENCE_AGGREGATE
+    assert "additional items withheld by display bound" in file_segment
 
 
 def test_renderer_labels_selected_negative_evidence_as_a_negative_lesson(

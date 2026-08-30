@@ -4364,6 +4364,21 @@ def render_opportunity_brief(snapshot: WipSnapshot, ranking: object) -> str:
         )
     for item in ranking.selected:
         record = item.record
+        prose_values = (
+            ("problem", record.problem),
+            ("mechanism", record.mechanism),
+            ("observed_effect", record.observed_effect.text),
+            ("context", record.context),
+            ("boundary", record.boundary),
+        )
+        procedure_fields = _distributed_procedure_fields(prose_values)
+        prose = {
+            name: _brief_scalar(
+                value,
+                force_code_shaped=name in procedure_fields,
+            )
+            for name, value in prose_values
+        }
         effect_label = {
             "observed": "Observed",
             "intended": "Intended",
@@ -4384,15 +4399,15 @@ def render_opportunity_brief(snapshot: WipSnapshot, ranking: object) -> str:
         )
         lines.extend(
             (
-                f"### {title_prefix}{_brief_scalar(record.mechanism)}",
-                f"- Problem: {_brief_scalar(record.problem)}",
-                f"- Mechanism: {_brief_scalar(record.mechanism)}",
+                f"### {title_prefix}{prose['mechanism']}",
+                f"- Problem: {prose['problem']}",
+                f"- Mechanism: {prose['mechanism']}",
                 (
                     f"- Observed effect: {effect_label} — "
-                    f"{_brief_scalar(record.observed_effect.text)}"
+                    f"{prose['observed_effect']}"
                 ),
-                f"- Context: {_brief_scalar(record.context)}",
-                f"- Boundary: {_brief_scalar(record.boundary)}",
+                f"- Context: {prose['context']}",
+                f"- Boundary: {prose['boundary']}",
                 f"- {inference_label}: {_brief_scalar(item.inference)}",
                 (
                     f"- Evidence: {_brief_scalar(evidence.source_repo_name)}@"
@@ -4423,14 +4438,20 @@ def render_opportunity_brief(snapshot: WipSnapshot, ranking: object) -> str:
     return rendered
 
 
-def _brief_scalar(value: str, *, limit: int = MAX_PUBLIC_TEXT) -> str:
+def _brief_scalar(
+    value: str,
+    *,
+    limit: int = MAX_PUBLIC_TEXT,
+    force_code_shaped: bool = False,
+) -> str:
     """Keep record prose inside one Markdown field without adding source text."""
 
     checked = _checked_string(value, field="brief field", limit=limit)
     collapsed = " ".join(checked.split())
-    if re.search(r"\b(?:sufficient|implemented|confirmed)\b", collapsed, re.I):
+    analysis = unicodedata.normalize("NFKC", collapsed).casefold()
+    if re.search(r"\b(?:sufficient|implemented|confirmed)\b", analysis):
         collapsed = "source statement withheld: ambiguous status language"
-    elif _looks_code_shaped(collapsed):
+    elif force_code_shaped or _looks_code_shaped(analysis):
         collapsed = "source statement withheld: code-shaped content"
     escaped = html.escape(collapsed, quote=True)
     return re.sub(r"([\\`*_\[\]])", r"\\\1", escaped)
@@ -4440,8 +4461,7 @@ def _looks_code_shaped(value: str) -> bool:
     if len(re.findall(r"\b\d+[.)]\s*[A-Za-z]", value)) >= 2:
         return True
     return bool(
-        ";" in value
-        or "{" in value
+        "{" in value
         or "}" in value
         or re.search(
             r"(?:```|~~~|source[_ -]?excerpt|&&|\|\||->|=>|:=|"
@@ -4452,7 +4472,9 @@ def _looks_code_shaped(value: str) -> bool:
             r"(?:^|[\s,(])(?:const\s+|let\s+|var\s+|"
             r"(?:int|float|double|bool|string)\s+)?[A-Za-z_]\w*"
             r"(?:\s*:\s*[A-Za-z_]\w*)?\s*=(?!=)|"
-            r"\b[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*\s*\([^)]*\)|"
+            r"\b[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*\([^)]*\)|"
+            r"^\s*[A-Za-z_]\w*(?:[.-]\w+)*\s+"
+            r"(?:--?[A-Za-z0-9]|\.{0,2}/|/|[^\n]*(?:[|&><$]))|"
             r"(?:^|\s)(?:sudo|sh|bash|zsh|fish|chmod|chown|rm|mv|cp|curl|"
             r"wget|git|npm|pnpm|yarn|cargo|go)\s+)",
             value,
@@ -4461,24 +4483,72 @@ def _looks_code_shaped(value: str) -> bool:
     )
 
 
+_PROCEDURE_VERBS = frozenset(
+    {
+        "add",
+        "build",
+        "change",
+        "configure",
+        "copy",
+        "create",
+        "deploy",
+        "edit",
+        "execute",
+        "install",
+        "modify",
+        "move",
+        "open",
+        "remove",
+        "replace",
+        "run",
+        "set",
+        "start",
+        "stop",
+        "test",
+        "update",
+        "verify",
+        "write",
+    }
+)
+
+
+def _distributed_procedure_fields(
+    values: tuple[tuple[str, str], ...],
+) -> frozenset[str]:
+    markers: list[tuple[int, str]] = []
+    for field, value in values:
+        analysis = unicodedata.normalize("NFKC", value).casefold()
+        for match in re.finditer(r"\b([1-9]\d*)[.)]\s*([^\W\d_]+)\b", analysis):
+            if match.group(2) in _PROCEDURE_VERBS:
+                markers.append((int(match.group(1)), field))
+    withheld: set[str] = set()
+    for index in range(len(markers) - 2):
+        window = markers[index : index + 3]
+        if window[1][0] == window[0][0] + 1 and window[2][0] == window[1][0] + 1:
+            withheld.update(field for _, field in window)
+    return frozenset(withheld)
+
+
 def _brief_evidence_items(values: tuple[str, ...], *, item_limit: int) -> str:
     encoded = tuple(_brief_scalar(value, limit=item_limit) for value in values)
-    visible: list[str] = []
-    used = 0
-    for item in encoded:
-        separator = 2 if visible else 0
-        if used + separator + len(item) > MAX_BRIEF_EVIDENCE_AGGREGATE:
-            break
-        visible.append(item)
-        used += separator + len(item)
-    omitted = len(encoded) - len(visible)
-    if omitted:
-        visible.append(f"{omitted} additional items withheld by display bound")
-    return ", ".join(visible)
+    joined = ", ".join(encoded)
+    if len(joined) <= MAX_BRIEF_EVIDENCE_AGGREGATE:
+        assert len(joined) <= MAX_BRIEF_EVIDENCE_AGGREGATE
+        return joined
+    visible = list(encoded)
+    while visible:
+        visible.pop()
+        omitted = len(encoded) - len(visible)
+        summary = f"{omitted} additional items withheld by display bound"
+        candidate = ", ".join((*visible, summary))
+        if len(candidate) <= MAX_BRIEF_EVIDENCE_AGGREGATE:
+            assert len(candidate) <= MAX_BRIEF_EVIDENCE_AGGREGATE
+            return candidate
+    raise OpportunityBriefError("evidence display bound cannot contain its summary")
 
 
 def _validate_rendered_brief(rendered: str) -> None:
-    lowered = rendered.casefold()
+    lowered = unicodedata.normalize("NFKC", rendered).casefold()
     if re.search(r"\b(?:sufficient|implemented|confirmed)\b", lowered):
         raise OpportunityBriefError("brief contains ambiguous CAM status language")
     if re.search(

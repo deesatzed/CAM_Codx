@@ -639,7 +639,19 @@ def test_boundary_conflict_is_scoped_to_each_matched_need(tmp_path: Path) -> Non
     assert audits[integrity_need.need_id].selected_record_ids == (record_id(record),)
 
 
-def test_generic_no_write_boundary_does_not_create_need_conflict(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    "boundary",
+    (
+        "Works without modifying evidence replay state.",
+        "Works without writing evidence replay state.",
+        "Performs no mutation of evidence replay state.",
+        "Performs no write to evidence replay state.",
+    ),
+)
+def test_generic_no_write_boundary_does_not_create_need_conflict(
+    tmp_path: Path,
+    boundary: str,
+) -> None:
     need = make_need(
         "Write target state safely while preserving evidence replay receipts.",
         "write target state evidence replay receipts",
@@ -651,10 +663,7 @@ def test_generic_no_write_boundary_does_not_create_need_conflict(tmp_path: Path)
             "Bind target state evidence replay receipts to immutable artifact digests."
         ),
         context="Evidence replay verification after workspace relocation.",
-        boundary=(
-            "Works without modifying evidence, does not write target state, "
-            "and performs no mutation."
-        ),
+        boundary=boundary,
     )
     acquired = make_receipt(
         tmp_path,
@@ -676,9 +685,23 @@ def test_generic_no_write_boundary_does_not_create_need_conflict(tmp_path: Path)
     "boundary",
     (
         "This mechanism is unrelated to evidence replay.",
+        "Evidence replay is unrelated to this mechanism.",
         "This mechanism is inapplicable to evidence replay.",
+        "Evidence replay is inapplicable here.",
         "This mechanism does not apply to evidence replay.",
+        "Evidence replay does not apply here.",
         "This mechanism is unsupported for evidence replay.",
+        "Evidence replay is unsupported here.",
+        "This mechanism cannot apply to evidence replay.",
+        "Evidence replay cannot apply here.",
+        "This mechanism can't apply to evidence replay.",
+        "Evidence replay can't apply here.",
+        "This mechanism never applies to evidence replay.",
+        "Evidence replay never applies here.",
+        "This mechanism is outside the scope of evidence replay.",
+        "Evidence replay is outside the scope of this mechanism.",
+        "This mechanism excludes evidence replay.",
+        "Evidence replay is excluded by this mechanism.",
     ),
 )
 def test_explicit_need_incompatibility_is_a_boundary_conflict(

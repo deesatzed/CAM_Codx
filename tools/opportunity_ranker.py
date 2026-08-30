@@ -53,8 +53,20 @@ _MECHANISM_ID_PATTERN = re.compile(r"mechanism_[0-9a-f]{24}")
 _DIGEST_PATTERN = re.compile(r"[0-9a-f]{64}")
 _BOUNDARY_CONFLICT_CUES = frozenset(
     {
+        "apply",
+        "can",
+        "cannot",
+        "did",
+        "do",
+        "does",
+        "exclude",
+        "exclud",
         "inapplicable",
+        "never",
         "not",
+        "outside",
+        "scope",
+        "t",
         "unrelat",
         "unsupport",
     }
@@ -1065,7 +1077,25 @@ def _boundary_conflicts(boundary: str, need_terms: frozenset[str]) -> bool:
             continue
         for cue, token in enumerate(sequence):
             if token in {"unrelat", "inapplicable", "unsupport"} and any(
-                0 < overlap - cue <= 4 for overlap in overlap_positions
+                0 < abs(overlap - cue) <= 4 for overlap in overlap_positions
+            ):
+                return True
+            if token in {"exclude", "exclud"} and any(
+                0 < abs(overlap - cue) <= 4 for overlap in overlap_positions
+            ):
+                return True
+            if token == "cannot" and any(
+                0 < abs(overlap - cue) <= 4 for overlap in overlap_positions
+            ):
+                return True
+            if (
+                token == "can"
+                and cue + 1 < len(sequence)
+                and sequence[cue + 1] == "t"
+                and any(
+                    0 < min(abs(overlap - cue), abs(overlap - cue - 1)) <= 4
+                    for overlap in overlap_positions
+                )
             ):
                 return True
             if token == "not" and cue + 1 in overlap_positions:
@@ -1080,13 +1110,45 @@ def _boundary_conflicts(boundary: str, need_terms: frozenset[str]) -> bool:
                     "write",
                 }:
                     return True
+        for index in range(len(sequence) - 1):
+            if (
+                sequence[index] == "never"
+                and sequence[index + 1] == "apply"
+                and any(
+                    0 < min(abs(overlap - index), abs(overlap - index - 1)) <= 4
+                    for overlap in overlap_positions
+                )
+            ):
+                return True
+            if (
+                sequence[index] == "outside"
+                and (
+                    sequence[index + 1] == "scope"
+                    or (
+                        index + 2 < len(sequence)
+                        and sequence[index + 1] == "the"
+                        and sequence[index + 2] == "scope"
+                    )
+                )
+            ):
+                end = index + (2 if sequence[index + 1] == "the" else 1)
+                if any(
+                    0 < min(abs(overlap - index), abs(overlap - end)) <= 5
+                    for overlap in overlap_positions
+                ):
+                    return True
         for index in range(len(sequence) - 2):
             if (
                 sequence[index] in {"do", "does", "did"}
                 and sequence[index + 1] == "not"
                 and sequence[index + 2] == "apply"
                 and any(
-                    0 < overlap - (index + 2) <= 4
+                    0
+                    < min(
+                        abs(overlap - index),
+                        abs(overlap - (index + 2)),
+                    )
+                    <= 4
                     for overlap in overlap_positions
                 )
             ):

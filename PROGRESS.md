@@ -1,5 +1,27 @@
 # Progress
 
+## 2026-08-30 sealed opportunity brief semantics
+
+- Expanded per-need boundary parsing to recognize explicit incompatibility
+  cues before or after the need overlap, including cannot/never/outside-scope
+  and exclusion forms. Exact no-write and no-mutation controls remain eligible.
+- Renderer safety analysis now normalizes compatibility characters with NFKC
+  plus case-folding, preserves safe original parenthetical/semicolon prose,
+  detects generic leading shell command shapes, and withholds numbered
+  imperative procedures distributed across multiple record fields.
+- Evidence aggregate rendering now reserves the exact omission-summary space
+  and asserts that the completed field remains within `65,536` characters.
+- TDD RED was `14 failed, 8 passed` for boundary grammar and controls, plus `6
+  failed, 115 deselected` for Unicode, prose, shell, distributed-step, and
+  aggregate-bound renderer cases. The expanded opportunity suite is `159
+  passed`; Development Brief/method-resolver compatibility is `403 passed`.
+  The comparable full run is `750 passed, 3 skipped, 2 failed`; both failures
+  remain the existing absent sibling `/Volumes/WS4TB/waswikiT/repos2mine/CAM_CAM`
+  dependency in `test_cam_control_plane_e2e.py` and
+  `test_cam_documentation_contract.py`.
+- No CAM query, provider, mining, database, target, donor, configuration, or
+  profile operation was performed.
+
 ## 2026-08-30 per-need boundaries and fail-closed brief prose
 
 - Boundary conflicts are now computed per matched need. Ranking selects the
@@ -12,10 +34,11 @@
   mechanisms use deterministic complete-link grouping, preventing a bridge
   mechanism from merging disjoint groups.
 - Every dynamic record field uses a shared language-neutral code/step filter.
-  C/Rust/Go/Swift, shell, SQL, assignment, brace, semicolon, call, arrow, and
-  numbered multi-step fixtures are withheld rather than quoted. Evidence file
-  and symbol items are sanitized individually, and a bounded aggregate accepts
-  five valid 900-character paths without exposing executable prose.
+  C/Rust/Go/Swift, shell, SQL, assignment, brace, code-shaped semicolon, call,
+  arrow, and numbered multi-step fixtures are withheld rather than quoted.
+  Evidence file and symbol items are sanitized individually, and a bounded
+  aggregate accepts five valid 900-character paths without exposing executable
+  prose.
 - Initial TDD RED was `6 failed, 2 passed` for per-need boundary, explicit
   incompatibility, independent additivity, and complete-link cases; a stronger
   no-write overlap control was separately RED at `1 failed`. Renderer RED was

@@ -1,5 +1,29 @@
 # Decisions
 
+## 2026-08-30: Seal boundary grammar and brief display semantics
+
+Decision: explicit boundary incompatibility is recognized on either side of an
+exact per-need overlap. The bounded grammar covers `unsupported`,
+`inapplicable`, `unrelated`, `cannot`/`can't`, `never applies`, `outside the
+scope`, `excludes`/`excluded`, and `does not apply`. Read-only safety language
+such as `without modifying`, `without writing`, `no mutation`, and `no write`
+remains non-conflicting. A mixed candidate is still rejected only when every
+relevant matched need conflicts.
+
+Renderer safety analysis uses Unicode NFKC plus case-folding while preserving
+the original safe prose for display. Code withholding requires structural
+signals: braces, assignment, calls, declarations, shell/SQL forms, or numbered
+imperative sequences. A semicolon or parenthetical alone is ordinary prose.
+Numbered procedures are evaluated across the complete selected record, so a
+distributed sequence cannot evade per-field checks; every participating prose
+field is replaced by the same neutral withholding label.
+
+Reason: phrase direction and compatibility characters must not change a
+source boundary or safety decision, but conservative rendering also must not
+erase harmless source prose. Evidence-item omission summaries reserve space
+inside the fixed `64 KiB` aggregate instead of extending its bound. The exact
+ranking formula and frozen `0.48` threshold remain unchanged.
+
 ## 2026-08-30: Scope boundary exclusions per need and withhold executable prose
 
 Decision: a candidate boundary is evaluated independently for every recorded
@@ -25,11 +49,12 @@ alternating filler. Complete-link grouping preserves padding resistance without
 transitive over-grouping.
 
 Safety: every dynamic record field is passed through one language-neutral,
-fail-closed renderer filter. Assignments, braces, semicolons, function calls,
-arrows, shell/SQL shapes, C/Rust/Go/Swift-like constructs, and numbered
-multi-step instructions are replaced with an explicit neutral withholding
-label. Evidence files and symbols are sanitized item by item; their display is
-bounded to `64 KiB` per aggregate with a deterministic omitted-item summary.
+fail-closed renderer filter. Assignments, braces, structurally code-shaped
+semicolon forms, function calls, arrows, shell/SQL shapes,
+C/Rust/Go/Swift-like constructs, and numbered multi-step instructions are
+replaced with an explicit neutral withholding label. Evidence files and
+symbols are sanitized item by item; their display is bounded to `64 KiB` per
+aggregate with a deterministic omitted-item summary.
 All valid Task 5 item sizes remain accepted, and the fixed score formula and
 `0.48` threshold remain unchanged.
 
