@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import FrozenInstanceError
 import hashlib
 import importlib.util
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -145,7 +146,7 @@ def test_reader_prefers_latest_handoff_and_ignores_generated_noise(
 
     assert snapshot.target_path == target.resolve()
     assert snapshot.target_revision == git_output(target, "rev-parse", "HEAD")
-    assert snapshot.target_repo_id == "local:target-repo"
+    assert snapshot.target_repo_id.startswith("local:target-repo:")
     assert snapshot.branch == "main"
     assert snapshot.handoff.relative_path == "HANDOFF_LATEST.md"
     assert snapshot.handoff.sha256 == sha256_path(target / "HANDOFF_LATEST.md")
@@ -337,3 +338,374 @@ def test_production_parser_contains_no_tabletop_or_donor_vocabulary() -> None:
 
     for forbidden in ("agnomine", "imbora", "genericagent"):
         assert forbidden not in source
+
+
+def test_git_snapshot_disables_external_execution_and_inherited_git_environment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    brief = load_module()
+    target = make_wip_repository(tmp_path)
+    fsmonitor_marker = tmp_path / "fsmonitor-executed"
+    trace_marker = tmp_path / "inherited-git-trace"
+    monitor = tmp_path / "malicious-fsmonitor.sh"
+    monitor.write_text(
+        f"#!/bin/sh\nprintf executed > {fsmonitor_marker}\nexit 0\n",
+        encoding="utf-8",
+    )
+    monitor.chmod(0o755)
+    subprocess.run(
+        ["git", "-C", str(target), "config", "core.fsmonitor", str(monitor)],
+        check=True,
+    )
+    expected_revision = git_output(target, "rev-parse", "HEAD")
+    monkeypatch.setenv("GIT_TRACE", str(trace_marker))
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(tmp_path / "attacker.gitconfig"))
+
+    snapshot = brief.inspect_wip_repository(target)
+
+    assert snapshot.target_revision == expected_revision
+    assert not fsmonitor_marker.exists()
+    assert not trace_marker.exists()
+
+
+def test_git_snapshot_uses_one_bounded_porcelain_v2_snapshot_at_exact_root(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    brief = load_module()
+    target = make_wip_repository(tmp_path)
+    calls: list[tuple[tuple[str, ...], dict[str, str]]] = []
+    real_popen = brief.subprocess.Popen
+
+    def recording_popen(arguments, *args, **kwargs):
+        calls.append((tuple(arguments), dict(kwargs["env"])))
+        return real_popen(arguments, *args, **kwargs)
+
+    monkeypatch.setattr(brief.subprocess, "Popen", recording_popen)
+    brief.inspect_wip_repository(target)
+
+    assert len(calls) == 2
+    status_arguments, environment = calls[-1]
+    assert "--porcelain=v2" in status_arguments
+    assert "-z" in status_arguments
+    assert "--branch" in status_arguments
+    assert "--no-renames" in status_arguments
+    assert "core.fsmonitor=false" in status_arguments
+    assert "core.hooksPath=/dev/null" in status_arguments
+    assert environment["GIT_NO_LAZY_FETCH"] == "1"
+    assert not any(name.startswith("GIT_") for name in environment if name not in {
+        "GIT_CONFIG_NOSYSTEM",
+        "GIT_NO_LAZY_FETCH",
+        "GIT_OPTIONAL_LOCKS",
+        "GIT_TERMINAL_PROMPT",
+    })
+
+    with pytest.raises(brief.OpportunityBriefError, match="worktree root"):
+        brief.inspect_wip_repository(target / "src")
+
+
+def test_evidence_read_rejects_symlink_hardlink_and_path_replacement(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    brief = load_module()
+    source = tmp_path / "source.md"
+    source.write_text(HANDOFF_TEXT, encoding="utf-8")
+
+    symlink_target = tmp_path / "symlink-target"
+    symlink_target.mkdir()
+    (symlink_target / "HANDOFF_LATEST.md").symlink_to(source)
+    with pytest.raises(brief.OpportunityBriefError, match="unsafe|regular"):
+        brief.inspect_wip_repository(symlink_target)
+
+    hardlink_target = tmp_path / "hardlink-target"
+    hardlink_target.mkdir()
+    os.link(source, hardlink_target / "HANDOFF_LATEST.md")
+    with pytest.raises(brief.OpportunityBriefError, match="link"):
+        brief.inspect_wip_repository(hardlink_target)
+
+    oversized_target = tmp_path / "oversized-target"
+    oversized_target.mkdir()
+    (oversized_target / "HANDOFF_LATEST.md").write_bytes(b"x" * (brief.MAX_HANDOFF_BYTES + 1))
+    with pytest.raises(brief.OpportunityBriefError, match="bounded"):
+        brief.inspect_wip_repository(oversized_target)
+
+    race_target = tmp_path / "race-target"
+    race_target.mkdir()
+    handoff = race_target / "HANDOFF_LATEST.md"
+    handoff.write_text(HANDOFF_TEXT, encoding="utf-8")
+    original_open = brief.os.open
+    replaced = False
+    observed_flags = 0
+
+    def replacing_open(path, flags, *args, **kwargs):
+        nonlocal observed_flags, replaced
+        descriptor = original_open(path, flags, *args, **kwargs)
+        if Path(path) == handoff and not replaced:
+            observed_flags = flags
+            replacement = race_target / "replacement.md"
+            replacement.write_text(HANDOFF_TEXT.replace("Current", "Changed"), encoding="utf-8")
+            os.replace(replacement, handoff)
+            replaced = True
+        return descriptor
+
+    monkeypatch.setattr(brief.os, "open", replacing_open)
+    with pytest.raises(brief.OpportunityBriefError, match="changed|race"):
+        brief.inspect_wip_repository(race_target)
+    assert observed_flags & os.O_CLOEXEC
+    assert observed_flags & os.O_NOFOLLOW
+
+
+def test_git_status_paths_are_nul_parsed_and_controls_are_escaped(tmp_path: Path) -> None:
+    brief = load_module()
+    target = make_wip_repository(tmp_path)
+    unusual = target / "line\nbreak.py"
+    unusual.write_text("# ordinary untracked file\n", encoding="utf-8")
+
+    snapshot = brief.inspect_wip_repository(target)
+
+    matching = [item for item in snapshot.dirty_entries if "line" in item and "break.py" in item]
+    assert matching == ["? line\\x0abreak.py"]
+    assert "\n" not in matching[0]
+
+
+def test_markdown_lexer_excludes_fences_comments_and_honors_setext_boundaries(
+    tmp_path: Path,
+) -> None:
+    brief = load_module()
+    target = tmp_path / "markdown"
+    target.mkdir()
+    text = """# Handoff
+
+```markdown
+## Blockers
+- [P0] Fenced fake blocker.
+```
+
+<!--
+## Risks
+- [P0] Commented fake risk.
+-->
+
+Blockers
+========
+- [P0] Real receipt blocker.
+
+Risks / Unknowns
+----------------
+- [P1] Real replay uncertainty.
+
+Completed
+---------
+- [P0] Disallowed historical item.
+
+Open Questions
+--------------
+- [P2] Which real receipt is sufficient?
+"""
+    (target / "HANDOFF_LATEST.md").write_text(text, encoding="utf-8")
+
+    needs = brief.extract_need_themes(brief.inspect_wip_repository(target))
+
+    assert [need.problem for need in needs] == [
+        "Real receipt blocker.",
+        "Real replay uncertainty.",
+        "Which real receipt is sufficient?",
+    ]
+
+
+@pytest.mark.parametrize("unsafe", ["\x00", "\x07", "\u202e"])
+def test_reader_and_public_evidence_reject_unsafe_text_controls(
+    tmp_path: Path,
+    unsafe: str,
+) -> None:
+    brief = load_module()
+    target = tmp_path / "unsafe-text"
+    target.mkdir()
+    text = f"## Blockers\n- Unsafe {unsafe} text.\n"
+    (target / "HANDOFF_LATEST.md").write_text(text, encoding="utf-8")
+
+    with pytest.raises(brief.OpportunityBriefError, match="unsafe"):
+        brief.inspect_wip_repository(target)
+    with pytest.raises((TypeError, ValueError), match="unsafe"):
+        brief.HandoffEvidence(relative_path="HANDOFF_LATEST.md", sha256="a" * 64, text=text)
+
+
+def test_all_inspection_and_parser_caps_fail_closed_instead_of_truncating(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    brief = load_module()
+    dirty_parent = tmp_path / "dirty"
+    dirty_parent.mkdir()
+    dirty_target = make_wip_repository(dirty_parent)
+    monkeypatch.setattr(brief, "MAX_DIRTY_ENTRIES", 1)
+    with pytest.raises(brief.OpportunityBriefError, match="dirty|status"):
+        brief.inspect_wip_repository(dirty_target)
+
+    file_target = tmp_path / "files"
+    file_target.mkdir()
+    (file_target / "HANDOFF_LATEST.md").write_text(HANDOFF_TEXT, encoding="utf-8")
+    (file_target / "one.py").write_text("# TODO one\n", encoding="utf-8")
+    (file_target / "two.py").write_text("# TODO two\n", encoding="utf-8")
+    monkeypatch.setattr(brief, "MAX_DIRTY_ENTRIES", 256)
+    monkeypatch.setattr(brief, "MAX_INSPECTED_FILES", 1)
+    with pytest.raises(brief.OpportunityBriefError, match="file|bound"):
+        brief.inspect_wip_repository(file_target)
+
+    monkeypatch.setattr(brief, "MAX_INSPECTED_FILES", 512)
+    nested = file_target / "nested"
+    nested.mkdir()
+    (nested / "child.py").write_text("pass\n", encoding="utf-8")
+    monkeypatch.setattr(brief, "MAX_INSPECTED_DIRECTORIES", 1)
+    with pytest.raises(brief.OpportunityBriefError, match="directory|bound"):
+        brief.inspect_wip_repository(file_target)
+
+    monkeypatch.setattr(brief, "MAX_INSPECTED_DIRECTORIES", 256)
+    monkeypatch.setattr(brief, "MAX_TARGET_ENTRIES", 2)
+    with pytest.raises(brief.OpportunityBriefError, match="entry|bound"):
+        brief.inspect_wip_repository(file_target)
+
+    monkeypatch.setattr(brief, "MAX_TARGET_ENTRIES", 2_048)
+    monkeypatch.setattr(brief, "MAX_SECTION_BULLETS", 3)
+    handoff = brief.inspect_wip_repository(file_target).handoff
+    assert handoff is not None
+    with pytest.raises(brief.OpportunityBriefError, match="bullet|bound"):
+        brief.extract_need_themes(
+            brief.WipSnapshot(
+                target_path=file_target,
+                target_revision=None,
+                target_repo_id="target-repo-01",
+                branch=None,
+                dirty_entries=(),
+                handoff=brief.HandoffEvidence(
+                    relative_path="HANDOFF_LATEST.md",
+                    sha256="b" * 64,
+                    text="## Blockers\n" + "".join(f"- Need {index}.\n" for index in range(4)),
+                ),
+                truth_files=(),
+                visible_gaps=(),
+                conflicts=(),
+                verification_status="not_run",
+            ),
+            maximum=3,
+        )
+
+
+def test_git_subprocess_output_cap_fails_closed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    brief = load_module()
+    target = make_wip_repository(tmp_path)
+    for index in range(20):
+        (target / f"untracked-{index:02d}-with-a-long-name.py").write_text("pass\n", encoding="utf-8")
+    monkeypatch.setattr(brief, "MAX_GIT_STATUS_BYTES", 128, raising=False)
+
+    with pytest.raises(brief.OpportunityBriefError, match="output|status"):
+        brief.inspect_wip_repository(target)
+
+
+def test_public_dataclasses_enforce_recursive_invariants_and_have_no_dict(
+    tmp_path: Path,
+) -> None:
+    brief = load_module()
+    handoff = brief.HandoffEvidence(
+        relative_path="HANDOFF_LATEST.md",
+        sha256="a" * 64,
+        text="# Handoff\n",
+    )
+    snapshot = brief.WipSnapshot(
+        target_path=tmp_path,
+        target_revision=None,
+        target_repo_id="target-repo-01",
+        branch=None,
+        dirty_entries=("? file.py",),
+        handoff=handoff,
+        truth_files=("GOAL.md",),
+        visible_gaps=(),
+        conflicts=(),
+        verification_status="not_run",
+    )
+    need = brief.NeedTheme(
+        need_id="need_1234",
+        category="blocker",
+        problem="Problem.",
+        desired_improvement="Improvement.",
+        existing_evidence="Evidence.",
+        gap="Gap.",
+        query_text="query evidence",
+        handoff_span="Problem.",
+    )
+
+    assert not hasattr(handoff, "__dict__")
+    assert not hasattr(snapshot, "__dict__")
+    assert not hasattr(need, "__dict__")
+    with pytest.raises((TypeError, ValueError)):
+        brief.HandoffEvidence(relative_path="../escape.md", sha256="short", text="x")
+    with pytest.raises((TypeError, ValueError)):
+        brief.WipSnapshot(
+            target_path=tmp_path,
+            target_revision="not-a-revision",
+            target_repo_id="target-repo-01",
+            branch=None,
+            dirty_entries=["mutable"],
+            handoff=handoff,
+            truth_files=(),
+            visible_gaps=(),
+            conflicts=(),
+            verification_status="not_run",
+        )
+    with pytest.raises((TypeError, ValueError)):
+        brief.NeedTheme(
+            need_id="need_1234",
+            category="blocker",
+            problem="Problem.",
+            desired_improvement="Improvement.",
+            existing_evidence="Evidence.",
+            gap="Gap.",
+            query_text="query evidence",
+            handoff_span="Problem.",
+            implementation_steps=("mutate",),
+        )
+
+
+def test_target_repo_id_is_explicit_or_collision_resistant_by_default(tmp_path: Path) -> None:
+    brief = load_module()
+    first = tmp_path / "one" / "target"
+    second = tmp_path / "two" / "target"
+    first.mkdir(parents=True)
+    second.mkdir(parents=True)
+    for target in (first, second):
+        (target / "HANDOFF_LATEST.md").write_text(HANDOFF_TEXT, encoding="utf-8")
+
+    first_id = brief.inspect_wip_repository(first).target_repo_id
+    second_id = brief.inspect_wip_repository(second).target_repo_id
+
+    assert first_id.startswith("local:target:")
+    assert second_id.startswith("local:target:")
+    assert first_id != second_id
+    assert brief.inspect_wip_repository(first, target_repo_id="target-repo-01").target_repo_id == (
+        "target-repo-01"
+    )
+    for invalid in (True, "", " padded ", "unsafe\x00id"):
+        with pytest.raises((TypeError, ValueError), match="target_repo_id"):
+            brief.inspect_wip_repository(first, target_repo_id=invalid)
+
+
+def test_dated_handoffs_require_iso_dates_and_revision_claims_require_hex_prefix(
+    tmp_path: Path,
+) -> None:
+    brief = load_module()
+    target = make_wip_repository(tmp_path)
+    (target / "HANDOFF_LATEST.md").unlink()
+    (target / "HANDOFF_9999-99-99.md").write_text("invalid date", encoding="utf-8")
+    tied = target / "HANDOFF_2026-08-28-z.md"
+    tied.write_text("Revision: d\n\n" + HANDOFF_TEXT, encoding="utf-8")
+    (target / "HANDOFF_2026-08-28-a.md").write_text("lower tie", encoding="utf-8")
+
+    snapshot = brief.inspect_wip_repository(target)
+
+    assert snapshot.handoff.relative_path == tied.name
+    assert not any("revision" in conflict for conflict in snapshot.conflicts)
