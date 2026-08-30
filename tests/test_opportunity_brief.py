@@ -13,13 +13,15 @@ import shutil
 import subprocess
 import sys
 import time
-from types import SimpleNamespace
 import unicodedata
 
 import pytest
 
 
 MODULE_PATH = Path(__file__).parents[1] / "tools" / "opportunity_brief.py"
+PROJECT_ROOT = MODULE_PATH.parent.parent
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
 
 HANDOFF_TEXT = """# Current handoff
 
@@ -1183,6 +1185,91 @@ def record_id_for(mapping: dict[str, object]) -> str:
         separators=(",", ":"),
     )
     return f"opp_{hashlib.sha256(canonical.encode('utf-8')).hexdigest()[:32]}"
+
+
+def make_ranking_acquisition(brief, tmp_path: Path, needs, candidates):
+    identity = (1, 2, 1, 10, 3, 4)
+    digest = "a" * 64
+    command = (tmp_path / "cam").absolute()
+    sidecar = (tmp_path / "opportunities.sqlite").absolute()
+    model = (tmp_path / "model").absolute()
+    closure = brief.ExecutionClosureReceipt(
+        launcher_kind="native",
+        launcher_path=command,
+        launcher_identity=identity,
+        launcher_sha256=digest,
+        interpreter_path=None,
+        interpreter_symlink_chain=(),
+        resolved_interpreter_path=None,
+        resolved_interpreter_identity=None,
+        interpreter_sha256=None,
+        python_home=None,
+        python_home_identity=None,
+        python_runtime_library_path=None,
+        python_runtime_library_identity=None,
+        python_runtime_library_sha256=None,
+        editable_site_packages=None,
+        editable_site_packages_identity=None,
+        editable_metadata_sha256=None,
+        cam_source_root=None,
+        cam_source_root_identity=None,
+        cam_source_revision=None,
+        cam_source_branch=None,
+        cam_source_dirty_entries=(),
+        cam_source_sha256=None,
+    )
+    calls = tuple(
+        brief.AcquisitionCall(
+            need_id=need.need_id,
+            query=need.query_text,
+            argv=(
+                str(command),
+                "opportunity-query",
+                need.query_text,
+                "--db",
+                str(sidecar),
+                "--target-repo-id",
+                "target-repo-01",
+                "--semantic-model-path",
+                str(model),
+                "--limit",
+                "20",
+                "--json",
+            ),
+            executable_identity=identity,
+            executable_sha256=digest,
+            sidecar_identity=identity,
+            sidecar_sha256=digest,
+            semantic_model_identity=identity,
+            semantic_model_sha256=digest,
+            execution_closure_sha256=closure.sha256,
+            status="ok",
+            result_count=sum(
+                need.need_id in {match.need_id for match in candidate.matches}
+                for candidate in candidates
+            ),
+            rejection_count=0,
+        )
+        for need in needs
+    )
+    return brief.AcquisitionReceipt(
+        target_repo_id="target-repo-01",
+        model_id=str(model),
+        cam_command=command,
+        executable_identity=identity,
+        executable_sha256=digest,
+        sidecar=sidecar,
+        sidecar_identity=identity,
+        sidecar_sha256=digest,
+        semantic_model_path=model,
+        semantic_model_identity=identity,
+        semantic_model_sha256=digest,
+        execution_closure=closure,
+        calls=calls,
+        candidates=candidates,
+        rejections=(),
+        gaps=(),
+    )
 
 
 def make_query_payload(
@@ -2538,7 +2625,7 @@ def test_acquisition_rejects_unsupported_launcher_shebangs_before_spawn(
 def test_rendered_cross_repo_brief_has_exact_sections_and_source_bound_fields(
     tmp_path: Path,
 ) -> None:
-    brief = load_module()
+    from tools import opportunity_brief as brief
     from tools import opportunity_ranker as ranker
 
     problem = "Evidence receipts do not survive relocation."
@@ -2560,10 +2647,11 @@ def test_rendered_cross_repo_brief_has_exact_sections_and_source_bound_fields(
             ),
         ),
     )
-    acquired = SimpleNamespace(
-        candidates=(candidate,),
-        gaps=(),
-        source_excerpt="def PRIVATE_SOURCE_EXCERPT(): return 'must not render'",
+    acquired = make_ranking_acquisition(
+        brief,
+        tmp_path,
+        (need,),
+        (candidate,),
     )
     handoff_text = (
         "# Current handoff\n\n## Blockers\n\n"
@@ -2618,15 +2706,16 @@ def test_rendered_cross_repo_brief_has_exact_sections_and_source_bound_fields(
 def test_rendered_cross_repo_brief_preserves_honest_empty_selection(
     tmp_path: Path,
 ) -> None:
-    brief = load_module()
+    from tools import opportunity_brief as brief
     from tools import opportunity_ranker as ranker
 
     problem = "Render a lunar shader with spectral caustics."
     need = make_need(brief, problem, "lunar shader spectral caustics")
+    acquired = make_ranking_acquisition(brief, tmp_path, (need,), ())
     ranking = ranker.rank_and_select(
         needs=(need,),
         handoff_text=f"## Blockers\n\n- {problem}\n",
-        acquired=SimpleNamespace(candidates=(), gaps=()),
+        acquired=acquired,
     )
     snapshot = brief.WipSnapshot(
         target_path=tmp_path,
@@ -2647,6 +2736,166 @@ def test_rendered_cross_repo_brief_preserves_honest_empty_selection(
     assert "## Cross-repo opportunities\n\n- No opportunity met" in rendered
     assert "## What CAM did not find" in rendered
     assert need.problem in rendered
+
+
+def test_renderer_neutralizes_dynamic_commonmark_claims_and_source_excerpts(
+    tmp_path: Path,
+) -> None:
+    from tools import opportunity_brief as brief
+    from tools import opportunity_ranker as ranker
+
+    need = make_need(
+        brief,
+        "Preserve evidence receipts after relocation.",
+        "preserve evidence receipts relocation",
+    )
+    mapping = make_record_mapping()
+    mapping["problem"] = (
+        "Evidence receipts [external](https://evil.invalid) fail after relocation "
+        "<script>alert(1)</script>."
+    )
+    mapping["mechanism"] = (
+        "Bind evidence receipts to digests; def leaked(): return source_excerpt"
+    )
+    mapping["observed_effect"] = {
+        "status": "observed",
+        "text": "Confirmed sufficient implemented behavior.",
+    }
+    evidence = mapping["evidence"]
+    assert isinstance(evidence, dict)
+    evidence["source_repo_name"] = "[donor](https://evil.invalid)"
+    evidence["source_files"] = ["src/[receipt](evil).py"]
+    evidence["source_symbols"] = ["<script>alert</script>"]
+    record = brief._parse_opportunity_record(
+        mapping,
+        target_repo_id="target-repo-01",
+    )
+    candidate = brief.OpportunityCandidate(
+        record_id=record_id_for(mapping),
+        record=record,
+        matches=(
+            brief.CandidateMatch(
+                need_id=need.need_id,
+                fts_rank=1,
+                semantic_rank=1,
+                rrf_score=2 / 61,
+            ),
+        ),
+    )
+    acquired = make_ranking_acquisition(
+        brief,
+        tmp_path,
+        (need,),
+        (candidate,),
+    )
+    handoff_text = "## Blockers\n\n- Preserve evidence receipts after relocation.\n"
+    ranking = ranker.rank_and_select(
+        needs=(need,),
+        handoff_text=handoff_text,
+        acquired=acquired,
+    )
+    snapshot = brief.WipSnapshot(
+        target_path=(tmp_path / "[target](evil)").absolute(),
+        target_revision="d" * 40,
+        target_repo_id="target-repo-01",
+        target_repo_id_is_exclusion_authoritative=True,
+        branch="[branch](evil)",
+        dirty_entries=(),
+        handoff=brief.HandoffEvidence(
+            relative_path="[handoff](evil).md",
+            sha256=hashlib.sha256(handoff_text.encode()).hexdigest(),
+            text=handoff_text,
+        ),
+        truth_files=(),
+        visible_gaps=(),
+        conflicts=(),
+        verification_status="not_run",
+    )
+
+    rendered = brief.render_opportunity_brief(snapshot, ranking)
+    lowered = rendered.casefold()
+
+    assert "- Target path:" in rendered
+    assert "[target](evil)" not in rendered
+    assert "[branch](evil)" not in rendered
+    assert "[handoff](evil)" not in rendered
+    assert not re.search(r"(?<!\\)!?\[[^\]\n]*\]\([^\n)]*\)", rendered)
+    assert "<script" not in lowered
+    assert "def leaked" not in lowered
+    assert "source_excerpt" not in lowered
+    assert "source statement withheld: ambiguous status language" in rendered
+    assert not re.search(r"\b(?:sufficient|implemented|confirmed)\b", lowered)
+
+
+def test_renderer_labels_selected_negative_evidence_as_a_negative_lesson(
+    tmp_path: Path,
+) -> None:
+    from tools import opportunity_brief as brief
+    from tools import opportunity_ranker as ranker
+
+    need = make_need(
+        brief,
+        "Prevent mutable evidence loss during replay.",
+        "prevent mutable evidence loss replay",
+        category="risk",
+    )
+    mapping = make_record_mapping()
+    mapping["problem"] = "Mutable replay logs lose evidence after partial failure."
+    mapping["mechanism"] = (
+        "Treat mutable replay logs as a negative lesson and require immutable receipts."
+    )
+    mapping["observed_effect"] = {
+        "status": "negative",
+        "text": "The mutable log lost evidence after a partial write.",
+    }
+    mapping["context"] = "Evidence replay recovery."
+    mapping["boundary"] = "The failed design is evidence to avoid, not a recommendation."
+    record = brief._parse_opportunity_record(
+        mapping,
+        target_repo_id="target-repo-01",
+    )
+    candidate = brief.OpportunityCandidate(
+        record_id=record_id_for(mapping),
+        record=record,
+        matches=(
+            brief.CandidateMatch(
+                need_id=need.need_id,
+                fts_rank=1,
+                semantic_rank=1,
+                rrf_score=2 / 61,
+            ),
+        ),
+    )
+    acquired = make_ranking_acquisition(
+        brief,
+        tmp_path,
+        (need,),
+        (candidate,),
+    )
+    ranking = ranker.rank_and_select(
+        needs=(need,),
+        handoff_text="## Risks\n\n- Prevent evidence loss during replay.\n",
+        acquired=acquired,
+    )
+    snapshot = brief.WipSnapshot(
+        target_path=tmp_path.absolute(),
+        target_revision=None,
+        target_repo_id="target-repo-01",
+        target_repo_id_is_exclusion_authoritative=True,
+        branch=None,
+        dirty_entries=(),
+        handoff=None,
+        truth_files=(),
+        visible_gaps=(),
+        conflicts=(),
+        verification_status="not_run",
+    )
+
+    rendered = brief.render_opportunity_brief(snapshot, ranking)
+
+    assert "### Negative lesson:" in rendered
+    assert "Why this negative lesson matters here (Inference)" in rendered
+    assert "Why it may help here (Inference)" not in rendered
 
 
 def test_acquisition_rejects_python_named_link_to_non_python_terminal(

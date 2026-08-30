@@ -12,6 +12,7 @@ from dataclasses import dataclass, field as dataclass_field
 from datetime import date
 import errno
 import hashlib
+import html
 import json
 import math
 import os
@@ -4346,10 +4347,11 @@ def render_opportunity_brief(snapshot: WipSnapshot, ranking: object) -> str:
         "",
         "## Starting point",
         "",
-        f"- Target: {snapshot.target_repo_id}",
-        f"- Revision: {revision}",
-        f"- Branch: {branch}",
-        f"- Handoff: {handoff}",
+        f"- Target: {_brief_scalar(snapshot.target_repo_id)}",
+        f"- Target path: {_brief_scalar(str(snapshot.target_path))}",
+        f"- Revision: {_brief_scalar(revision)}",
+        f"- Branch: {_brief_scalar(branch)}",
+        f"- Handoff: {_brief_scalar(handoff)}",
         "- Verification: Not run; candidates remain inspection hypotheses.",
         "",
         "## Cross-repo opportunities",
@@ -4369,9 +4371,16 @@ def render_opportunity_brief(snapshot: WipSnapshot, ranking: object) -> str:
         evidence = record.evidence
         files = ", ".join(evidence.source_files)
         symbols = ", ".join(evidence.source_symbols)
+        negative = record.observed_effect.status == "negative"
+        title_prefix = "Negative lesson: " if negative else ""
+        inference_label = (
+            "Why this negative lesson matters here (Inference)"
+            if negative
+            else "Why it may help here (Inference)"
+        )
         lines.extend(
             (
-                f"### {_brief_scalar(record.mechanism)}",
+                f"### {title_prefix}{_brief_scalar(record.mechanism)}",
                 f"- Problem: {_brief_scalar(record.problem)}",
                 f"- Mechanism: {_brief_scalar(record.mechanism)}",
                 (
@@ -4380,11 +4389,13 @@ def render_opportunity_brief(snapshot: WipSnapshot, ranking: object) -> str:
                 ),
                 f"- Context: {_brief_scalar(record.context)}",
                 f"- Boundary: {_brief_scalar(record.boundary)}",
-                f"- Why it may help here (Inference): {_brief_scalar(item.inference)}",
+                f"- {inference_label}: {_brief_scalar(item.inference)}",
                 (
                     f"- Evidence: {_brief_scalar(evidence.source_repo_name)}@"
-                    f"{evidence.source_revision}; files: {_brief_scalar(files)}; "
-                    f"symbols: {_brief_scalar(symbols)}; {evidence.license_type}"
+                    f"{_brief_scalar(evidence.source_revision)}; "
+                    f"files: {_brief_scalar(files)}; "
+                    f"symbols: {_brief_scalar(symbols)}; "
+                    f"{_brief_scalar(evidence.license_type)}"
                 ),
                 "",
             )
@@ -4403,13 +4414,47 @@ def render_opportunity_brief(snapshot: WipSnapshot, ranking: object) -> str:
             )
     else:
         lines.append("- No additional acquired candidate was rejected.")
-    return "\n".join(lines).rstrip() + "\n"
+    rendered = "\n".join(lines).rstrip() + "\n"
+    _validate_rendered_brief(rendered)
+    return rendered
 
 
 def _brief_scalar(value: str) -> str:
     """Keep record prose inside one Markdown field without adding source text."""
 
-    return " ".join(value.replace("`", "\\`").split())
+    checked = _checked_string(value, field="brief field", limit=MAX_PUBLIC_TEXT)
+    collapsed = " ".join(checked.split())
+    if re.search(r"\b(?:sufficient|implemented|confirmed)\b", collapsed, re.I):
+        collapsed = "source statement withheld: ambiguous status language"
+    elif _looks_code_shaped(collapsed):
+        collapsed = "source statement withheld: code-shaped content"
+    escaped = html.escape(collapsed, quote=True)
+    return re.sub(r"([\\`*_\[\]])", r"\\\1", escaped)
+
+
+def _looks_code_shaped(value: str) -> bool:
+    return bool(
+        re.search(
+            r"(?:```|~~~|source[_ -]?excerpt|"
+            r"<\s*/?\s*(?:script|style|pre|code)\b|"
+            r"(?:^|\s)(?:def|class|function|import)\s+[A-Za-z_]|"
+            r"(?:^|\s)return\s+|=>|:=)",
+            value,
+            re.I,
+        )
+    )
+
+
+def _validate_rendered_brief(rendered: str) -> None:
+    lowered = rendered.casefold()
+    if re.search(r"\b(?:sufficient|implemented|confirmed)\b", lowered):
+        raise OpportunityBriefError("brief contains ambiguous CAM status language")
+    if _looks_code_shaped(rendered):
+        raise OpportunityBriefError("brief contains code-shaped source content")
+    if re.search(r"(?<!\\)!?\[[^\]\n]*\]\([^\n)]*\)", rendered):
+        raise OpportunityBriefError("brief contains an unsafe dynamic Markdown link")
+    if re.search(r"<\s*[A-Za-z!/?]", rendered):
+        raise OpportunityBriefError("brief contains unsafe raw HTML")
 
 
 __all__ = [

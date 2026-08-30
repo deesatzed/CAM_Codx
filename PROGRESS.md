@@ -1,5 +1,36 @@
 # Progress
 
+## 2026-08-30 hardened opportunity evidence binding
+
+- Rank input now requires the exact recursively valid Task 5 acquisition
+  receipt and exact need/call/query identity. Candidate relevance and RRF are
+  limited to its recorded need matches; boundary conflicts reject before
+  threshold selection. Every selected record is bound into its selected need,
+  source, and equivalent-mechanism audits.
+- Handoff redundancy uses bounded per-span maximum containment. Additivity
+  counts only novel terms anchored to the need or source problem/context, and
+  equivalent-mechanism containment ignores unrelated padding. Public ranked
+  children and aggregate results carry canonical integrity bindings and
+  recompute their recursive Task 5 record and audit relations.
+- The renderer now includes the encoded target path, CommonMark-encodes every
+  dynamic snapshot/record/evidence scalar, neutralizes ambiguous CAM-status or
+  code-shaped source text, and rejects unsafe final output. Selected negative
+  evidence is explicitly presented as a `Negative lesson`.
+- TDD RED was `7 failed` for the ranking adversarial matrix. Direct documented
+  pytest first failed collection because `tools` was not importable; after the
+  allowed test-local project-root bootstrap, renderer behavior was RED at `2
+  failed, 2 passed`. The expanded opportunity surface is now `110 passed`.
+  Development Brief/method-resolver compatibility remains `403 passed`.
+  The comparable `PYTHONPATH=.` full run is `701 passed, 3 skipped, 2 failed`;
+  both failures remain the existing absent-sibling `CAM_CAM` path dependency
+  in `test_cam_control_plane_e2e.py` and `test_cam_documentation_contract.py`.
+  Literal repository-wide `pytest -q` still exposes six older test-module
+  `tools` import collection errors outside the two-file test ownership; the
+  Task 6 direct invocation is independently green. Direct Ruff and
+  `git diff --check` pass.
+- No CAM query, provider, mining, database, target, donor, configuration, or
+  profile operation was performed.
+
 ## 2026-08-30 cross-repository opportunity ranking and brief rendering
 
 - Added frozen, inspectable score components and complete selected/rejected,

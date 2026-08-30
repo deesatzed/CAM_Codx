@@ -1,5 +1,36 @@
 # Decisions
 
+## 2026-08-30: Bind opportunity ranking and rendering to admitted evidence
+
+Decision: ranking accepts only the exact, recursively revalidated Task 5
+`AcquisitionReceipt` and exact `NeedTheme` sequence whose IDs and queries equal
+the receipt calls. A candidate is scored only against the needs named by its
+`CandidateMatch` values; there is no cross-need RRF fallback. A boundary
+negation within a conservative local token window of an exact need overlap is
+a hard `boundary_conflict` rejection.
+
+Mechanism additivity admits only novel discriminative terms anchored to the
+exact need or source problem/context. Handoff redundancy uses maximum token
+containment over bounded individual handoff lines/sentences, and equivalent
+mechanisms use containment grouping, so appended unrelated words cannot dilute
+either decision. The exact score coefficients and frozen `0.48` threshold do
+not change.
+
+Reason: retrieval rank is evidence only for the query that produced it;
+unmatched needs, contradictory source boundaries, repeated handoff material,
+and arbitrary padding cannot support a target-facing selection. Frozen public
+ranking children carry canonical integrity digests, the aggregate result
+recomputes complete mechanism/source/need relations, and every selected record
+must appear in a selected need audit. `dataclasses.replace` therefore cannot
+silently detach a record, component, inference, or audit from its receipt.
+
+Safety: rendering recursively revalidates the snapshot and ranking, encodes
+every dynamic scalar for CommonMark, neutralizes ambiguous status language and
+code-shaped source material, and applies a final unsafe-output gate. Negative
+evidence is labeled `Negative lesson` with a distinct inference label rather
+than being described as a mechanism that may help. These are inspection
+dispositions, not target outcomes or implementation claims.
+
 ## 2026-08-30: Freeze opportunity ranking as inspectable ordering only
 
 Decision: cross-repository opportunity inspection uses the exact decomposed

@@ -2,15 +2,22 @@
 
 from __future__ import annotations
 
-from dataclasses import FrozenInstanceError
+from dataclasses import FrozenInstanceError, replace
 import hashlib
 import json
 from pathlib import Path
+import sys
+from types import SimpleNamespace
 
 import pytest
 
-from tools import opportunity_brief as brief
-from tools import opportunity_ranker as ranker
+
+PROJECT_ROOT = Path(__file__).parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+from tools import opportunity_brief as brief  # noqa: E402
+from tools import opportunity_ranker as ranker  # noqa: E402
 
 
 EVIDENCE_HANDOFF = """# Current handoff
@@ -268,7 +275,7 @@ def test_evidence_need_selects_only_imbora_with_exact_inspection_formula(
         "not_relevant_to_need",
         "not_additive_to_handoff",
     }
-    assert result.rejected_by_source["GenericAgent"].reason == "not_relevant_to_need"
+    assert result.rejected_by_source["GenericAgent"].reason == "boundary_conflict"
     for item in result.dispositions:
         components = item.components
         assert all(
@@ -489,6 +496,240 @@ def test_negative_lessons_are_selectable_and_cardinality_is_zero_to_five(
     assert len(result.dispositions) == 7
     assert {item.disposition for item in result.dispositions} == {"selected", "rejected"}
     assert len(result.source_audit) == 7
+
+
+def test_ranker_requires_exact_recursively_validated_acquisition_receipt(
+    tmp_path: Path,
+) -> None:
+    need = make_need("Preserve evidence replay.", "preserve evidence replay")
+    record = evidence_fixtures()[0]
+    candidate = make_candidate(record, (need,), rank=1)
+    acquired = make_receipt(tmp_path, (need,), (candidate,))
+
+    with pytest.raises(TypeError, match="AcquisitionReceipt"):
+        ranker.rank_and_select(
+            needs=(need,),
+            handoff_text=EVIDENCE_HANDOFF,
+            acquired=SimpleNamespace(candidates=(candidate,)),
+        )
+
+    object.__setattr__(record.evidence, "source_sha256", ("not-a-digest",))
+    with pytest.raises(ValueError, match="digest|sha256|record"):
+        ranker.rank_and_select(
+            needs=(need,),
+            handoff_text=EVIDENCE_HANDOFF,
+            acquired=acquired,
+        )
+
+
+def test_ranker_requires_exact_need_call_and_query_identity(tmp_path: Path) -> None:
+    acquired_need = make_need(
+        "Preserve evidence replay.",
+        "preserve evidence replay",
+    )
+    requested_need = make_need(
+        "Preserve evidence replay.",
+        "a different exact query",
+    )
+    acquired = make_receipt(tmp_path, (acquired_need,), ())
+
+    with pytest.raises(ValueError, match="need|call|query"):
+        ranker.rank_and_select(
+            needs=(requested_need,),
+            handoff_text=EVIDENCE_HANDOFF,
+            acquired=acquired,
+        )
+
+
+def test_candidate_scores_only_the_needs_named_by_its_matches(tmp_path: Path) -> None:
+    evidence_need = make_need(
+        "Preserve experiment evidence with replay verification.",
+        "experiment evidence replay verification",
+    )
+    unrelated_need = make_need(
+        "Render a lunar shader with spectral caustics.",
+        "lunar shader spectral caustics",
+        category="risk",
+    )
+    record = evidence_fixtures()[0]
+    candidate = make_candidate(record, (unrelated_need,), rank=1)
+    acquired = make_receipt(
+        tmp_path,
+        (evidence_need, unrelated_need),
+        (candidate,),
+    )
+
+    result = ranker.rank_and_select(
+        needs=(evidence_need, unrelated_need),
+        handoff_text="## Risks\n\n- Render a lunar shader with spectral caustics.\n",
+        acquired=acquired,
+    )
+
+    assert result.selected == ()
+    assert result.rejected[0].matched_need_ids == (unrelated_need.need_id,)
+    assert result.rejected[0].components.normalized_rrf == 1.0
+    assert result.rejected[0].reason == "not_relevant_to_need"
+
+
+def test_boundary_conflict_is_a_hard_rejection(tmp_path: Path) -> None:
+    need = make_need(
+        "Preserve evidence replay receipts.",
+        "preserve evidence replay receipts",
+    )
+    record = make_record(
+        source="boundary-source",
+        problem="Evidence replay lacks durable receipts.",
+        mechanism="Bind evidence replay receipts to immutable artifact digests.",
+        context="Evidence replay verification after workspace relocation.",
+        boundary="This mechanism is unrelated to evidence replay in persistent repositories.",
+    )
+    acquired = make_receipt(
+        tmp_path,
+        (need,),
+        (make_candidate(record, (need,), rank=1),),
+    )
+
+    result = ranker.rank_and_select(
+        needs=(need,),
+        handoff_text="## Blockers\n\n- Preserve evidence integrity.\n",
+        acquired=acquired,
+    )
+
+    assert result.selected == ()
+    assert result.rejected[0].reason == "boundary_conflict"
+    assert result.rejected[0].components.cross_context_transfer == 0.0
+
+
+def test_padding_cannot_hide_handoff_redundancy_or_invent_additivity(
+    tmp_path: Path,
+) -> None:
+    need = make_need(
+        "Preserve evidence replay receipts.",
+        "preserve evidence replay receipts",
+    )
+    filler = " ".join(f"ornament{index}" for index in range(40))
+    duplicated = make_record(
+        source="duplicated",
+        problem="Evidence replay lacks receipts.",
+        mechanism=f"Bind replay receipts to artifact digests. {filler}",
+        context="Evidence replay integrity.",
+        boundary="Does not provide off-device recovery.",
+    )
+    filler_only = make_record(
+        source="filler",
+        problem="Evidence replay lacks receipts.",
+        mechanism=f"Replay {filler}",
+        context="Evidence replay integrity.",
+        boundary="Does not provide off-device recovery.",
+    )
+    acquired = make_receipt(
+        tmp_path,
+        (need,),
+        (
+            make_candidate(duplicated, (need,), rank=1),
+            make_candidate(filler_only, (need,), rank=2),
+        ),
+    )
+
+    result = ranker.rank_and_select(
+        needs=(need,),
+        handoff_text=(
+            "## Blockers\n\n- Preserve evidence replay.\n"
+            "- Bind replay receipts to artifact digests.\n"
+        ),
+        acquired=acquired,
+    )
+
+    assert result.selected == ()
+    assert result.rejected_by_source["duplicated"].reason == "not_additive_to_handoff"
+    assert result.rejected_by_source["filler"].reason == "not_additive_to_handoff"
+    assert result.rejected_by_source["duplicated"].components.redundancy_penalty == 1.0
+
+
+def test_equivalent_mechanism_grouping_ignores_unrelated_padding(
+    tmp_path: Path,
+) -> None:
+    need = make_need(
+        "Preserve evidence replay receipts.",
+        "preserve evidence replay receipts",
+    )
+    first = make_record(
+        source="source-a",
+        problem="Evidence replay lacks artifact receipts.",
+        mechanism="Bind replay receipts to artifact digests.",
+        context="Evidence replay integrity across workspaces.",
+        boundary="Does not provide off-device recovery.",
+    )
+    padded = make_record(
+        source="source-b",
+        problem="Evidence replay lacks artifact receipts.",
+        mechanism=(
+            "Bind replay receipts to artifact digests. "
+            + " ".join(f"decoration{index}" for index in range(30))
+        ),
+        context="Evidence replay integrity across workspaces.",
+        boundary="Does not provide off-device recovery.",
+    )
+    acquired = make_receipt(
+        tmp_path,
+        (need,),
+        (
+            make_candidate(first, (need,), rank=1),
+            make_candidate(padded, (need,), rank=2),
+        ),
+    )
+
+    result = ranker.rank_and_select(
+        needs=(need,),
+        handoff_text="## Blockers\n\n- Preserve evidence integrity.\n",
+        acquired=acquired,
+    )
+
+    assert len(result.mechanism_audit) == 1
+    assert set(result.mechanism_audit[0].record_ids) == {
+        record_id(first),
+        record_id(padded),
+    }
+
+
+def test_public_ranking_receipts_reject_replace_forgery(tmp_path: Path) -> None:
+    need = make_need(
+        "Preserve experiment evidence with replay verification.",
+        "experiment evidence replay verification",
+    )
+    record = evidence_fixtures()[0]
+    acquired = make_receipt(
+        tmp_path,
+        (need,),
+        (make_candidate(record, (need,), rank=1),),
+    )
+    result = ranker.rank_and_select(
+        needs=(need,),
+        handoff_text="## Blockers\n\n- Preserve evidence integrity.\n",
+        acquired=acquired,
+    )
+    selected = result.selected[0]
+
+    with pytest.raises(ValueError, match="integrity|canonical"):
+        replace(selected, inference="Forged target claim.")
+    with pytest.raises(ValueError, match="integrity|canonical|record_id"):
+        replace(selected, record_id="opp_" + "f" * 32)
+    forged_components = replace(selected.components, evidence_quality=0.5)
+    forged_score = (
+        0.35 * forged_components.normalized_rrf
+        + 0.25 * forged_components.need_relevance
+        + 0.20 * forged_components.additive_beyond_handoff
+        + 0.15 * forged_components.evidence_quality
+        + 0.05 * forged_components.cross_context_transfer
+        - 0.20 * forged_components.generic_match_penalty
+        - 0.25 * forged_components.redundancy_penalty
+    )
+    with pytest.raises(ValueError, match="integrity|canonical"):
+        replace(selected, components=forged_components, ranking_score=forged_score)
+    with pytest.raises(ValueError, match="integrity|audit|canonical"):
+        replace(result, mechanism_audit=())
+    with pytest.raises(ValueError, match="integrity|audit|canonical"):
+        replace(result, need_audit=())
 
 
 def test_ranker_rejects_invalid_selection_bounds(tmp_path: Path) -> None:
