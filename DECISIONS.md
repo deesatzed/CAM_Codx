@@ -1,5 +1,28 @@
 # Decisions
 
+## 2026-08-30: Freeze opportunity ranking as inspectable ordering only
+
+Decision: cross-repository opportunity inspection uses the exact decomposed
+score `0.35 normalized_rrf + 0.25 need_relevance + 0.20
+additive_beyond_handoff + 0.15 evidence_quality + 0.05
+cross_context_transfer - 0.20 generic_match_penalty - 0.25
+redundancy_penalty`. Every component is bounded to `[0, 1]` and retained in a
+frozen disposition receipt. The minimum selection score is frozen at `0.48`,
+with zero to five records selected after prioritizing source diversity and
+deduplicating normalized mechanism identities.
+
+Reason: `0.48` was fixed before the production implementation went GREEN. In
+the public evidence-preservation fixture it admits the source-grounded Imbora
+replay mechanism while Buzz, GenericAgent, an unrelated shader need, and a
+handoff-equivalent mechanism abstain. A later threshold change requires an
+explicit fixture amendment and a new decision; it cannot be hidden tuning.
+
+Safety: this number orders bounded human inspection candidates. It does not
+establish target usefulness, implementation status, scientific validity, or a
+verified outcome. Rendered target mappings are explicitly labeled
+`Inference`, preserve source evidence identity and boundaries, and omit
+granular implementation steps.
+
 ## 2026-08-24: Decompose task obligations locally before corpus acquisition
 
 Decision: CAM_Codx converts bounded public task text into frozen obligations

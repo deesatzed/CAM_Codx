@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import sys
 import time
+from types import SimpleNamespace
 import unicodedata
 
 import pytest
@@ -2532,6 +2533,120 @@ def test_acquisition_rejects_unsupported_launcher_shebangs_before_spawn(
             semantic_model_path=model_path,
             target_repo_id="target-repo-01",
         )
+
+
+def test_rendered_cross_repo_brief_has_exact_sections_and_source_bound_fields(
+    tmp_path: Path,
+) -> None:
+    brief = load_module()
+    from tools import opportunity_ranker as ranker
+
+    problem = "Evidence receipts do not survive relocation."
+    need = make_need(brief, problem, "evidence receipt relocation verification")
+    mapping = make_record_mapping()
+    record = brief._parse_opportunity_record(
+        mapping,
+        target_repo_id="target-repo-01",
+    )
+    candidate = brief.OpportunityCandidate(
+        record_id=record_id_for(mapping),
+        record=record,
+        matches=(
+            brief.CandidateMatch(
+                need_id=need.need_id,
+                fts_rank=1,
+                semantic_rank=1,
+                rrf_score=2 / 61,
+            ),
+        ),
+    )
+    acquired = SimpleNamespace(
+        candidates=(candidate,),
+        gaps=(),
+        source_excerpt="def PRIVATE_SOURCE_EXCERPT(): return 'must not render'",
+    )
+    handoff_text = (
+        "# Current handoff\n\n## Blockers\n\n"
+        "- Evidence receipts do not survive relocation.\n"
+    )
+    ranking = ranker.rank_and_select(
+        needs=(need,),
+        handoff_text=handoff_text,
+        acquired=acquired,
+    )
+    snapshot = brief.WipSnapshot(
+        target_path=tmp_path,
+        target_revision="d" * 40,
+        target_repo_id="target-repo-01",
+        target_repo_id_is_exclusion_authoritative=True,
+        branch="feature/evidence",
+        dirty_entries=(),
+        handoff=brief.HandoffEvidence(
+            relative_path="HANDOFF_LATEST.md",
+            sha256=hashlib.sha256(handoff_text.encode()).hexdigest(),
+            text=handoff_text,
+        ),
+        truth_files=("GOAL.md",),
+        visible_gaps=(),
+        conflicts=(),
+        verification_status="not_run",
+    )
+
+    rendered = brief.render_opportunity_brief(snapshot, ranking)
+
+    assert rendered.startswith("# Cross-Repo Opportunity Brief\n")
+    assert "\n## Starting point\n" in rendered
+    assert "\n## Cross-repo opportunities\n" in rendered
+    assert "\n## What CAM did not find\n" in rendered
+    assert "- Problem: Evidence receipts do not survive relocation." in rendered
+    assert "- Mechanism: Bind append-only receipts to content digests." in rendered
+    assert "- Observed effect: Observed — Relocated receipts retained" in rendered
+    assert "- Context: A local verification runner" in rendered
+    assert "- Boundary: This does not establish scientific correctness." in rendered
+    assert "- Why it may help here (Inference):" in rendered
+    assert "- Evidence: donor@" + "a" * 40 in rendered
+    assert "src/receipt.py" in rendered
+    assert "ReceiptChain" in rendered
+    assert "MIT" in rendered
+    assert "PRIVATE_SOURCE_EXCERPT" not in rendered
+    lowered = rendered.casefold()
+    for forbidden_claim in ("sufficient", "implemented", "confirmed"):
+        assert forbidden_claim not in lowered
+    assert "implementation steps" not in lowered
+
+
+def test_rendered_cross_repo_brief_preserves_honest_empty_selection(
+    tmp_path: Path,
+) -> None:
+    brief = load_module()
+    from tools import opportunity_ranker as ranker
+
+    problem = "Render a lunar shader with spectral caustics."
+    need = make_need(brief, problem, "lunar shader spectral caustics")
+    ranking = ranker.rank_and_select(
+        needs=(need,),
+        handoff_text=f"## Blockers\n\n- {problem}\n",
+        acquired=SimpleNamespace(candidates=(), gaps=()),
+    )
+    snapshot = brief.WipSnapshot(
+        target_path=tmp_path,
+        target_revision=None,
+        target_repo_id="target-repo-01",
+        target_repo_id_is_exclusion_authoritative=True,
+        branch=None,
+        dirty_entries=(),
+        handoff=None,
+        truth_files=(),
+        visible_gaps=("No handoff was selected.",),
+        conflicts=(),
+        verification_status="not_run",
+    )
+
+    rendered = brief.render_opportunity_brief(snapshot, ranking)
+
+    assert "## Cross-repo opportunities\n\n- No opportunity met" in rendered
+    assert "## What CAM did not find" in rendered
+    assert need.problem in rendered
 
 
 def test_acquisition_rejects_python_named_link_to_non_python_terminal(

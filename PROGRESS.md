@@ -1,5 +1,30 @@
 # Progress
 
+## 2026-08-30 cross-repository opportunity ranking and brief rendering
+
+- Added frozen, inspectable score components and complete selected/rejected,
+  equivalent-mechanism, source, and need audits. The fixed `0.48` threshold
+  admits zero to five records; exact-need relevance, handoff novelty,
+  normalized mechanism grouping, source diversity, cross-need deduplication,
+  and negative lessons are covered by source-neutral fixtures.
+- Added a deterministic Markdown renderer with the required starting-point,
+  opportunity, and abstention headings. Every selected item preserves all six
+  source record fields, labels the target mapping `Inference`, and identifies
+  repository revision, files, symbols, and license without emitting source
+  excerpts or granular implementation steps.
+- Strict TDD first failed during collection because the ranker did not exist.
+  The first behavioral run then reported `2 failed, 11 passed`; the failures
+  exposed boilerplate-induced unrelated relevance and a diversity fixture
+  confounded by handoff redundancy. The corrected focused gate is `101
+  passed`; Development Brief and method-resolver compatibility is `403
+  passed`. The complete repository run is `692 passed, 3 skipped, 2 failed`:
+  both failures are the existing workspace-path dependency on the absent
+  sibling `/Volumes/WS4TB/waswikiT/repos2mine/CAM_CAM` in
+  `test_cam_control_plane_e2e.py` and `test_cam_documentation_contract.py`,
+  not a Task 6 regression. Direct Ruff and `git diff --check` pass.
+- This work performed no CAM query, provider call, mining, database access,
+  target write, configuration/profile change, or donor-source inspection.
+
 ## 2026-08-24 original-order Unicode and leakage skeleton
 
 - Unicode validation now scans the original scalar order before NFKC and scans

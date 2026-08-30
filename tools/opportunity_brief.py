@@ -4326,6 +4326,92 @@ def _to_need_theme(candidate: _Candidate) -> NeedTheme:
     )
 
 
+def render_opportunity_brief(snapshot: WipSnapshot, ranking: object) -> str:
+    """Render selected opportunities without converting them into a build plan."""
+
+    from tools.opportunity_ranker import RankingResult
+
+    if type(snapshot) is not WipSnapshot:
+        raise TypeError("snapshot must be a WipSnapshot")
+    snapshot.__post_init__()
+    if type(ranking) is not RankingResult:
+        raise TypeError("ranking must be a RankingResult")
+    ranking.__post_init__()
+
+    revision = snapshot.target_revision or "not available"
+    branch = snapshot.branch or "not available"
+    handoff = snapshot.handoff.relative_path if snapshot.handoff is not None else "not available"
+    lines = [
+        "# Cross-Repo Opportunity Brief",
+        "",
+        "## Starting point",
+        "",
+        f"- Target: {snapshot.target_repo_id}",
+        f"- Revision: {revision}",
+        f"- Branch: {branch}",
+        f"- Handoff: {handoff}",
+        "- Verification: Not run; candidates remain inspection hypotheses.",
+        "",
+        "## Cross-repo opportunities",
+        "",
+    ]
+    if not ranking.selected:
+        lines.append(
+            f"- No opportunity met the frozen inspection threshold ({ranking.minimum_score:.2f})."
+        )
+    for item in ranking.selected:
+        record = item.record
+        effect_label = {
+            "observed": "Observed",
+            "intended": "Intended",
+            "negative": "Negative",
+        }[record.observed_effect.status]
+        evidence = record.evidence
+        files = ", ".join(evidence.source_files)
+        symbols = ", ".join(evidence.source_symbols)
+        lines.extend(
+            (
+                f"### {_brief_scalar(record.mechanism)}",
+                f"- Problem: {_brief_scalar(record.problem)}",
+                f"- Mechanism: {_brief_scalar(record.mechanism)}",
+                (
+                    f"- Observed effect: {effect_label} — "
+                    f"{_brief_scalar(record.observed_effect.text)}"
+                ),
+                f"- Context: {_brief_scalar(record.context)}",
+                f"- Boundary: {_brief_scalar(record.boundary)}",
+                f"- Why it may help here (Inference): {_brief_scalar(item.inference)}",
+                (
+                    f"- Evidence: {_brief_scalar(evidence.source_repo_name)}@"
+                    f"{evidence.source_revision}; files: {_brief_scalar(files)}; "
+                    f"symbols: {_brief_scalar(symbols)}; {evidence.license_type}"
+                ),
+                "",
+            )
+        )
+
+    lines.extend(("## What CAM did not find", ""))
+    if ranking.rejected:
+        for item in ranking.rejected:
+            lines.append(
+                f"- {_brief_scalar(item.source_repo_name)}: {item.reason.replace('_', ' ')}."
+            )
+    elif not ranking.selected:
+        for audit in ranking.need_audit:
+            lines.append(
+                f"- No selected source-grounded candidate for: {_brief_scalar(audit.problem)}"
+            )
+    else:
+        lines.append("- No additional acquired candidate was rejected.")
+    return "\n".join(lines).rstrip() + "\n"
+
+
+def _brief_scalar(value: str) -> str:
+    """Keep record prose inside one Markdown field without adding source text."""
+
+    return " ".join(value.replace("`", "\\`").split())
+
+
 __all__ = [
     "AcquisitionCall",
     "AcquisitionGap",
@@ -4345,4 +4431,5 @@ __all__ = [
     "acquire_opportunities",
     "extract_need_themes",
     "inspect_wip_repository",
+    "render_opportunity_brief",
 ]
