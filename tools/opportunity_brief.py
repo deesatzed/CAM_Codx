@@ -50,6 +50,8 @@ TRUTH_FILE_NAMES = (
     "TASK_QUEUE.md",
     "AGENTS.md",
 )
+MAX_TRUTH_FILES = len(TRUTH_FILE_NAMES)
+MAX_CONFLICTS = 64
 
 _SKIPPED_DIRECTORY_NAMES = frozenset(
     {
@@ -109,23 +111,14 @@ _ATX_HEADING_PATTERN = re.compile(r"^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$")
 _PLAIN_HEADING_PATTERN = re.compile(r"^\s*([A-Za-z][A-Za-z /&-]{1,48}):\s*$")
 _SETEXT_PATTERN = re.compile(r"^\s{0,3}(?:={3,}|-{3,})\s*$")
 _FENCE_PATTERN = re.compile(r"^\s{0,3}(`{3,}|~{3,}).*$")
-_BULLET_PATTERN = re.compile(r"^\s*(?:[-*+]\s+|\d{1,3}[.)]\s+)(.+?)\s*$")
+_BULLET_PATTERN = re.compile(r"^(?:[-*+]\s+|\d{1,3}[.)]\s+)(.+?)\s*$")
 _PRIORITY_PATTERN = re.compile(
     r"^\s*(?:\[\s*(P[0-2])\s*\]\s*:?\s*|\*{0,2}(P[0-2])\*{0,2}\s*:)\s*",
     re.IGNORECASE,
 )
-_BRANCH_CLAIM_PATTERN = re.compile(
-    r"^\s*(?:[-*+]\s+)?\*{0,2}branch\*{0,2}\s*:\s*`?([^`\s]+)`?\s*$",
-    re.IGNORECASE,
-)
-_REVISION_CLAIM_PATTERN = re.compile(
-    r"^\s*(?:[-*+]\s+)?\*{0,2}(?:revision|head|commit)\*{0,2}\s*:\s*"
-    r"`?([0-9a-f]{7,64})`?\s*$",
-    re.IGNORECASE,
-)
-_REVISION_CLAIM_ANY_PATTERN = re.compile(
-    r"^\s*(?:[-*+]\s+)?\*{0,2}(?:revision|head|commit)\*{0,2}\s*:\s*"
-    r"`?([^`\s]+)`?\s*$",
+_CHECKOUT_CLAIM_PATTERN = re.compile(
+    r"^\s*(?:[-*+]\s+)?\*{0,2}(?P<label>branch|revision|head|commit)"
+    r"\*{0,2}\s*:(?P<value>.*)$",
     re.IGNORECASE,
 )
 _RAW_HTML_OPEN_PATTERN = re.compile(
@@ -257,7 +250,12 @@ class HandoffEvidence:
 
 @dataclass(frozen=True, slots=True)
 class WipSnapshot:
-    """Deeply immutable snapshot of bounded target evidence."""
+    """Deeply immutable snapshot of bounded target evidence.
+
+    The authority flag records how :func:`inspect_wip_repository` was called.
+    Exclusion consumers must require an explicit identity during inspection;
+    they must not trust the flag on a manually constructed snapshot.
+    """
 
     target_path: Path
     target_revision: str | None
@@ -294,12 +292,16 @@ class WipSnapshot:
         if self.handoff is not None and type(self.handoff) is not HandoffEvidence:
             raise TypeError("handoff must be HandoffEvidence or None")
         truth = _checked_tuple(self.truth_files, field="truth_files", item_limit=1_024)
+        if len(truth) > MAX_TRUTH_FILES:
+            raise ValueError("truth_files exceeds its cardinality bound")
         for item in truth:
             _checked_relative_path(item, field="truth_files item")
         gaps = _checked_tuple(self.visible_gaps, field="visible_gaps", item_limit=4_096)
         if len(gaps) > MAX_GAPS:
             raise ValueError("visible_gaps exceeds its bound")
-        _checked_tuple(self.conflicts, field="conflicts", item_limit=4_096)
+        conflicts = _checked_tuple(self.conflicts, field="conflicts", item_limit=4_096)
+        if len(conflicts) > MAX_CONFLICTS:
+            raise ValueError("conflicts exceeds its cardinality bound")
         if self.verification_status != "not_run":
             raise ValueError("verification_status must be 'not_run'")
         if type(self.target_repo_id_is_exclusion_authoritative) is not bool:
@@ -1082,29 +1084,46 @@ def _find_checkout_conflicts(
     for line in _visible_markdown_lines(handoff.text):
         if line is None:
             continue
-        branch_match = _BRANCH_CLAIM_PATTERN.fullmatch(line)
-        if branch_match:
-            claimed_branch = branch_match.group(1)
-            if branch is not None and claimed_branch != branch:
+        claim = _CHECKOUT_CLAIM_PATTERN.fullmatch(line)
+        if claim is None:
+            continue
+        label = claim.group("label").casefold()
+        raw_value = claim.group("value").strip()
+        token = _balanced_claim_token(raw_value)
+        if label == "branch":
+            if token is None:
                 conflicts.append(
-                    f"handoff branch {claimed_branch!r} conflicts with live branch {branch!r}"
+                    f"handoff branch claim {raw_value!r} is malformed"
                 )
-            continue
-        revision_match = _REVISION_CLAIM_PATTERN.fullmatch(line)
-        if revision_match:
-            if revision is not None:
-                claimed_revision = revision_match.group(1)
-                if not revision.casefold().startswith(claimed_revision.casefold()):
-                    conflicts.append(
-                        f"handoff revision {claimed_revision!r} conflicts with live revision {revision!r}"
-                    )
-            continue
-        malformed_revision = _REVISION_CLAIM_ANY_PATTERN.fullmatch(line)
-        if malformed_revision:
+            elif branch is not None and token != branch:
+                conflicts.append(
+                    f"handoff branch {token!r} conflicts with live branch {branch!r}"
+                )
+        elif token is None or re.fullmatch(r"[0-9a-f]{7,64}", token, re.IGNORECASE) is None:
             conflicts.append(
-                f"handoff revision claim {malformed_revision.group(1)!r} is malformed"
+                f"handoff {label} claim {raw_value!r} is malformed"
+            )
+        elif revision is not None and not revision.casefold().startswith(token.casefold()):
+            conflicts.append(
+                f"handoff {label} {token!r} conflicts with live revision {revision!r}"
             )
     return tuple(dict.fromkeys(conflicts))
+
+
+def _balanced_claim_token(value: str) -> str | None:
+    if not value:
+        return None
+    if value.startswith("`") or value.endswith("`"):
+        if len(value) < 3 or not value.startswith("`") or not value.endswith("`"):
+            return None
+        if value.count("`") != 2:
+            return None
+        value = value[1:-1]
+    elif "`" in value:
+        return None
+    if not value or any(character.isspace() for character in value):
+        return None
+    return value
 
 
 def _validate_need_bounds(minimum: int, maximum: int) -> None:
@@ -1127,7 +1146,8 @@ def _visible_markdown_lines(text: str) -> tuple[str | None, ...]:
     in_comment = False
     fence_character: str | None = None
     fence_length = 0
-    raw_html_tag: str | None = None
+    html_mode: str | None = None
+    html_token = ""
     for raw_line in text.splitlines():
         if len(visible) >= MAX_MARKDOWN_LINES:
             raise OpportunityBriefError("handoff Markdown line count exceeds its bound")
@@ -1142,9 +1162,10 @@ def _visible_markdown_lines(text: str) -> tuple[str | None, ...]:
                 fence_length = 0
             visible.append(None)
             continue
-        if raw_html_tag is not None:
-            if re.search(rf"</\s*{re.escape(raw_html_tag)}\s*>", line, re.IGNORECASE):
-                raw_html_tag = None
+        if html_mode is not None:
+            if _html_block_finished(html_mode, html_token, line):
+                html_mode = None
+                html_token = ""
             visible.append(None)
             continue
         if _is_indented_markdown_code(raw_line):
@@ -1157,15 +1178,38 @@ def _visible_markdown_lines(text: str) -> tuple[str | None, ...]:
             fence_length = len(marker)
             visible.append(None)
             continue
-        raw_html = _RAW_HTML_OPEN_PATTERN.match(line)
-        if raw_html:
-            tag = raw_html.group("tag").casefold()
-            if re.search(rf"</\s*{re.escape(tag)}\s*>", line, re.IGNORECASE) is None:
-                raw_html_tag = tag
+        html_block = _html_block_start(line)
+        if html_block is not None:
+            mode, token = html_block
+            if not _html_block_finished(mode, token, line):
+                html_mode, html_token = mode, token
             visible.append(None)
             continue
         visible.append(line)
     return tuple(visible)
+
+
+def _html_block_start(line: str) -> tuple[str, str] | None:
+    raw_html = _RAW_HTML_OPEN_PATTERN.match(line)
+    if raw_html:
+        return "closing_tag", raw_html.group("tag").casefold()
+    if re.match(r"^\s{0,3}<\?", line):
+        return "terminator", "?>"
+    if re.match(r"^\s{0,3}<!\[CDATA\[", line):
+        return "terminator", "]]>"
+    if re.match(r"^\s{0,3}<![A-Z]", line):
+        return "terminator", ">"
+    if re.match(r"^\s{0,3}</?[A-Za-z][A-Za-z0-9-]*(?:\s|/?>|$)", line):
+        return "blank", ""
+    return None
+
+
+def _html_block_finished(mode: str, token: str, line: str) -> bool:
+    if mode == "blank":
+        return not line.strip()
+    if mode == "closing_tag":
+        return re.search(rf"</\s*{re.escape(token)}\s*>", line, re.IGNORECASE) is not None
+    return token in line
 
 
 def _is_indented_markdown_code(line: str) -> bool:

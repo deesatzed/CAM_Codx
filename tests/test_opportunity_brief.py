@@ -995,3 +995,137 @@ def test_valid_revision_claim_without_live_git_revision_is_not_malformed(tmp_pat
     snapshot = brief.inspect_wip_repository(target)
 
     assert not any("malformed" in conflict for conflict in snapshot.conflicts)
+
+
+def test_need_parser_accepts_only_direct_section_list_children(tmp_path: Path) -> None:
+    brief = load_module()
+    target = tmp_path / "direct-needs"
+    target.mkdir()
+    text = """## Blockers
+- [P0] Direct blocker.
+ - [P0] One-space implementation step must be ignored.
+  - [P0] Two-space implementation step must be ignored.
+   1. [P0] Three-space implementation step must be ignored.
+
+## Risks
+- [P1] Direct risk.
+
+## Open Questions
+- [P2] Direct question?
+"""
+    (target / "HANDOFF_LATEST.md").write_text(text, encoding="utf-8")
+
+    needs = brief.extract_need_themes(brief.inspect_wip_repository(target))
+
+    assert [need.problem for need in needs] == ["Direct blocker.", "Direct risk.", "Direct question?"]
+
+
+def test_markdown_lexer_masks_all_commonmark_html_block_families(tmp_path: Path) -> None:
+    brief = load_module()
+    target = tmp_path / "html-blocks"
+    target.mkdir()
+    text = """## Blockers
+- [P0] Direct blocker.
+<div class="example">
+- [P0] Div example must be ignored.
+</div>
+
+<details>
+- [P0] Details example must be ignored.
+</details>
+
+<table>
+- [P0] Table example must be ignored.
+</table>
+
+<blockquote>
+- [P0] Quote example must be ignored.
+</blockquote>
+
+<?example
+- [P0] Processing example must be ignored.
+?>
+
+<!DOCTYPE
+- [P0] Declaration example must be ignored.
+>
+
+<![CDATA[
+- [P0] CDATA example must be ignored.
+]]>
+
+<custom-element data-example="true">
+- [P0] Generic HTML example must be ignored.
+</custom-element>
+
+## Risks
+- [P1] Direct risk.
+
+## Open Questions
+- [P2] Direct question?
+"""
+    (target / "HANDOFF_LATEST.md").write_text(text, encoding="utf-8")
+
+    needs = brief.extract_need_themes(brief.inspect_wip_repository(target))
+
+    assert [need.problem for need in needs] == ["Direct blocker.", "Direct risk.", "Direct question?"]
+
+
+def test_checkout_claim_labels_record_all_malformed_values(tmp_path: Path) -> None:
+    brief = load_module()
+    target = make_wip_repository(tmp_path)
+    malformed = (
+        "Revision:",
+        "Head: deadbeef annotated",
+        "Commit: `deadbeef",
+        "Revision: deadbeef`",
+        "Commit: `dead beef`",
+        "Branch:",
+        "Branch: feature branch",
+        "Branch: `feature/x` annotated",
+    )
+    valid_mismatches = (
+        "Head: `deadbeef`",
+        "Branch: `archived-work`",
+    )
+    text = "\n".join((*malformed, *valid_mismatches)) + "\n\n" + HANDOFF_TEXT
+    (target / "HANDOFF_LATEST.md").write_text(text, encoding="utf-8")
+
+    snapshot = brief.inspect_wip_repository(target)
+
+    malformed_conflicts = [item for item in snapshot.conflicts if "malformed" in item]
+    assert len(malformed_conflicts) == len(malformed)
+    assert all(any(label.casefold() in item.casefold() for item in malformed_conflicts) for label in (
+        "revision",
+        "head",
+        "commit",
+        "branch",
+    ))
+    assert any("deadbeef" in item and "live revision" in item for item in snapshot.conflicts)
+    assert any("archived-work" in item and "live branch" in item for item in snapshot.conflicts)
+
+
+def test_public_snapshot_truth_and_conflict_cardinality_are_bounded(tmp_path: Path) -> None:
+    brief = load_module()
+    common = {
+        "target_path": tmp_path,
+        "target_revision": None,
+        "target_repo_id": "target-repo-01",
+        "branch": None,
+        "dirty_entries": (),
+        "handoff": None,
+        "visible_gaps": (),
+        "verification_status": "not_run",
+    }
+    with pytest.raises(ValueError, match="truth_files.*bound"):
+        brief.WipSnapshot(
+            **common,
+            truth_files=tuple(f"TRUTH_{index}.md" for index in range(8)),
+            conflicts=(),
+        )
+    with pytest.raises(ValueError, match="conflicts.*bound"):
+        brief.WipSnapshot(
+            **common,
+            truth_files=(),
+            conflicts=tuple(f"conflict {index}" for index in range(65)),
+        )
