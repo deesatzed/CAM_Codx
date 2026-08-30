@@ -6,8 +6,11 @@ target, loads a provider, opens CAM data, or creates implementation steps.
 
 from __future__ import annotations
 
+import ast
+from contextvars import ContextVar
 from dataclasses import dataclass
 from datetime import date
+import errno
 import hashlib
 import json
 import math
@@ -19,10 +22,12 @@ import signal
 import shutil
 import stat
 import subprocess
+import sys
 import tempfile
 import time
 from typing import Literal
 import unicodedata
+from urllib.parse import unquote, urlparse
 
 
 VerificationStatus = Literal["not_run"]
@@ -61,8 +66,17 @@ MAX_COMMAND_BYTES = 64 * 1024 * 1024
 MAX_SIDECAR_BYTES = 768 * 1024 * 1024
 MAX_MODEL_ENTRIES = 16_384
 MAX_MODEL_BYTES = 16 * 1024 * 1024 * 1024
+MAX_CLOSURE_METADATA_FILES = 128
+MAX_CLOSURE_METADATA_BYTES = 8 * 1024 * 1024
+MAX_INTERPRETER_LINKS = 16
+HASH_PHASE_TIMEOUT_SECONDS = 15.0
 MAX_JSON_DEPTH = 16
 MAX_JSON_NODES = 50_000
+
+_HASH_DEADLINE: ContextVar[float | None] = ContextVar(
+    "opportunity_brief_hash_deadline",
+    default=None,
+)
 
 TRUTH_FILE_NAMES = (
     "GOAL.md",
@@ -633,6 +647,80 @@ class OpportunityCandidate:
 
 
 @dataclass(frozen=True, slots=True)
+class ExecutionClosureReceipt:
+    """Auditable binding for the launcher and every executable CAM dependency."""
+
+    launcher_kind: Literal["python", "native"]
+    interpreter_path: Path | None
+    interpreter_sha256: str | None
+    editable_metadata_sha256: str | None
+    cam_source_root: Path | None
+    cam_source_revision: str | None
+    cam_source_branch: str | None
+    cam_source_dirty_entries: tuple[str, ...]
+    cam_source_sha256: str | None
+    sha256: str
+
+    def __post_init__(self) -> None:
+        if self.launcher_kind not in {"python", "native"}:
+            raise ValueError("execution closure launcher kind is unsupported")
+        _validate_digest(self.sha256, field="execution closure digest")
+        if type(self.cam_source_dirty_entries) is not tuple:
+            raise TypeError("CAM source dirty entries must be a tuple")
+        if len(self.cam_source_dirty_entries) > MAX_DIRTY_ENTRIES:
+            raise ValueError("CAM source dirty entries exceed their bound")
+        for entry in self.cam_source_dirty_entries:
+            _checked_canonical_string(entry, field="CAM source dirty entry", limit=4_096)
+        if self.launcher_kind == "native":
+            if any(
+                value is not None
+                for value in (
+                    self.interpreter_path,
+                    self.interpreter_sha256,
+                    self.editable_metadata_sha256,
+                    self.cam_source_root,
+                    self.cam_source_revision,
+                    self.cam_source_branch,
+                    self.cam_source_sha256,
+                )
+            ) or self.cam_source_dirty_entries:
+                raise ValueError("native execution closures cannot claim Python artifacts")
+            return
+        if not isinstance(self.interpreter_path, Path) or not self.interpreter_path.is_absolute():
+            raise ValueError("Python execution closure requires an absolute interpreter path")
+        _validate_digest(self.interpreter_sha256, field="interpreter digest")
+        if self.editable_metadata_sha256 is not None:
+            _validate_digest(
+                self.editable_metadata_sha256,
+                field="editable metadata digest",
+            )
+        source_values = (
+            self.cam_source_root,
+            self.cam_source_revision,
+            self.cam_source_sha256,
+        )
+        if any(value is not None for value in source_values):
+            if not all(value is not None for value in source_values):
+                raise ValueError("CAM source closure fields must be complete")
+            if not isinstance(self.cam_source_root, Path) or not self.cam_source_root.is_absolute():
+                raise ValueError("CAM source root must be an absolute pathlib.Path")
+            if (
+                type(self.cam_source_revision) is not str
+                or _REVISION_PATTERN.fullmatch(self.cam_source_revision) is None
+            ):
+                raise ValueError("CAM source revision must be an immutable Git identity")
+            if self.cam_source_branch is not None:
+                _checked_canonical_string(
+                    self.cam_source_branch,
+                    field="CAM source branch",
+                    limit=256,
+                )
+            _validate_digest(self.cam_source_sha256, field="CAM source digest")
+        elif self.cam_source_branch is not None or self.cam_source_dirty_entries:
+            raise ValueError("CAM source state requires a CAM source root")
+
+
+@dataclass(frozen=True, slots=True)
 class AcquisitionCall:
     """Auditable query invocation without subprocess output or secrets."""
 
@@ -645,6 +733,7 @@ class AcquisitionCall:
     sidecar_sha256: str
     semantic_model_identity: DirectoryIdentity
     semantic_model_sha256: str
+    execution_closure_sha256: str
     status: QueryStatus
     result_count: int
     rejection_count: int
@@ -693,6 +782,10 @@ class AcquisitionCall:
             self.semantic_model_sha256,
             field="semantic model",
             require_single_link=False,
+        )
+        _validate_digest(
+            self.execution_closure_sha256,
+            field="execution closure digest",
         )
         if self.status not in {"ok", "query_failed"}:
             raise ValueError("query call status is unsupported")
@@ -762,6 +855,7 @@ class AcquisitionReceipt:
     semantic_model_path: Path
     semantic_model_identity: DirectoryIdentity
     semantic_model_sha256: str
+    execution_closure: ExecutionClosureReceipt
     calls: tuple[AcquisitionCall, ...]
     candidates: tuple[OpportunityCandidate, ...]
     rejections: tuple[AcquisitionRejection, ...]
@@ -806,6 +900,9 @@ class AcquisitionReceipt:
             field="semantic model",
             require_single_link=False,
         )
+        if type(self.execution_closure) is not ExecutionClosureReceipt:
+            raise TypeError("execution_closure must be an ExecutionClosureReceipt")
+        self.execution_closure.__post_init__()
         _validate_typed_tuple(
             self.calls,
             field="calls",
@@ -864,6 +961,7 @@ class AcquisitionReceipt:
             or call.sidecar_sha256 != self.sidecar_sha256
             or call.semantic_model_identity != self.semantic_model_identity
             or call.semantic_model_sha256 != self.semantic_model_sha256
+            or call.execution_closure_sha256 != self.execution_closure.sha256
             for call in self.calls
         ):
             raise ValueError("query call artifact identity or digest does not match receipt")
@@ -955,6 +1053,12 @@ def _validate_digest_tuple(value: object, *, field: str) -> None:
             raise ValueError(f"{field} contains a malformed digest")
 
 
+def _validate_digest(value: object, *, field: str) -> None:
+    checked = _checked_canonical_string(value, field=field, limit=64)
+    if _HEX_DIGEST_PATTERN.fullmatch(checked) is None:
+        raise ValueError(f"{field} must be a lowercase SHA-256 digest")
+
+
 def _validate_artifact_binding(
     identity: object,
     digest: object,
@@ -1026,6 +1130,42 @@ class _ModelArtifactSnapshot:
     identity: DirectoryIdentity
     entries: tuple[_ModelManifestEntry, ...]
     sha256: str
+
+
+@dataclass(frozen=True, slots=True)
+class _SymlinkSnapshot:
+    path: Path
+    identity: DirectoryIdentity
+    target: str
+
+
+@dataclass(frozen=True, slots=True)
+class _MetadataSnapshot:
+    files: tuple[_FileArtifactSnapshot, ...]
+    sha256: str
+
+
+@dataclass(frozen=True, slots=True)
+class _CamSourceSnapshot:
+    root: Path
+    root_identity: DirectoryIdentity
+    git: _GitSnapshot
+    manifest: _ModelArtifactSnapshot
+
+
+@dataclass(frozen=True, slots=True)
+class _ExecutionClosureSnapshot:
+    receipt: ExecutionClosureReceipt
+    interpreter_links: tuple[_SymlinkSnapshot, ...]
+    interpreter: _FileArtifactSnapshot | None
+    metadata: _MetadataSnapshot | None
+    source: _CamSourceSnapshot | None
+
+
+@dataclass(frozen=True, slots=True)
+class _PinnedCommandSnapshot:
+    launcher: _FileArtifactSnapshot
+    interpreter: _FileArtifactSnapshot | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1189,22 +1329,32 @@ def acquire_opportunities(
         model_id = str(model_path.resolve(strict=True))
     except (OSError, RuntimeError, ValueError) as error:
         raise OpportunityBriefError("semantic model path identity is unavailable") from error
-    executable_descriptor, executable = _pin_executable(command)
+    executable_descriptor: int | None = None
     pinned_directory: Path | None = None
-    pinned_snapshot: _FileArtifactSnapshot | None = None
     try:
-        _pinned_command, pinned_directory, pinned_snapshot = (
-            _materialize_pinned_executable(
+        hash_token = _HASH_DEADLINE.set(
+            time.monotonic() + HASH_PHASE_TIMEOUT_SECONDS
+        )
+        try:
+            executable_descriptor, executable = _pin_executable(command)
+            closure = _snapshot_execution_closure(
+                command,
                 executable_descriptor,
                 executable,
             )
-        )
-        sidecar_snapshot = _snapshot_single_link_file(
-            database,
-            label="sidecar",
-            byte_limit=MAX_SIDECAR_BYTES,
-        )
-        model_snapshot = _snapshot_model_directory(model_path)
+            pinned_directory, pinned_snapshot = _materialize_pinned_executable(
+                executable_descriptor,
+                executable,
+                closure,
+            )
+            sidecar_snapshot = _snapshot_single_link_file(
+                database,
+                label="sidecar",
+                byte_limit=MAX_SIDECAR_BYTES,
+            )
+            model_snapshot = _snapshot_model_directory(model_path)
+        finally:
+            _HASH_DEADLINE.reset(hash_token)
         calls: list[AcquisitionCall] = []
         gaps: list[AcquisitionGap] = []
         rejections: list[AcquisitionRejection] = []
@@ -1225,18 +1375,22 @@ def acquire_opportunities(
                 "20",
                 "--json",
             )
-            _assert_artifacts_unchanged(
+            _assert_acquisition_identities_unchanged(
                 executable_descriptor,
                 executable,
                 sidecar_snapshot,
                 model_snapshot,
+                closure,
+                pinned_snapshot,
             )
             completed = _run_query_bounded(argv, pinned_snapshot)
-            _assert_artifacts_unchanged(
+            _assert_acquisition_identities_unchanged(
                 executable_descriptor,
                 executable,
                 sidecar_snapshot,
                 model_snapshot,
+                closure,
+                pinned_snapshot,
             )
             call_binding = {
                 "executable_identity": executable.identity,
@@ -1245,6 +1399,7 @@ def acquire_opportunities(
                 "sidecar_sha256": sidecar_snapshot.sha256,
                 "semantic_model_identity": model_snapshot.identity,
                 "semantic_model_sha256": model_snapshot.sha256,
+                "execution_closure_sha256": closure.receipt.sha256,
             }
             if completed.returncode != 0:
                 if not _is_recoverable_query_failure(completed):
@@ -1306,12 +1461,20 @@ def acquire_opportunities(
                     record=prior.record,
                     matches=(*prior.matches, match),
                 )
-        _assert_artifacts_unchanged(
-            executable_descriptor,
-            executable,
-            sidecar_snapshot,
-            model_snapshot,
+        hash_token = _HASH_DEADLINE.set(
+            time.monotonic() + HASH_PHASE_TIMEOUT_SECONDS
         )
+        try:
+            _assert_acquisition_artifacts_unchanged(
+                executable_descriptor,
+                executable,
+                sidecar_snapshot,
+                model_snapshot,
+                closure,
+                pinned_snapshot,
+            )
+        finally:
+            _HASH_DEADLINE.reset(hash_token)
         return AcquisitionReceipt(
             target_repo_id=target,
             model_id=model_id,
@@ -1324,19 +1487,17 @@ def acquire_opportunities(
             semantic_model_path=model_path,
             semantic_model_identity=model_snapshot.identity,
             semantic_model_sha256=model_snapshot.sha256,
+            execution_closure=closure.receipt,
             calls=tuple(calls),
             candidates=tuple(candidates),
             rejections=tuple(rejections),
             gaps=tuple(gaps),
         )
     finally:
-        os.close(executable_descriptor)
+        if executable_descriptor is not None:
+            os.close(executable_descriptor)
         if pinned_directory is not None:
-            try:
-                os.chmod(pinned_directory, 0o700)
-            except OSError:
-                pass
-            shutil.rmtree(pinned_directory, ignore_errors=True)
+            _cleanup_pinned_command(pinned_directory)
 
 
 def _unique_acquisition_needs(needs: object) -> tuple[NeedTheme, ...]:
@@ -1409,53 +1570,491 @@ def _pin_executable(path: Path) -> tuple[int, _FileArtifactSnapshot]:
     return descriptor, snapshot
 
 
+def _snapshot_execution_closure(
+    command: Path,
+    descriptor: int,
+    launcher: _FileArtifactSnapshot,
+) -> _ExecutionClosureSnapshot:
+    raw = _read_open_file(descriptor, launcher.identity[3], label="CAM launcher")
+    first_line = raw.partition(b"\n")[0].rstrip(b"\r")
+    if not first_line.startswith(b"#!"):
+        if not _is_native_executable(raw[:4]):
+            raise OpportunityBriefError("CAM launcher format is unsupported")
+        receipt = _execution_closure_receipt(
+            launcher_kind="native",
+            launcher=launcher,
+            interpreter=None,
+            links=(),
+            metadata=None,
+            source=None,
+        )
+        return _ExecutionClosureSnapshot(
+            receipt=receipt,
+            interpreter_links=(),
+            interpreter=None,
+            metadata=None,
+            source=None,
+        )
+    try:
+        shebang = first_line[2:].decode("utf-8")
+    except UnicodeError as error:
+        raise OpportunityBriefError("CAM launcher shebang is malformed") from error
+    if (
+        not shebang
+        or shebang != shebang.strip()
+        or any(character.isspace() for character in shebang)
+        or not Path(shebang).is_absolute()
+    ):
+        raise OpportunityBriefError("CAM launcher shebang must name one absolute interpreter")
+    links, interpreter = _snapshot_interpreter_chain(Path(shebang))
+    known_python = _snapshot_single_link_file(
+        Path(sys.executable).resolve(strict=True),
+        label="known Python interpreter",
+        byte_limit=MAX_COMMAND_BYTES,
+    )
+    if interpreter.sha256 != known_python.sha256:
+        raise OpportunityBriefError("CAM launcher interpreter is not the known Python runtime")
+    source_root = _launcher_source_marker(raw)
+    metadata: _MetadataSnapshot | None = None
+    if source_root is None and re.search(rb"(?:from|import)\s+claw(?:\.|\s|$)", raw):
+        metadata, source_root = _snapshot_editable_metadata(interpreter.path)
+    source = _snapshot_cam_source(source_root) if source_root is not None else None
+    receipt = _execution_closure_receipt(
+        launcher_kind="python",
+        launcher=launcher,
+        interpreter=interpreter,
+        links=links,
+        metadata=metadata,
+        source=source,
+    )
+    return _ExecutionClosureSnapshot(
+        receipt=receipt,
+        interpreter_links=links,
+        interpreter=interpreter,
+        metadata=metadata,
+        source=source,
+    )
+
+
+def _read_open_file(descriptor: int, size: int, *, label: str) -> bytes:
+    if size > MAX_COMMAND_BYTES:
+        raise OpportunityBriefError(f"{label} exceeds its byte bound")
+    try:
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        chunks: list[bytes] = []
+        remaining = size
+        while remaining:
+            _check_hash_deadline()
+            chunk = os.read(descriptor, min(1024 * 1024, remaining))
+            if not chunk:
+                raise OpportunityBriefError(f"{label} changed while being read")
+            chunks.append(chunk)
+            remaining -= len(chunk)
+        if os.read(descriptor, 1):
+            raise OpportunityBriefError(f"{label} changed while being read")
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        return b"".join(chunks)
+    except OpportunityBriefError:
+        raise
+    except OSError as error:
+        raise OpportunityBriefError(f"{label} could not be read") from error
+
+
+def _is_native_executable(prefix: bytes) -> bool:
+    return prefix in {
+        b"\x7fELF",
+        b"\xcf\xfa\xed\xfe",
+        b"\xfe\xed\xfa\xcf",
+        b"\xca\xfe\xba\xbe",
+        b"\xbe\xba\xfe\xca",
+    }
+
+
+def _snapshot_interpreter_chain(
+    path: Path,
+) -> tuple[tuple[_SymlinkSnapshot, ...], _FileArtifactSnapshot]:
+    links: list[_SymlinkSnapshot] = []
+    current = path
+    seen: set[tuple[int, int]] = set()
+    for _index in range(MAX_INTERPRETER_LINKS + 1):
+        try:
+            identity = os.lstat(current)
+        except OSError as error:
+            raise OpportunityBriefError("CAM interpreter chain could not be inspected") from error
+        if not stat.S_ISLNK(identity.st_mode):
+            if not stat.S_ISREG(identity.st_mode) or identity.st_mode & 0o111 == 0:
+                raise OpportunityBriefError("CAM interpreter must resolve to an executable file")
+            return tuple(links), _snapshot_single_link_file(
+                current,
+                label="CAM interpreter",
+                byte_limit=MAX_COMMAND_BYTES,
+            )
+        inode = (identity.st_dev, identity.st_ino)
+        if inode in seen or len(links) == MAX_INTERPRETER_LINKS:
+            raise OpportunityBriefError("CAM interpreter symlink chain is unsupported")
+        seen.add(inode)
+        try:
+            target = os.readlink(current)
+        except OSError as error:
+            raise OpportunityBriefError("CAM interpreter symlink could not be read") from error
+        _checked_canonical_string(target, field="interpreter symlink target", limit=4_096)
+        links.append(
+            _SymlinkSnapshot(
+                path=current,
+                identity=_stat_identity(identity),
+                target=target,
+            )
+        )
+        target_path = Path(target)
+        current = target_path if target_path.is_absolute() else current.parent / target_path
+    raise OpportunityBriefError("CAM interpreter symlink chain is unsupported")
+
+
+def _launcher_source_marker(raw: bytes) -> Path | None:
+    marker = b"# cam-implementation-root: "
+    values = [line[len(marker) :] for line in raw.splitlines() if line.startswith(marker)]
+    if not values:
+        return None
+    if len(values) != 1:
+        raise OpportunityBriefError("CAM launcher implementation root is ambiguous")
+    try:
+        value = values[0].decode("utf-8")
+    except UnicodeError as error:
+        raise OpportunityBriefError("CAM launcher implementation root is malformed") from error
+    root = Path(_checked_canonical_string(value, field="CAM implementation root", limit=4_096))
+    if not root.is_absolute():
+        raise OpportunityBriefError("CAM implementation root must be absolute")
+    return _validate_acquisition_path(root, field="CAM implementation root", kind="directory")
+
+
 def _materialize_pinned_executable(
     descriptor: int,
     expected: _FileArtifactSnapshot,
-) -> tuple[Path, Path, _FileArtifactSnapshot]:
+    closure: _ExecutionClosureSnapshot,
+) -> tuple[Path, _PinnedCommandSnapshot]:
     directory = Path(tempfile.mkdtemp(prefix="cam-opportunity-command-"))
     destination = directory / "cam-command"
-    destination_descriptor: int | None = None
     completed = False
     try:
-        destination_descriptor = os.open(
-            destination,
-            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC,
-            0o500,
-        )
-        os.lseek(descriptor, 0, os.SEEK_SET)
-        while True:
-            chunk = os.read(descriptor, 1024 * 1024)
-            if not chunk:
-                break
-            view = memoryview(chunk)
-            while view:
-                written = os.write(destination_descriptor, view)
-                view = view[written:]
-        os.fsync(destination_descriptor)
-        os.close(destination_descriptor)
-        destination_descriptor = None
-        os.chmod(destination, 0o500)
+        raw = _read_open_file(descriptor, expected.identity[3], label="CAM launcher")
+        pinned_interpreter: _FileArtifactSnapshot | None = None
+        if closure.interpreter is not None:
+            interpreter_path = directory / "python-interpreter"
+            _copy_snapshot_file(closure.interpreter, interpreter_path, mode=0o500)
+            pinned_interpreter = _snapshot_single_link_file(
+                interpreter_path,
+                label="pinned Python interpreter",
+                byte_limit=MAX_COMMAND_BYTES,
+            )
+            first, separator, remainder = raw.partition(b"\n")
+            if not separator or not first.startswith(b"#!"):
+                raise OpportunityBriefError("CAM Python launcher shebang changed")
+            raw = b"#!" + os.fsencode(interpreter_path) + b"\n" + remainder
+        _write_private_file(destination, raw, mode=0o500)
         copied = _snapshot_single_link_file(
             destination,
             label="pinned cam command copy",
             byte_limit=MAX_COMMAND_BYTES,
         )
-        if copied.sha256 != expected.sha256 or copied.identity[3] != expected.identity[3]:
+        if closure.interpreter is None and (
+            copied.sha256 != expected.sha256 or copied.identity[3] != expected.identity[3]
+        ):
             raise OpportunityBriefError("pinned cam command copy digest is inconsistent")
         os.lseek(descriptor, 0, os.SEEK_SET)
         os.chmod(directory, 0o500)
         completed = True
-        return destination, directory, copied
+        return directory, _PinnedCommandSnapshot(
+            launcher=copied,
+            interpreter=pinned_interpreter,
+        )
     except OpportunityBriefError:
         raise
     except OSError as error:
         raise OpportunityBriefError("cam command could not be pinned for execution") from error
     finally:
-        if destination_descriptor is not None:
-            os.close(destination_descriptor)
         if not completed:
-            shutil.rmtree(directory, ignore_errors=True)
+            _cleanup_pinned_command(directory)
+
+
+def _write_private_file(path: Path, content: bytes, *, mode: int) -> None:
+    descriptor: int | None = None
+    try:
+        descriptor = os.open(
+            path,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_CLOEXEC,
+            mode,
+        )
+        view = memoryview(content)
+        while view:
+            written = os.write(descriptor, view)
+            if written <= 0:
+                raise OpportunityBriefError("private command copy could not be written")
+            view = view[written:]
+        os.fsync(descriptor)
+        os.close(descriptor)
+        descriptor = None
+        os.chmod(path, mode)
+    except OpportunityBriefError:
+        raise
+    except OSError as error:
+        raise OpportunityBriefError("private command copy could not be written") from error
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+
+
+def _copy_snapshot_file(
+    source: _FileArtifactSnapshot,
+    destination: Path,
+    *,
+    mode: int,
+) -> None:
+    descriptor: int | None = None
+    try:
+        descriptor = os.open(source.path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        before = os.fstat(descriptor)
+        if _stat_identity(before) != source.identity:
+            raise OpportunityBriefError("execution closure identity changed")
+        content = _read_open_file(descriptor, before.st_size, label="execution closure")
+        after = os.fstat(descriptor)
+        path_after = os.lstat(source.path)
+        if (
+            _stat_identity(after) != source.identity
+            or _stat_identity(path_after) != source.identity
+            or hashlib.sha256(content).hexdigest() != source.sha256
+        ):
+            raise OpportunityBriefError("execution closure identity or digest changed")
+        _write_private_file(destination, content, mode=mode)
+    except OpportunityBriefError:
+        raise
+    except OSError as error:
+        raise OpportunityBriefError("execution closure could not be copied") from error
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+
+
+def _cleanup_pinned_command(directory: Path) -> None:
+    try:
+        if os.path.lexists(directory):
+            os.chmod(directory, 0o700)
+            shutil.rmtree(directory)
+        if os.path.lexists(directory):
+            raise OpportunityBriefError("private command cleanup could not be verified")
+    except OpportunityBriefError:
+        raise
+    except Exception as error:
+        raise OpportunityBriefError("private command cleanup failed") from error
+
+
+def _snapshot_editable_metadata(
+    interpreter: Path,
+) -> tuple[_MetadataSnapshot, Path]:
+    prefix = interpreter.parent.parent
+    candidates: list[tuple[Path, Path, Path]] = []
+    try:
+        site_directories = sorted((prefix / "lib").glob("python*/site-packages"))
+        for site in site_directories:
+            pth_files = sorted(site.glob("__editable__.claw-*.pth"))
+            finder_files = sorted(site.glob("__editable___claw_*_finder.py"))
+            dist_directories = sorted(site.glob("claw-*.dist-info"))
+            if len(pth_files) == len(finder_files) == len(dist_directories) == 1:
+                candidates.append((pth_files[0], finder_files[0], dist_directories[0]))
+    except OSError as error:
+        raise OpportunityBriefError("editable CAM metadata could not be inspected") from error
+    if len(candidates) != 1:
+        raise OpportunityBriefError("editable CAM metadata is missing or ambiguous")
+    pth_path, finder_path, dist_directory = candidates[0]
+    metadata_paths = [pth_path, finder_path]
+    try:
+        dist_entries = sorted(dist_directory.iterdir(), key=lambda item: item.name)
+    except OSError as error:
+        raise OpportunityBriefError("editable CAM distribution metadata could not be read") from error
+    if len(dist_entries) > MAX_CLOSURE_METADATA_FILES - len(metadata_paths):
+        raise OpportunityBriefError("editable CAM metadata exceeds its file bound")
+    if any(not entry.is_file() or entry.is_symlink() for entry in dist_entries):
+        raise OpportunityBriefError("editable CAM metadata contains an unsupported entry")
+    metadata_paths.extend(dist_entries)
+    snapshots: list[_FileArtifactSnapshot] = []
+    total = 0
+    for path in metadata_paths:
+        snapshot = _snapshot_single_link_file(
+            path,
+            label="editable CAM metadata",
+            byte_limit=MAX_CLOSURE_METADATA_BYTES,
+        )
+        total += snapshot.identity[3]
+        if total > MAX_CLOSURE_METADATA_BYTES:
+            raise OpportunityBriefError("editable CAM metadata exceeds its byte bound")
+        snapshots.append(snapshot)
+    by_path = {snapshot.path: snapshot for snapshot in snapshots}
+    pth_text = _read_snapshot_text(by_path[pth_path], label="editable CAM .pth metadata")
+    finder_text = _read_snapshot_text(
+        by_path[finder_path],
+        label="editable CAM mapping metadata",
+    )
+    finder_module = finder_path.stem
+    if pth_text.strip() != f"import {finder_module}; {finder_module}.install()":
+        raise OpportunityBriefError("editable CAM .pth metadata is unsupported")
+    mapping_root = _parse_editable_claw_mapping(finder_text)
+    direct_url_path = dist_directory / "direct_url.json"
+    if direct_url_path not in by_path:
+        raise OpportunityBriefError("editable CAM direct URL metadata is missing")
+    direct_url = _decode_strict_json(
+        _read_snapshot_bytes(by_path[direct_url_path], label="editable CAM direct URL"),
+        label="editable CAM direct URL metadata",
+    )
+    if type(direct_url) is not dict or set(direct_url) != {"url", "dir_info"}:
+        raise OpportunityBriefError("editable CAM direct URL metadata is unsupported")
+    if direct_url.get("dir_info") != {"editable": True}:
+        raise OpportunityBriefError("CAM installation is not an editable source mapping")
+    parsed_url = urlparse(direct_url.get("url") if type(direct_url.get("url")) is str else "")
+    if parsed_url.scheme != "file" or parsed_url.netloc or not parsed_url.path:
+        raise OpportunityBriefError("editable CAM source URL is unsupported")
+    source_root = Path(unquote(parsed_url.path))
+    if not source_root.is_absolute() or mapping_root != source_root / "src" / "claw":
+        raise OpportunityBriefError("editable CAM mapping does not match its source root")
+    aggregate = _metadata_digest(tuple(snapshots))
+    return _MetadataSnapshot(files=tuple(snapshots), sha256=aggregate), source_root
+
+
+def _parse_editable_claw_mapping(text: str) -> Path:
+    try:
+        tree = ast.parse(text)
+    except (SyntaxError, ValueError) as error:
+        raise OpportunityBriefError("editable CAM mapping metadata is malformed") from error
+    values: list[object] = []
+    for node in tree.body:
+        if isinstance(node, (ast.Assign, ast.AnnAssign)):
+            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+            if any(isinstance(target, ast.Name) and target.id == "MAPPING" for target in targets):
+                try:
+                    values.append(ast.literal_eval(node.value))
+                except (ValueError, TypeError) as error:
+                    raise OpportunityBriefError(
+                        "editable CAM mapping metadata is malformed"
+                    ) from error
+    if len(values) != 1 or type(values[0]) is not dict or set(values[0]) != {"claw"}:
+        raise OpportunityBriefError("editable CAM mapping metadata is unsupported")
+    value = values[0]["claw"]
+    if type(value) is not str:
+        raise OpportunityBriefError("editable CAM mapping path is malformed")
+    path = Path(_checked_canonical_string(value, field="editable CAM mapping", limit=4_096))
+    if not path.is_absolute():
+        raise OpportunityBriefError("editable CAM mapping path must be absolute")
+    return path
+
+
+def _read_snapshot_bytes(snapshot: _FileArtifactSnapshot, *, label: str) -> bytes:
+    descriptor: int | None = None
+    try:
+        descriptor = os.open(snapshot.path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+        if _stat_identity(os.fstat(descriptor)) != snapshot.identity:
+            raise OpportunityBriefError(f"{label} identity changed")
+        raw = _read_open_file(descriptor, snapshot.identity[3], label=label)
+        if hashlib.sha256(raw).hexdigest() != snapshot.sha256:
+            raise OpportunityBriefError(f"{label} digest changed")
+        return raw
+    except OpportunityBriefError:
+        raise
+    except OSError as error:
+        raise OpportunityBriefError(f"{label} could not be read") from error
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+
+
+def _read_snapshot_text(snapshot: _FileArtifactSnapshot, *, label: str) -> str:
+    try:
+        return _read_snapshot_bytes(snapshot, label=label).decode("utf-8")
+    except UnicodeError as error:
+        raise OpportunityBriefError(f"{label} is not UTF-8") from error
+
+
+def _metadata_digest(files: tuple[_FileArtifactSnapshot, ...]) -> str:
+    payload = [
+        [str(item.path), list(item.identity), item.sha256]
+        for item in files
+    ]
+    return hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
+def _snapshot_cam_source(root: Path) -> _CamSourceSnapshot:
+    validated = _validate_acquisition_path(
+        root,
+        field="CAM source root",
+        kind="directory",
+    )
+    descriptor: int | None = None
+    try:
+        descriptor, identity = _open_pinned_root(validated)
+        git = _read_git_snapshot(validated, descriptor, identity)
+        if git.revision is None:
+            raise OpportunityBriefError("CAM source root must have an immutable Git HEAD")
+        source_path = validated / "src" / "claw"
+        try:
+            manifest = _snapshot_model_directory(source_path)
+        except OpportunityBriefError as error:
+            raise OpportunityBriefError("CAM source content manifest is invalid") from error
+        _assert_root_identity(validated, descriptor, identity)
+        return _CamSourceSnapshot(
+            root=validated,
+            root_identity=identity,
+            git=git,
+            manifest=manifest,
+        )
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+
+
+def _execution_closure_receipt(
+    *,
+    launcher_kind: Literal["python", "native"],
+    launcher: _FileArtifactSnapshot,
+    interpreter: _FileArtifactSnapshot | None,
+    links: tuple[_SymlinkSnapshot, ...],
+    metadata: _MetadataSnapshot | None,
+    source: _CamSourceSnapshot | None,
+) -> ExecutionClosureReceipt:
+    payload = {
+        "launcher": [str(launcher.path), list(launcher.identity), launcher.sha256],
+        "launcher_kind": launcher_kind,
+        "interpreter": None
+        if interpreter is None
+        else [str(interpreter.path), list(interpreter.identity), interpreter.sha256],
+        "interpreter_links": [
+            [str(link.path), list(link.identity), link.target] for link in links
+        ],
+        "editable_metadata_sha256": None if metadata is None else metadata.sha256,
+        "cam_source": None
+        if source is None
+        else {
+            "root": str(source.root),
+            "root_identity": list(source.root_identity),
+            "revision": source.git.revision,
+            "branch": source.git.branch,
+            "dirty_entries": list(source.git.dirty_entries),
+            "manifest_sha256": source.manifest.sha256,
+        },
+    }
+    digest = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return ExecutionClosureReceipt(
+        launcher_kind=launcher_kind,
+        interpreter_path=None if interpreter is None else interpreter.path,
+        interpreter_sha256=None if interpreter is None else interpreter.sha256,
+        editable_metadata_sha256=None if metadata is None else metadata.sha256,
+        cam_source_root=None if source is None else source.root,
+        cam_source_revision=None if source is None else source.git.revision,
+        cam_source_branch=None if source is None else source.git.branch,
+        cam_source_dirty_entries=() if source is None else source.git.dirty_entries,
+        cam_source_sha256=None if source is None else source.manifest.sha256,
+        sha256=digest,
+    )
 
 
 def _snapshot_single_link_file(
@@ -1527,6 +2126,7 @@ def _hash_descriptor(descriptor: int, *, byte_limit: int, label: str) -> str:
     try:
         os.lseek(descriptor, 0, os.SEEK_SET)
         while True:
+            _check_hash_deadline()
             chunk = os.read(descriptor, min(1024 * 1024, byte_limit + 1 - total))
             if not chunk:
                 break
@@ -1540,6 +2140,12 @@ def _hash_descriptor(descriptor: int, *, byte_limit: int, label: str) -> str:
     except OSError as error:
         raise OpportunityBriefError(f"{label} content could not be hashed") from error
     return digest.hexdigest()
+
+
+def _check_hash_deadline() -> None:
+    deadline = _HASH_DEADLINE.get()
+    if deadline is not None and time.monotonic() > deadline:
+        raise OpportunityBriefError("execution closure hashing exceeded its time bound")
 
 
 def _snapshot_model_directory(path: Path) -> _ModelArtifactSnapshot:
@@ -1558,6 +2164,7 @@ def _snapshot_model_directory(path: Path) -> _ModelArtifactSnapshot:
             raise OpportunityBriefError("semantic model directory identity changed")
         entries: list[_ModelManifestEntry] = []
         budget = [0, 0]
+        _check_hash_deadline()
         _walk_model_manifest(descriptor, (), entries, budget)
         opened_after = os.fstat(descriptor)
         path_after = os.lstat(path)
@@ -1607,6 +2214,7 @@ def _walk_model_manifest(
     except OSError as error:
         raise OpportunityBriefError("semantic model manifest could not be scanned") from error
     for name in names:
+        _check_hash_deadline()
         _checked_relative_path("/".join((*relative_parts, name)), field="model entry")
         budget[0] += 1
         if budget[0] > MAX_MODEL_ENTRIES:
@@ -1717,11 +2325,35 @@ def _walk_model_directory(
             os.close(descriptor)
 
 
-def _assert_artifacts_unchanged(
+def _assert_acquisition_identities_unchanged(
     executable_descriptor: int,
     executable: _FileArtifactSnapshot,
     sidecar: _FileArtifactSnapshot,
     model: _ModelArtifactSnapshot,
+    closure: _ExecutionClosureSnapshot,
+    pinned: _PinnedCommandSnapshot,
+) -> None:
+    _assert_open_file_identity(
+        executable_descriptor,
+        executable,
+        label="cam command",
+        require_executable=True,
+    )
+    _assert_file_identity(sidecar, label="sidecar")
+    _assert_tree_identity(model, label="semantic model")
+    _assert_execution_closure_identity(closure)
+    _assert_file_identity(pinned.launcher, label="pinned cam command copy")
+    if pinned.interpreter is not None:
+        _assert_file_identity(pinned.interpreter, label="pinned Python interpreter")
+
+
+def _assert_acquisition_artifacts_unchanged(
+    executable_descriptor: int,
+    executable: _FileArtifactSnapshot,
+    sidecar: _FileArtifactSnapshot,
+    model: _ModelArtifactSnapshot,
+    closure: _ExecutionClosureSnapshot,
+    pinned: _PinnedCommandSnapshot,
 ) -> None:
     current_executable = _snapshot_open_file(
         executable_descriptor,
@@ -1730,18 +2362,157 @@ def _assert_artifacts_unchanged(
         byte_limit=MAX_COMMAND_BYTES,
         require_executable=True,
     )
-    current_sidecar = _snapshot_single_link_file(
-        sidecar.path,
-        label="sidecar",
-        byte_limit=MAX_SIDECAR_BYTES,
-    )
-    current_model = _snapshot_model_directory(model.path)
     if current_executable != executable:
         raise OpportunityBriefError("cam command identity or digest changed")
-    if current_sidecar != sidecar:
+    if (
+        _snapshot_single_link_file(
+            sidecar.path,
+            label="sidecar",
+            byte_limit=MAX_SIDECAR_BYTES,
+        )
+        != sidecar
+    ):
         raise OpportunityBriefError("sidecar identity or digest changed")
-    if current_model != model:
+    if _snapshot_model_directory(model.path) != model:
         raise OpportunityBriefError("semantic model identity or digest changed")
+    if (
+        _snapshot_execution_closure(
+            executable.path,
+            executable_descriptor,
+            current_executable,
+        )
+        != closure
+    ):
+        raise OpportunityBriefError("CAM execution closure identity or digest changed")
+    current_pinned = _PinnedCommandSnapshot(
+        launcher=_snapshot_single_link_file(
+            pinned.launcher.path,
+            label="pinned cam command copy",
+            byte_limit=MAX_COMMAND_BYTES,
+        ),
+        interpreter=None
+        if pinned.interpreter is None
+        else _snapshot_single_link_file(
+            pinned.interpreter.path,
+            label="pinned Python interpreter",
+            byte_limit=MAX_COMMAND_BYTES,
+        ),
+    )
+    if current_pinned != pinned:
+        raise OpportunityBriefError("pinned CAM execution closure changed")
+
+
+def _assert_open_file_identity(
+    descriptor: int,
+    expected: _FileArtifactSnapshot,
+    *,
+    label: str,
+    require_executable: bool,
+) -> None:
+    try:
+        opened = os.fstat(descriptor)
+        current = os.lstat(expected.path)
+    except OSError as error:
+        raise OpportunityBriefError(f"{label} identity could not be inspected") from error
+    if (
+        _stat_identity(opened) != expected.identity
+        or _stat_identity(current) != expected.identity
+        or not stat.S_ISREG(current.st_mode)
+        or (require_executable and current.st_mode & 0o111 == 0)
+    ):
+        raise OpportunityBriefError(f"{label} identity changed")
+
+
+def _assert_file_identity(expected: _FileArtifactSnapshot, *, label: str) -> None:
+    try:
+        current = os.lstat(expected.path)
+    except OSError as error:
+        raise OpportunityBriefError(f"{label} identity could not be inspected") from error
+    if not stat.S_ISREG(current.st_mode) or _stat_identity(current) != expected.identity:
+        raise OpportunityBriefError(f"{label} identity changed")
+
+
+def _assert_tree_identity(expected: _ModelArtifactSnapshot, *, label: str) -> None:
+    try:
+        root = os.lstat(expected.path)
+    except OSError as error:
+        raise OpportunityBriefError(f"{label} identity could not be inspected") from error
+    if not stat.S_ISDIR(root.st_mode) or _stat_identity(root) != expected.identity:
+        raise OpportunityBriefError(f"{label} identity changed")
+    current = _tree_identity_entries(expected.path)
+    wanted = tuple(
+        (entry.relative_path, entry.kind, entry.identity) for entry in expected.entries
+    )
+    if current != wanted:
+        raise OpportunityBriefError(f"{label} identity changed")
+
+
+def _tree_identity_entries(
+    root: Path,
+) -> tuple[tuple[str, Literal["directory", "file"], DirectoryIdentity], ...]:
+    entries: list[tuple[str, Literal["directory", "file"], DirectoryIdentity]] = []
+    budget = [0]
+
+    def walk(directory: Path, parts: tuple[str, ...]) -> None:
+        try:
+            children = sorted(
+                directory.iterdir(),
+                key=lambda item: (item.name.casefold(), os.fsencode(item.name)),
+            )
+        except OSError as error:
+            raise OpportunityBriefError("artifact identity manifest could not be scanned") from error
+        for child in children:
+            budget[0] += 1
+            if budget[0] > MAX_MODEL_ENTRIES:
+                raise OpportunityBriefError("artifact identity manifest exceeds its bound")
+            try:
+                identity = os.lstat(child)
+            except OSError as error:
+                raise OpportunityBriefError("artifact identity changed") from error
+            relative = "/".join((*parts, child.name))
+            if stat.S_ISLNK(identity.st_mode):
+                raise OpportunityBriefError("artifact identity manifest contains a symlink")
+            if stat.S_ISDIR(identity.st_mode):
+                walk(child, (*parts, child.name))
+                entries.append((relative, "directory", _stat_identity(identity)))
+            elif stat.S_ISREG(identity.st_mode) and identity.st_nlink == 1:
+                entries.append((relative, "file", _stat_identity(identity)))
+            else:
+                raise OpportunityBriefError("artifact identity manifest contains an entry")
+
+    walk(root, ())
+    return tuple(entries)
+
+
+def _assert_execution_closure_identity(closure: _ExecutionClosureSnapshot) -> None:
+    for link in closure.interpreter_links:
+        try:
+            current = os.lstat(link.path)
+            target = os.readlink(link.path)
+        except OSError as error:
+            raise OpportunityBriefError("CAM interpreter closure identity changed") from error
+        if _stat_identity(current) != link.identity or target != link.target:
+            raise OpportunityBriefError("CAM interpreter closure identity changed")
+    if closure.interpreter is not None:
+        _assert_file_identity(closure.interpreter, label="CAM interpreter closure")
+    if closure.metadata is not None:
+        for item in closure.metadata.files:
+            _assert_file_identity(item, label="editable CAM metadata closure")
+    if closure.source is not None:
+        source = closure.source
+        try:
+            root_descriptor, root_identity = _open_pinned_root(source.root)
+        except OpportunityBriefError as error:
+            raise OpportunityBriefError("CAM source closure identity changed") from error
+        try:
+            if root_identity != source.root_identity:
+                raise OpportunityBriefError("CAM source closure identity changed")
+            git = _read_git_snapshot(source.root, root_descriptor, root_identity)
+            if git != source.git:
+                raise OpportunityBriefError("CAM source Git closure changed")
+            _assert_tree_identity(source.manifest, label="CAM source closure")
+        finally:
+            os.close(root_descriptor)
 
 
 def _query_environment() -> dict[str, str]:
@@ -1758,22 +2529,27 @@ def _query_environment() -> dict[str, str]:
 
 def _run_query_bounded(
     argv: tuple[str, ...],
-    pinned_executable: _FileArtifactSnapshot,
+    pinned_executable: _PinnedCommandSnapshot,
 ) -> _GitResult:
     process: subprocess.Popen[bytes] | None = None
+    process_group: int | None = None
     selector: selectors.BaseSelector | None = None
+    group_handled = False
     output = bytearray()
     errors = bytearray()
     try:
-        if _snapshot_single_link_file(
-            pinned_executable.path,
+        _assert_file_identity(
+            pinned_executable.launcher,
             label="pinned cam command copy",
-            byte_limit=MAX_COMMAND_BYTES,
-        ) != pinned_executable:
-            raise OpportunityBriefError("pinned cam command identity or digest changed")
+        )
+        if pinned_executable.interpreter is not None:
+            _assert_file_identity(
+                pinned_executable.interpreter,
+                label="pinned Python interpreter",
+            )
         process = subprocess.Popen(
             list(argv),
-            executable=str(pinned_executable.path),
+            executable=str(pinned_executable.launcher.path),
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -1782,6 +2558,7 @@ def _run_query_bounded(
             close_fds=True,
             start_new_session=True,
         )
+        process_group = process.pid
         if process.stdout is None or process.stderr is None:
             raise OpportunityBriefError("opportunity query pipes were unavailable")
         selector = selectors.DefaultSelector()
@@ -1825,12 +2602,24 @@ def _run_query_bounded(
             returncode = process.wait(timeout=remaining)
         except subprocess.TimeoutExpired as error:
             raise OpportunityBriefError("opportunity query timed out") from error
-        if _snapshot_single_link_file(
-            pinned_executable.path,
+        if _process_group_exists(process_group):
+            _kill_query_process_group(process, process_group)
+            group_handled = True
+            raise OpportunityBriefError(
+                "opportunity query process group survived its leader"
+            )
+        if returncode != 0:
+            _kill_query_process_group(process, process_group)
+            group_handled = True
+        _assert_file_identity(
+            pinned_executable.launcher,
             label="pinned cam command copy",
-            byte_limit=MAX_COMMAND_BYTES,
-        ) != pinned_executable:
-            raise OpportunityBriefError("pinned cam command identity or digest changed")
+        )
+        if pinned_executable.interpreter is not None:
+            _assert_file_identity(
+                pinned_executable.interpreter,
+                label="pinned Python interpreter",
+            )
         return _GitResult(
             returncode=returncode,
             stdout=bytes(output),
@@ -1841,8 +2630,8 @@ def _run_query_bounded(
     except Exception as error:
         raise OpportunityBriefError("opportunity query subprocess output failed") from error
     finally:
-        if process is not None and process.poll() is None:
-            _stop_query_process(process)
+        if process is not None and process_group is not None and not group_handled:
+            _kill_query_process_group(process, process_group)
         if selector is not None:
             try:
                 selector.close()
@@ -1855,18 +2644,45 @@ def _run_query_bounded(
                 process.stderr.close()
 
 
-def _stop_query_process(process: subprocess.Popen[bytes]) -> None:
-    if process.poll() is None:
-        try:
-            os.killpg(process.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-        except OSError:
-            process.kill()
+def _process_group_exists(process_group: int) -> bool:
+    try:
+        os.killpg(process_group, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError as error:
+        if error.errno == errno.ESRCH:
+            return False
+        raise OpportunityBriefError("opportunity query process group could not be inspected") from error
+    return True
+
+
+def _kill_query_process_group(
+    process: subprocess.Popen[bytes],
+    process_group: int,
+) -> None:
+    try:
+        os.killpg(process_group, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    except OSError as error:
+        if error.errno != errno.ESRCH:
+            try:
+                process.kill()
+            except OSError:
+                pass
     try:
         process.wait(timeout=1)
     except subprocess.TimeoutExpired:
-        pass
+        try:
+            process.kill()
+        except OSError:
+            pass
+        try:
+            process.wait(timeout=1)
+        except subprocess.TimeoutExpired:
+            pass
 
 
 def _is_recoverable_query_failure(completed: _GitResult) -> bool:

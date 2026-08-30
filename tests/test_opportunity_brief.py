@@ -9,8 +9,10 @@ import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
+import time
 import unicodedata
 
 import pytest
@@ -1214,16 +1216,27 @@ def make_query_payload(
 def make_fake_cam(
     tmp_path: Path,
     responses: dict[str, object],
+    *,
+    interpreter: Path | None = None,
+    implementation_root: Path | None = None,
 ) -> tuple[Path, Path]:
     log_path = tmp_path / "fake-cam-calls.jsonl"
     executable = tmp_path / "fake-cam"
     encoded_responses = json.dumps(responses, sort_keys=True)
+    shebang = interpreter if interpreter is not None else Path(sys.executable)
+    implementation_marker = (
+        ""
+        if implementation_root is None
+        else f"# cam-implementation-root: {implementation_root}\n"
+    )
     executable.write_text(
-        f"#!{sys.executable}\n"
+        f"#!{shebang}\n"
+        f"{implementation_marker}"
         "import json\n"
         "import os\n"
         "import pathlib\n"
         "import signal\n"
+        "import subprocess\n"
         "import sys\n"
         "import time\n"
         f"responses = json.loads({encoded_responses!r})\n"
@@ -1235,6 +1248,13 @@ def make_fake_cam(
         "    time.sleep(entry['sleep_seconds'])\n"
         "if isinstance(entry, dict) and 'mutate_path' in entry:\n"
         "    pathlib.Path(entry['mutate_path']).write_bytes(b'mutated')\n"
+        "if isinstance(entry, dict) and 'background_marker' in entry:\n"
+        "    code = ('import pathlib,time; time.sleep(%r); ' "
+        "            'pathlib.Path(%r).write_text(\"survived\", encoding=\"utf-8\")' "
+        "            % (entry.get('background_seconds', 0.5), "
+        "               entry['background_marker']))\n"
+        "    subprocess.Popen([sys.executable, '-c', code], stdin=subprocess.DEVNULL, "
+        "stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)\n"
         "if isinstance(entry, dict) and 'signal_number' in entry:\n"
         "    os.kill(os.getpid(), entry['signal_number'])\n"
         "if isinstance(entry, dict) and 'raw_stdout' in entry:\n"
@@ -1553,6 +1573,7 @@ def test_public_acquisition_receipts_reject_forged_call_and_relation_shapes(
         "sidecar_sha256": digest,
         "semantic_model_identity": identity,
         "semantic_model_sha256": digest,
+        "execution_closure_sha256": digest,
     }
     with pytest.raises((TypeError, ValueError), match="argv|invocation"):
         brief.AcquisitionCall(
@@ -1586,6 +1607,18 @@ def test_public_acquisition_receipts_reject_forged_call_and_relation_shapes(
             semantic_model_path=tmp_path / "model",
             semantic_model_identity=identity,
             semantic_model_sha256=digest,
+            execution_closure=brief.ExecutionClosureReceipt(
+                launcher_kind="native",
+                interpreter_path=None,
+                interpreter_sha256=None,
+                editable_metadata_sha256=None,
+                cam_source_root=None,
+                cam_source_revision=None,
+                cam_source_branch=None,
+                cam_source_dirty_entries=(),
+                cam_source_sha256=None,
+                sha256=digest,
+            ),
             calls=(forged_call,),
             candidates=(),
             rejections=(),
@@ -2109,3 +2142,293 @@ def test_acquisition_selector_failures_kill_and_reap_without_private_errors(
             if process.poll() is None:
                 process.kill()
                 process.wait(timeout=1)
+
+
+def test_acquisition_pins_python_interpreter_chain_before_spawn(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    brief = load_module()
+    need = make_need(brief, "Bind interpreter identity.", "interpreter identity")
+    sidecar = tmp_path / "opportunities.sqlite"
+    sidecar.write_bytes(b"fixture")
+    model_path = tmp_path / "semantic-model"
+    model_path.mkdir()
+    interpreter = tmp_path / "python-copy"
+    shutil.copy2(Path(sys.executable).resolve(), interpreter)
+    interpreter.chmod(0o755)
+    second_link = tmp_path / "python-link-2"
+    second_link.symlink_to(interpreter)
+    first_link = tmp_path / "python-link-1"
+    first_link.symlink_to(second_link)
+    target_repo_id = "target-repo-01"
+    payload = make_query_payload(
+        need.query_text,
+        target_repo_id=target_repo_id,
+        model_id=str(model_path.resolve()),
+    )
+    fake_cam, _log = make_fake_cam(
+        tmp_path,
+        {need.query_text: payload},
+        interpreter=first_link,
+    )
+    replacement_marker = tmp_path / "replacement-interpreter-ran"
+    replacement = tmp_path / "replacement-python"
+    replacement.write_text(
+        f"#!{sys.executable}\n"
+        "import os\n"
+        "import pathlib\n"
+        "import sys\n"
+        f"pathlib.Path({str(replacement_marker)!r}).write_text('ran', encoding='utf-8')\n"
+        f"os.execv({sys.executable!r}, [{sys.executable!r}, *sys.argv[1:]])\n",
+        encoding="utf-8",
+    )
+    replacement.chmod(0o755)
+    real_popen = brief.subprocess.Popen
+
+    def replacing_popen(arguments, *args, **kwargs):
+        os.replace(replacement, interpreter)
+        return real_popen(arguments, *args, **kwargs)
+
+    monkeypatch.setattr(brief.subprocess, "Popen", replacing_popen)
+    with pytest.raises(brief.OpportunityBriefError, match="interpreter|closure|identity"):
+        brief.acquire_opportunities(
+            needs=(need,),
+            cam_command=fake_cam,
+            sidecar=sidecar,
+            semantic_model_path=model_path,
+            target_repo_id=target_repo_id,
+        )
+    assert not replacement_marker.exists()
+
+
+def test_acquisition_binds_editable_cam_source_and_git_snapshot(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    brief = load_module()
+    need = make_need(brief, "Bind CAM source.", "cam source identity")
+    sidecar = tmp_path / "opportunities.sqlite"
+    sidecar.write_bytes(b"fixture")
+    model_path = tmp_path / "semantic-model"
+    model_path.mkdir()
+    implementation = tmp_path / "cam-source"
+    source = implementation / "src" / "claw" / "cli.py"
+    source.parent.mkdir(parents=True)
+    source.write_text("def app_main():\n    return 0\n", encoding="utf-8")
+    subprocess.run(["git", "init", "-q", "-b", "main", str(implementation)], check=True)
+    subprocess.run(["git", "-C", str(implementation), "add", "."], check=True)
+    subprocess.run(
+        [
+            "git",
+            "-C",
+            str(implementation),
+            "-c",
+            "user.name=Opportunity Brief Test",
+            "-c",
+            "user.email=opportunity-brief@example.invalid",
+            "commit",
+            "-qm",
+            "fixture CAM source",
+        ],
+        check=True,
+    )
+    target_repo_id = "target-repo-01"
+    fake_cam, _log = make_fake_cam(
+        tmp_path,
+        {
+            need.query_text: make_query_payload(
+                need.query_text,
+                target_repo_id=target_repo_id,
+                model_id=str(model_path.resolve()),
+            )
+        },
+        implementation_root=implementation,
+    )
+    real_popen = brief.subprocess.Popen
+    mutated = False
+
+    def replacing_popen(arguments, *args, **kwargs):
+        nonlocal mutated
+        if arguments and Path(arguments[0]).name == "fake-cam" and not mutated:
+            source.write_text("def app_main():\n    return 7\n", encoding="utf-8")
+            mutated = True
+        return real_popen(arguments, *args, **kwargs)
+
+    monkeypatch.setattr(brief.subprocess, "Popen", replacing_popen)
+    with pytest.raises(brief.OpportunityBriefError, match="CAM source|closure|identity|changed"):
+        brief.acquire_opportunities(
+            needs=(need,),
+            cam_command=fake_cam,
+            sidecar=sidecar,
+            semantic_model_path=model_path,
+            target_repo_id=target_repo_id,
+        )
+
+
+@pytest.mark.parametrize("returncode", [0, 2])
+def test_acquisition_kills_leaderless_query_process_groups(
+    tmp_path: Path,
+    returncode: int,
+) -> None:
+    brief = load_module()
+    need = make_need(brief, "Own process groups.", "process group ownership")
+    sidecar = tmp_path / "opportunities.sqlite"
+    sidecar.write_bytes(b"fixture")
+    model_path = tmp_path / "semantic-model"
+    model_path.mkdir()
+    marker = tmp_path / "background-child-survived"
+    target_repo_id = "target-repo-01"
+    response: dict[str, object] = {
+        "background_marker": str(marker),
+        "background_seconds": 0.3,
+    }
+    if returncode == 0:
+        response["payload"] = make_query_payload(
+            need.query_text,
+            target_repo_id=target_repo_id,
+            model_id=str(model_path.resolve()),
+        )
+    else:
+        response.update(exit_code=returncode, stdout="{}")
+    fake_cam, _log = make_fake_cam(tmp_path, {need.query_text: response})
+
+    with pytest.raises(brief.OpportunityBriefError, match="process group|subprocess|non-recoverable"):
+        brief.acquire_opportunities(
+            needs=(need,),
+            cam_command=fake_cam,
+            sidecar=sidecar,
+            semantic_model_path=model_path,
+            target_repo_id=target_repo_id,
+        )
+    time.sleep(0.45)
+    assert not marker.exists()
+
+
+def test_acquisition_hashes_model_only_at_initial_and_final_boundaries(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    brief = load_module()
+    needs = tuple(
+        make_need(
+            brief,
+            f"Bound hashing for need {index}.",
+            f"bounded hash query {index}",
+            category="blocker" if index == 0 else "risk",
+        )
+        for index in range(3)
+    )
+    sidecar = tmp_path / "opportunities.sqlite"
+    sidecar.write_bytes(b"fixture")
+    model_path = tmp_path / "semantic-model"
+    model_path.mkdir()
+    (model_path / "config.json").write_text("{}", encoding="utf-8")
+    target_repo_id = "target-repo-01"
+    fake_cam, _log = make_fake_cam(
+        tmp_path,
+        {
+            need.query_text: make_query_payload(
+                need.query_text,
+                target_repo_id=target_repo_id,
+                model_id=str(model_path.resolve()),
+            )
+            for need in needs
+        },
+    )
+    real_snapshot = brief._snapshot_model_directory
+    snapshots = 0
+
+    def counting_snapshot(path):
+        nonlocal snapshots
+        snapshots += 1
+        return real_snapshot(path)
+
+    monkeypatch.setattr(brief, "_snapshot_model_directory", counting_snapshot)
+    receipt = brief.acquire_opportunities(
+        needs=needs,
+        cam_command=fake_cam,
+        sidecar=sidecar,
+        semantic_model_path=model_path,
+        target_repo_id=target_repo_id,
+    )
+
+    assert len(receipt.calls) == 3
+    assert snapshots == 2
+
+
+def test_acquisition_cleanup_failure_is_sanitized_and_verified(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    brief = load_module()
+    need = make_need(brief, "Verify private cleanup.", "private cleanup")
+    sidecar = tmp_path / "opportunities.sqlite"
+    sidecar.write_bytes(b"fixture")
+    model_path = tmp_path / "semantic-model"
+    model_path.mkdir()
+    fake_cam, _log = make_fake_cam(
+        tmp_path,
+        {
+            need.query_text: make_query_payload(
+                need.query_text,
+                target_repo_id="target-repo-01",
+                model_id=str(model_path.resolve()),
+            )
+        },
+    )
+    real_rmtree = brief.shutil.rmtree
+    leaked: list[Path] = []
+
+    def ineffective_rmtree(path, *args, **kwargs):
+        leaked.append(Path(path))
+
+    monkeypatch.setattr(brief.shutil, "rmtree", ineffective_rmtree)
+    try:
+        with pytest.raises(brief.OpportunityBriefError, match="cleanup") as captured:
+            brief.acquire_opportunities(
+                needs=(need,),
+                cam_command=fake_cam,
+                sidecar=sidecar,
+                semantic_model_path=model_path,
+                target_repo_id="target-repo-01",
+            )
+        assert "SECRET" not in str(captured.value)
+        assert leaked and all(path.exists() for path in leaked)
+    finally:
+        monkeypatch.setattr(brief.shutil, "rmtree", real_rmtree)
+        for path in leaked:
+            real_rmtree(path, ignore_errors=True)
+
+
+@pytest.mark.parametrize(
+    "shebang",
+    ["#!/usr/bin/env python3", "#!python3", "#!/bin/sh -e -x"],
+)
+def test_acquisition_rejects_unsupported_launcher_shebangs_before_spawn(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    shebang: str,
+) -> None:
+    brief = load_module()
+    need = make_need(brief, "Reject launcher ambiguity.", "launcher form")
+    sidecar = tmp_path / "opportunities.sqlite"
+    sidecar.write_bytes(b"fixture")
+    model_path = tmp_path / "semantic-model"
+    model_path.mkdir()
+    launcher = tmp_path / "fake-cam"
+    launcher.write_text(f"{shebang}\nraise SystemExit(0)\n", encoding="utf-8")
+    launcher.chmod(0o755)
+
+    def forbidden_popen(*_args, **_kwargs):
+        raise AssertionError("unsupported launcher must fail before spawn")
+
+    monkeypatch.setattr(brief.subprocess, "Popen", forbidden_popen)
+    with pytest.raises(brief.OpportunityBriefError, match="launcher|shebang|interpreter"):
+        brief.acquire_opportunities(
+            needs=(need,),
+            cam_command=launcher,
+            sidecar=sidecar,
+            semantic_model_path=model_path,
+            target_repo_id="target-repo-01",
+        )
