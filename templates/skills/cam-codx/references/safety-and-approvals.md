@@ -20,6 +20,27 @@ Compound policies require every listed class. Use one matching, unexpired,
 single-use approval for the exact packet. A dry run validates but does not
 consume that approval.
 
+## MONID external evidence
+
+MONID is an optional external-evidence dependency, not a CAM_CAM command and
+not a substitute for an existing dedicated user tool or owned API. An evidence
+request names the decision-changing question, allowed source policy, data
+class, retention class, freshness rule, and per-task budget before it may run.
+The control-plane planner may inspect the local cache without making a provider
+call; a cache miss is an evidence gap, not permission to spend.
+
+Cache reuse is permitted only when the new task's source policy, retention
+class, question/parameter identity, and freshness rule are compatible. Retain
+the raw local response and a redacted receipt, but quarantine sensitive or
+policy-violating results from ordinary retrieval. Show evidence, reuse only,
+refresh, and do not retain remain user controls.
+
+Do not self-authorize provider spend. A live MONID request requires a known
+endpoint price within the declared per-task budget and the relevant external
+network/provider-spend authorization. Unknown price, prohibited data class,
+private content, secrets, PHI, legal/clinical conclusion, or an unavailable
+endpoint fails closed before execution.
+
 ## Non-negotiable boundaries
 
 - No implicit mining.

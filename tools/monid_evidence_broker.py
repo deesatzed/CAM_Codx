@@ -7,11 +7,16 @@ import hashlib
 import json
 import math
 from pathlib import Path
+import subprocess
 from typing import Any, Callable, Mapping, Protocol
 
 
 class EvidencePolicyError(ValueError):
     """An evidence request violates its declared task policy."""
+
+
+class MonidExecutionError(RuntimeError):
+    """The local MONID CLI could not return a valid structured result."""
 
 
 def _nonempty_strings(values: frozenset[str], field: str) -> None:
@@ -53,6 +58,7 @@ class EvidenceRequest:
     requested_data_classes: frozenset[str]
     policy: EvidencePolicy
     input_body: Mapping[str, Any] = field(default_factory=dict)
+    input_query: Mapping[str, Any] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         if not isinstance(self.task_id, str) or not self.task_id.strip():
@@ -69,6 +75,8 @@ class EvidenceRequest:
             raise EvidencePolicyError("requested data class is prohibited by task policy")
         if not isinstance(self.input_body, Mapping):
             raise EvidencePolicyError("input_body must be a mapping")
+        if not isinstance(self.input_query, Mapping):
+            raise EvidencePolicyError("input_query must be a mapping")
 
 
 @dataclass(frozen=True)
@@ -97,6 +105,7 @@ def _request_key(request: EvidenceRequest) -> str:
         "question": request.question,
         "requested_data_classes": sorted(request.requested_data_classes),
         "input_body": request.input_body,
+        "input_query": request.input_query,
     }
     return hashlib.sha256(_canonical_json(payload)).hexdigest()
 
@@ -105,6 +114,34 @@ class MonidRunner(Protocol):
     """The narrow, shell-free execution boundary for the MONID CLI."""
 
     def run(self, argv: list[str]) -> dict[str, Any]: ...
+
+
+class SubprocessMonidRunner:
+    """Production list-form MONID runner; it never invokes a shell."""
+
+    def run(self, argv: list[str]) -> dict[str, Any]:
+        if not argv or argv[0] != "monid":
+            raise MonidExecutionError("MONID runner accepts only monid argv")
+        try:
+            completed = subprocess.run(
+                argv,
+                check=False,
+                shell=False,
+                text=True,
+                capture_output=True,
+            )
+        except OSError as exc:
+            raise MonidExecutionError(f"MONID command could not start: {exc}") from exc
+        if completed.returncode != 0:
+            detail = completed.stderr.strip() or completed.stdout.strip() or str(completed.returncode)
+            raise MonidExecutionError(f"MONID command failed: {detail}")
+        try:
+            payload = json.loads(completed.stdout)
+        except json.JSONDecodeError as exc:
+            raise MonidExecutionError("MONID command did not return JSON object") from exc
+        if not isinstance(payload, dict):
+            raise MonidExecutionError("MONID command did not return JSON object")
+        return payload
 
 
 class EvidenceBroker:
@@ -120,8 +157,6 @@ class EvidenceBroker:
         self._state_dir = state_dir.expanduser().resolve()
         self._runner = runner
         self._now = now or __import__("time").time
-        self._state_dir.mkdir(parents=True, exist_ok=True)
-        self._state_dir.chmod(0o700)
 
     def _entry_path(self, request: EvidenceRequest) -> Path:
         return self._state_dir / "entries" / f"{_request_key(request)}.json"
@@ -145,6 +180,8 @@ class EvidenceBroker:
         raw_sha256 = hashlib.sha256(raw).hexdigest()
         raw_dir = self._state_dir / "raw"
         entry_path = self._entry_path(request)
+        self._state_dir.mkdir(parents=True, exist_ok=True)
+        self._state_dir.chmod(0o700)
         raw_dir.mkdir(parents=True, exist_ok=True)
         entry_path.parent.mkdir(parents=True, exist_ok=True)
         raw_dir.chmod(0o700)
@@ -228,21 +265,14 @@ class EvidenceBroker:
         inspected = self._runner.run(
             ["monid", "inspect", "-j", "-p", provider, "-e", endpoint]
         )
-        if not self._body_is_supported(inspected, request.input_body):
+        if not self._inputs_are_supported(inspected, request):
             return EvidencePacket("miss", "schema_mismatch", None, 0.0, None, None)
-        result = self._runner.run(
-            [
-                "monid",
-                "run",
-                "-j",
-                "-p",
-                provider,
-                "-e",
-                endpoint,
-                "-i",
-                _canonical_json(dict(request.input_body)).decode("utf-8"),
-            ]
-        )
+        argv = ["monid", "run", "-j", "-p", provider, "-e", endpoint]
+        if request.input_body:
+            argv.extend(["-i", _canonical_json(dict(request.input_body)).decode("utf-8")])
+        if request.input_query:
+            argv.extend(["--query", _canonical_json(dict(request.input_query)).decode("utf-8")])
+        result = self._runner.run(argv)
         stored = self.store_completed_result(
             request,
             raw_result=result,
@@ -265,23 +295,69 @@ class EvidenceBroker:
         results = discovered.get("results")
         if not isinstance(results, list):
             return None
-        valid = [
-            item
-            for item in results
-            if isinstance(item, dict)
-            and isinstance(item.get("provider"), str)
-            and isinstance(item.get("endpoint"), str)
-            and item.get("source_category") in request.policy.allowed_source_categories
-        ]
+        valid = []
+        for item in results:
+            normalized = EvidenceBroker._normalize_candidate(item)
+            if (
+                normalized is not None
+                and normalized["source_category"] in request.policy.allowed_source_categories
+            ):
+                valid.append(normalized)
         if not valid:
             return None
         health_rank = {"healthy": 0, "stable": 1, "degraded": 2, "unknown": 3}
         return min(valid, key=lambda item: health_rank.get(item.get("health"), 4))
 
     @staticmethod
-    def _body_is_supported(inspected: dict[str, Any], body: Mapping[str, Any]) -> bool:
+    def _normalize_candidate(item: Any) -> dict[str, Any] | None:
+        if not isinstance(item, dict):
+            return None
+        provider, endpoint = item.get("provider"), item.get("endpoint")
+        if not isinstance(provider, str) or not provider or not isinstance(endpoint, str) or not endpoint:
+            return None
+        categories = item.get("categories")
+        if not isinstance(categories, list):
+            categories = [item.get("source_category")]
+        category = next(
+            (value for value in categories if isinstance(value, str) and value.strip()), None
+        )
+        price = item.get("price")
+        amount = price.get("amount") if isinstance(price, dict) else None
+        estimated_cost = (
+            item.get("estimated_cost_usd")
+            if "estimated_cost_usd" in item
+            else amount.get("value") if isinstance(amount, dict) else None
+        )
+        metrics = item.get("metrics")
+        health = item.get("health")
+        if isinstance(metrics, dict) and isinstance(metrics.get("status"), str):
+            health = metrics["status"]
+        if category is None:
+            return None
+        return {
+            "provider": provider,
+            "endpoint": endpoint,
+            "source_category": category,
+            "estimated_cost_usd": estimated_cost,
+            "health": health,
+        }
+
+    @staticmethod
+    def _inputs_are_supported(inspected: dict[str, Any], request: EvidenceRequest) -> bool:
         input_schema = inspected.get("input")
         if not isinstance(input_schema, dict):
             return False
-        supported_body = input_schema.get("body")
-        return isinstance(supported_body, dict) and set(body) <= set(supported_body)
+        return EvidenceBroker._fields_are_supported(
+            input_schema.get("body"), request.input_body
+        ) and EvidenceBroker._fields_are_supported(
+            input_schema.get("queryParams"), request.input_query
+        )
+
+    @staticmethod
+    def _fields_are_supported(schema: Any, values: Mapping[str, Any]) -> bool:
+        if not values:
+            return True
+        if not isinstance(schema, dict):
+            return False
+        properties = schema.get("properties", schema)
+        return isinstance(properties, dict) and set(values) <= set(properties)

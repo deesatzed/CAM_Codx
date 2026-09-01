@@ -2,7 +2,7 @@
 
 Baseline-measurement harness and validation helpers for the Codex-CAM Methodology. None of these scripts is invoked automatically; each one is a prerequisite for a specific gated phase in [`../build_to_do_checklist.md`](../build_to_do_checklist.md) and is run by hand against real workspace data, per the validation gates in [`../docs/_validation_gates.md`](../docs/_validation_gates.md).
 
-All scripts operate on real `codex` CLI output, real `claw.db` rows, and real SKILL.md files. None of them mock, stub, simulate, or cache anything; that policy is enforced workspace-wide and re-stated here so contributors do not loosen it locally.
+All scripts operate on real `codex` CLI output, real `claw.db` rows, and real SKILL.md files. They do not mock, stub, simulate, or fabricate evidence. `monid_evidence_broker.py` is the explicit exception to the no-cache convention: it retains content-addressed external evidence only under a task policy so compatible later tasks can reuse it without another provider call.
 
 ---
 
@@ -76,7 +76,7 @@ Importing the module raises `RuntimeError` at import time if `baselines/manifest
 
 ## Conventions all scripts follow
 
-- **Real data only.** No mock, no stub, no simulation, no cached response, no placeholder, no demo. Every script aborts rather than fabricate.
+- **Real data only.** No mock, no stub, no simulation, no placeholder, no demo. Every script aborts rather than fabricate; the MONID broker may reuse only a policy-compatible, timestamped raw response with its receipt.
 - **No automatic execution.** These scripts are invoked manually as part of the gated checklist; nothing runs them on a schedule or on commit.
 - **Absolute paths everywhere.** Scripts derive their own location and walk up to the repo root; they do not depend on the caller's `cwd`.
 - **Loud failure on drift.** Version mismatches (manifest vs live CLI, manifest vs transcript header) raise rather than degrade gracefully. The gates depend on the contract being identical; degradation would silently invalidate later behavioural claims.

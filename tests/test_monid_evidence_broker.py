@@ -11,6 +11,8 @@ from tools.monid_evidence_broker import (
     EvidencePolicyError,
     EvidenceRequest,
     EvidenceBroker,
+    MonidExecutionError,
+    SubprocessMonidRunner,
 )
 
 
@@ -192,3 +194,78 @@ def test_unknown_or_over_budget_endpoint_stops_before_run(tmp_path: Path) -> Non
 
     assert packet.disposition == "blocked_budget"
     assert [call[1] for call in runner.calls] == ["discover"]
+
+
+class LiveSchemaRunner(RecordingRunner):
+    def run(self, argv: list[str]) -> dict[str, Any]:
+        self.calls.append(tuple(argv))
+        if argv[1] == "discover":
+            return {
+                "results": [
+                    {
+                        "provider": "surf",
+                        "endpoint": "/prediction-market/analytics",
+                        "categories": ["prediction-markets", "surf"],
+                        "price": {"amount": {"value": 0.024, "currency": "USD"}},
+                        "metrics": {"status": "unknown"},
+                    }
+                ]
+            }
+        if argv[1] == "inspect":
+            return {"input": {"queryParams": {"properties": {"platform": {}, "limit": {}}}}}
+        if argv[1] == "run":
+            return {"data": {"momentum_markets": []}}
+        raise AssertionError(f"unexpected command: {argv}")
+
+
+def test_live_monid_schema_uses_disclosed_price_categories_and_query_params(tmp_path: Path) -> None:
+    request = EvidenceRequest(
+        task_id="kalshi-screen",
+        question="Which AI market has the highest swing potential?",
+        requested_data_classes=frozenset({"public"}),
+        input_query={"platform": "kalshi", "limit": 20},
+        policy=EvidencePolicy(
+            task_budget_usd=0.05,
+            freshness_seconds=1800,
+            allowed_source_categories=frozenset({"prediction-markets"}),
+            retention_class="local",
+            prohibited_data_classes=frozenset(),
+        ),
+    )
+    runner = LiveSchemaRunner()
+
+    packet = EvidenceBroker(tmp_path / "state", runner=runner, now=lambda: 1000.0).resolve(request)
+
+    assert packet.cost_usd == 0.024
+    assert packet.source_category == "prediction-markets"
+    run_call = runner.calls[-1]
+    assert "--query" in run_call
+    assert "platform" in run_call[run_call.index("--query") + 1]
+
+
+def test_subprocess_runner_uses_list_form_and_requires_json_object(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[tuple[list[str], dict[str, Any]]] = []
+
+    def fake_run(argv: list[str], **kwargs: Any) -> Any:
+        calls.append((argv, kwargs))
+        return type("Completed", (), {"returncode": 0, "stdout": '{"ok": true}', "stderr": ""})()
+
+    monkeypatch.setattr("tools.monid_evidence_broker.subprocess.run", fake_run)
+
+    result = SubprocessMonidRunner().run(["monid", "discover", "-j", "-q", "Kalshi"])
+
+    assert result == {"ok": True}
+    assert calls[0][0] == ["monid", "discover", "-j", "-q", "Kalshi"]
+    assert calls[0][1]["shell"] is False
+
+
+def test_subprocess_runner_rejects_non_json_output(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "tools.monid_evidence_broker.subprocess.run",
+        lambda *_args, **_kwargs: type(
+            "Completed", (), {"returncode": 0, "stdout": "not json", "stderr": ""}
+        )(),
+    )
+
+    with pytest.raises(MonidExecutionError, match="JSON object"):
+        SubprocessMonidRunner().run(["monid", "discover", "-j", "-q", "Kalshi"])

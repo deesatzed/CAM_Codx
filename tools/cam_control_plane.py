@@ -18,8 +18,18 @@ import sys
 import tomllib
 from typing import Any, Callable
 
-
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from tools.monid_evidence_broker import (  # noqa: E402
+    EvidenceBroker,
+    EvidencePacket,
+    EvidencePolicy,
+    EvidencePolicyError,
+    EvidenceRequest,
+)
+
 DEFAULT_REGISTRY = ROOT / "agent-packs" / "contract" / "cam_agent_capabilities.json"
 _ADMIN_INTENTS = frozenset(
     {"knowledge", "models", "self-enhance", "evolution", "doctor", "setup"}
@@ -65,6 +75,8 @@ class ControlPlaneRequest:
     operation: str | None = None
     run_id: str | None = None
     mining_receipt: Path | None = None
+    external_evidence: EvidenceRequest | None = None
+    evidence_state_dir: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -97,6 +109,7 @@ class ControlPlaneResult:
     operation_executed: bool
     identity_hashes: dict[str, str]
     next_action: str
+    external_evidence: EvidencePacket | None
 
 
 @dataclass(frozen=True)
@@ -283,6 +296,15 @@ def _resolve_request(request: ControlPlaneRequest) -> ControlPlaneRequest:
         receipt = _require_absolute_file(request.mining_receipt, "Mining receipt")
     if request.run_id is not None and not request.run_id.strip():
         raise ControlPlaneError("Run ID must not be blank")
+    if (request.external_evidence is None) != (request.evidence_state_dir is None):
+        raise ControlPlaneError("External evidence requires both request and state directory")
+    evidence_state_dir = None
+    if request.external_evidence is not None:
+        if request.run_id is not None and request.external_evidence.task_id != request.run_id:
+            raise ControlPlaneError("External evidence task ID must match the managed run")
+        if request.evidence_state_dir is None or not request.evidence_state_dir.is_absolute():
+            raise ControlPlaneError("External evidence state directory must be absolute")
+        evidence_state_dir = request.evidence_state_dir.resolve(strict=False)
     return ControlPlaneRequest(
         intent=request.intent.strip(),
         target=target,
@@ -296,6 +318,8 @@ def _resolve_request(request: ControlPlaneRequest) -> ControlPlaneRequest:
         operation=request.operation.strip() if request.operation else None,
         run_id=request.run_id.strip() if request.run_id else None,
         mining_receipt=receipt,
+        external_evidence=request.external_evidence,
+        evidence_state_dir=evidence_state_dir,
     )
 
 
@@ -366,6 +390,11 @@ def plan_request(
     after = _identity_hashes(resolved)
     if after != before:
         raise ControlPlaneError("Planning changed a pinned target or CAM runtime identity")
+    external_evidence = (
+        EvidenceBroker(resolved.evidence_state_dir).resolve_cached(resolved.external_evidence)
+        if resolved.external_evidence is not None and resolved.evidence_state_dir is not None
+        else None
+    )
     approval = ", ".join(route.approval_classes)
     return ControlPlaneResult(
         intent=resolved.intent,
@@ -382,6 +411,7 @@ def plan_request(
             f"Review route {route.command_path!r} and issue the required "
             f"approval ({approval}) before any execution packet is prepared."
         ),
+        external_evidence=external_evidence,
     )
 
 
@@ -659,6 +689,15 @@ def render_status_card(result: ControlPlaneResult) -> str:
             f"Provider spend: {spend}",
             f"Mining: {mining}",
             f"Approval: {approval}",
+            *(
+                [
+                    "External evidence: "
+                    f"{result.external_evidence.cache_status}/"
+                    f"{result.external_evidence.disposition}",
+                ]
+                if result.external_evidence is not None
+                else []
+            ),
             f"Next action: {result.next_action}",
         ]
     )
@@ -678,6 +717,11 @@ def _build_parser() -> argparse.ArgumentParser:
     plan.add_argument("--operation")
     plan.add_argument("--run-id")
     plan.add_argument("--mining-receipt", type=Path)
+    plan.add_argument("--evidence-question")
+    plan.add_argument("--evidence-state-dir", type=Path)
+    plan.add_argument("--evidence-budget-usd", type=float)
+    plan.add_argument("--evidence-freshness-seconds", type=float)
+    plan.add_argument("--evidence-source-category", action="append")
     plan.add_argument("--registry", type=Path, default=DEFAULT_REGISTRY)
     plan.add_argument("--json", action="store_true")
     return parser
@@ -686,6 +730,36 @@ def _build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     try:
+        evidence_args = (
+            args.evidence_question,
+            args.evidence_state_dir,
+            args.evidence_budget_usd,
+            args.evidence_freshness_seconds,
+            args.evidence_source_category,
+        )
+        if any(value is not None for value in evidence_args) and not all(
+            value is not None for value in evidence_args
+        ):
+            raise ControlPlaneError(
+                "External evidence requires question, state directory, budget, freshness, and source category"
+            )
+        external_evidence = None
+        if args.evidence_question is not None:
+            try:
+                external_evidence = EvidenceRequest(
+                    task_id=args.run_id or "unmanaged-plan",
+                    question=args.evidence_question,
+                    requested_data_classes=frozenset({"public"}),
+                    policy=EvidencePolicy(
+                        task_budget_usd=args.evidence_budget_usd,
+                        freshness_seconds=args.evidence_freshness_seconds,
+                        allowed_source_categories=frozenset(args.evidence_source_category),
+                        retention_class="local",
+                        prohibited_data_classes=frozenset(),
+                    ),
+                )
+            except EvidencePolicyError as exc:
+                raise ControlPlaneError(f"External evidence policy is invalid: {exc}") from exc
         request = ControlPlaneRequest(
             intent=args.intent,
             target=args.target,
@@ -699,6 +773,8 @@ def main(argv: list[str] | None = None) -> int:
             operation=args.operation,
             run_id=args.run_id,
             mining_receipt=args.mining_receipt,
+            external_evidence=external_evidence,
+            evidence_state_dir=args.evidence_state_dir,
         )
         result = plan_request(request, registry_path=args.registry)
     except ControlPlaneError as exc:

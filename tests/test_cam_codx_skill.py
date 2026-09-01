@@ -116,6 +116,18 @@ def test_skill_reuses_existing_helpers_and_has_explicit_unsafe_boundaries() -> N
         assert phrase in text
 
 
+def test_skill_documents_monid_evidence_as_policy_gated_and_reusable() -> None:
+    safety = (SKILL / "references" / "safety-and-approvals.md").read_text(encoding="utf-8").lower()
+    for phrase in (
+        "monid",
+        "per-task budget",
+        "source policy",
+        "cache reuse",
+        "do not self-authorize provider spend",
+    ):
+        assert phrase in safety
+
+
 def test_playbooks_cover_new_continuing_rescue_and_evidence_selection_needs() -> None:
     swe = (SKILL / "references" / "swe-playbooks.md").read_text(encoding="utf-8").lower()
     for phrase in (

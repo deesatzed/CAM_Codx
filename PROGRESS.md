@@ -1,5 +1,30 @@
 # Progress
 
+## 2026-09-01 MONID evidence broker and Kalshi live proof
+
+- Added `tools/monid_evidence_broker.py`: task-scoped policy validation,
+  source/freshness-compatible SHA-256 cache reuse, redacted evidence packets,
+  shell-free MONID subprocess execution, and inspected-schema routing for body
+  and query parameters. No MONID call is implicit in a normal CAM plan.
+- `tools/cam_control_plane.py plan` now accepts an optional external evidence
+  question plus absolute state directory, task budget, freshness interval, and
+  allowed source category. Planning performs only a read-only cache check and
+  reports an evidence gap on a miss; it does not create the state directory or
+  execute MONID.
+- A bounded live proof used Surf's Kalshi analytics and price-history endpoints
+  for a `prediction-markets` task with a $0.05 cap. Run IDs
+  `01M1EVMB5CG6E0KJ01E9ZK5RPD` and `01M1EVQ27D08X3ETSS3R4MTB6W` completed at
+  $0.024 each ($0.048 total). The result is external market evidence only, not
+  a trading recommendation or a verified product outcome. It exposed a
+  timestamp/freshness discrepancy between endpoint outputs; the broker must
+  preserve such observations separately.
+- Focused verification is `64 passed` for broker, control-plane, and skill
+  tests; Ruff and `git diff --check` pass. Broader relevant verification is
+  `125 passed, 3 skipped, 1 failed`; the sole failure is the pre-existing
+  missing sibling `../CAM_CAM/README.md` in
+  `test_direct_cam_runtime_docs_are_troubleshooting_only_and_do_not_overclaim_chat`,
+  not a MONID broker regression.
+
 ## 2026-08-30 sealed opportunity brief semantics
 
 - Expanded per-need boundary parsing to recognize explicit incompatibility

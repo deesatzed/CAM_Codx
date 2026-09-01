@@ -1,7 +1,7 @@
 # CAM_Codx MONID Evidence Broker Design
 
 **Date:** 2026-09-01  
-**Status:** Approved design; implementation not started  
+**Status:** Approved design; initial broker and read-only planning integration implemented; live-proof gate remains opt-in
 **Owner:** CAM_Codx  
 **External dependency:** MONID CLI/API
 

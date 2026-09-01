@@ -85,6 +85,38 @@ def _request(tmp_path: Path, *, intent: str = "assess"):
     )
 
 
+def test_assessment_plan_reports_external_evidence_cache_miss_without_execution(
+    tmp_path: Path,
+) -> None:
+    from tools.cam_control_plane import ControlPlaneRequest, plan_request
+    from tools.monid_evidence_broker import EvidencePolicy, EvidenceRequest
+
+    request = _request(tmp_path)
+    evidence = EvidenceRequest(
+        task_id="swe-run-001",
+        question="Which current AI prediction market has the largest swing potential?",
+        requested_data_classes=frozenset({"public"}),
+        policy=EvidencePolicy(
+            task_budget_usd=0.05,
+            freshness_seconds=1800,
+            allowed_source_categories=frozenset({"prediction-markets"}),
+            retention_class="local",
+            prohibited_data_classes=frozenset(),
+        ),
+    )
+    state_dir = tmp_path / "evidence-state"
+    request = ControlPlaneRequest(
+        **{**request.__dict__, "external_evidence": evidence, "evidence_state_dir": state_dir}
+    )
+
+    result = plan_request(request, registry_path=CONTRACT)
+
+    assert result.external_evidence is not None
+    assert result.external_evidence.cache_status == "miss"
+    assert result.operation_executed is False
+    assert not state_dir.exists()
+
+
 def _snapshot(path: Path) -> tuple[tuple[str, str, int, int, int, str], ...]:
     root = path.parent if path.is_file() or path.is_symlink() else path
     items = [path] if path.is_file() or path.is_symlink() else [path, *path.rglob("*")]
@@ -593,6 +625,38 @@ def test_cli_json_and_human_card_expose_required_fields(tmp_path: Path) -> None:
         "Next action:",
     ):
         assert label in card.stdout
+
+
+def test_cli_can_report_a_read_only_external_evidence_cache_miss(tmp_path: Path) -> None:
+    fixture = _runtime_fixture(tmp_path)
+    state_dir = tmp_path / "evidence-state"
+
+    completed = subprocess.run(
+        [
+            *_cli_args(fixture),
+            "--run-id",
+            "swe-run-001",
+            "--evidence-question",
+            "Which AI market has the largest swing potential?",
+            "--evidence-state-dir",
+            str(state_dir),
+            "--evidence-budget-usd",
+            "0.05",
+            "--evidence-freshness-seconds",
+            "1800",
+            "--evidence-source-category",
+            "prediction-markets",
+            "--json",
+        ],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr
+    assert json.loads(completed.stdout)["external_evidence"]["cache_status"] == "miss"
+    assert not state_dir.exists()
 
 
 def test_cli_help_lists_plan_without_touching_runtime(tmp_path: Path) -> None:
