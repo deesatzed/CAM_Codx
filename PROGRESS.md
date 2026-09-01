@@ -2,6 +2,11 @@
 
 ## 2026-09-01 MONID evidence broker and Kalshi live proof
 
+- Added a query-scoped endpoint catalog ledger. It snapshots returned MONID
+  endpoint identities and selected inspected-schema digests, reports
+  added/removed/schema/CLI-version drift on refresh, and invalidates cached
+  evidence produced by an endpoint with material schema drift. This is not a
+  global MONID inventory or background monitor.
 - Added `tools/monid_evidence_broker.py`: task-scoped policy validation,
   source/freshness-compatible SHA-256 cache reuse, redacted evidence packets,
   shell-free MONID subprocess execution, and inspected-schema routing for body

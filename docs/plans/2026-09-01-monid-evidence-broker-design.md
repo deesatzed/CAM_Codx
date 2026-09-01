@@ -97,6 +97,21 @@ Existing dedicated user tools, MCP servers, and owned API keys take precedence
 over MONID. MONID fills an external-data gap; it is not a silent replacement
 for an existing no-extra-cost integration.
 
+## Query-Scoped Catalog Ledger
+
+CAM_Codx does not assume MONID exposes a stable, global catalog. Instead, it
+keeps a local snapshot for each evidence question it has actually used. A
+refresh records the CLI version, returned provider/endpoint identities,
+categories, published price, health, and the inspected-schema digest for the
+selected endpoint. The next refresh reports added/removed endpoints, selected
+schema changes, and CLI-version changes.
+
+This is an explicit refresh capability, not background monitoring or a paid
+evidence run. A material schema drift invalidates cached evidence produced by
+that endpoint, preserving the raw artifact and invalidation reason for audit.
+New endpoints are reported only within the refreshed question's discovery
+scope; CAM_Codx must never describe this as MONID-wide coverage.
+
 ## Receipt and Evidence Packet
 
 Each MONID run or cache reuse produces a provenance-bearing receipt containing:

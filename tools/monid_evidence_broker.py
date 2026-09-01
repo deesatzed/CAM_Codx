@@ -144,6 +144,118 @@ class SubprocessMonidRunner:
         return payload
 
 
+@dataclass(frozen=True)
+class EndpointCatalogDrift:
+    """Material changes in the endpoints returned for one discovery question."""
+
+    added_endpoints: tuple[str, ...]
+    removed_endpoints: tuple[str, ...]
+    schema_changed_endpoints: tuple[str, ...]
+    cli_version_changed: bool
+
+    @property
+    def has_drift(self) -> bool:
+        return bool(
+            self.added_endpoints
+            or self.removed_endpoints
+            or self.schema_changed_endpoints
+            or self.cli_version_changed
+        )
+
+
+class EndpointCatalogLedger:
+    """Query-scoped MONID catalog snapshots; it does not claim global coverage."""
+
+    def __init__(
+        self,
+        state_dir: Path,
+        *,
+        runner: MonidRunner,
+        now: Callable[[], float] | None = None,
+    ) -> None:
+        self._state_dir = state_dir.expanduser().resolve()
+        self._runner = runner
+        self._now = now or __import__("time").time
+
+    @staticmethod
+    def _endpoint_id(provider: str, endpoint: str) -> str:
+        return f"{provider} {endpoint}"
+
+    def _snapshot_path(self, question: str) -> Path:
+        digest = hashlib.sha256(question.encode("utf-8")).hexdigest()
+        return self._state_dir / "catalog" / f"{digest}.json"
+
+    def refresh(
+        self,
+        question: str,
+        *,
+        selected_endpoint: tuple[str, str] | None,
+        cli_version: str,
+    ) -> EndpointCatalogDrift:
+        if not isinstance(question, str) or not question.strip():
+            raise EvidencePolicyError("catalog question must be a non-empty string")
+        if not isinstance(cli_version, str) or not cli_version.strip():
+            raise EvidencePolicyError("catalog CLI version must be a non-empty string")
+        discovered = self._runner.run(["monid", "discover", "-j", "-q", question])
+        results = discovered.get("results")
+        if not isinstance(results, list):
+            raise MonidExecutionError("MONID discover did not return a results list")
+        endpoints: dict[str, dict[str, Any]] = {}
+        for raw in results:
+            normalized = EvidenceBroker._normalize_candidate(raw)
+            if normalized is not None:
+                endpoint_id = self._endpoint_id(normalized["provider"], normalized["endpoint"])
+                endpoints[endpoint_id] = normalized
+        selected_id = (
+            self._endpoint_id(*selected_endpoint) if selected_endpoint is not None else None
+        )
+        schemas: dict[str, str] = {}
+        if selected_id is not None and selected_id in endpoints:
+            selected = endpoints[selected_id]
+            inspected = self._runner.run(
+                ["monid", "inspect", "-j", "-p", selected["provider"], "-e", selected["endpoint"]]
+            )
+            schemas[selected_id] = hashlib.sha256(_canonical_json(inspected)).hexdigest()
+
+        path = self._snapshot_path(question)
+        try:
+            previous = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            previous = None
+        previous_endpoints = set(previous.get("endpoints", {})) if isinstance(previous, dict) else set()
+        current_endpoints = set(endpoints)
+        previous_schemas = previous.get("schemas", {}) if isinstance(previous, dict) else {}
+        if not isinstance(previous_schemas, dict):
+            previous_schemas = {}
+        changed_schemas = tuple(
+            sorted(
+                endpoint_id
+                for endpoint_id, digest in schemas.items()
+                if endpoint_id in previous_schemas and previous_schemas[endpoint_id] != digest
+            )
+        )
+        drift = EndpointCatalogDrift(
+            added_endpoints=tuple(sorted(current_endpoints - previous_endpoints)) if previous else (),
+            removed_endpoints=tuple(sorted(previous_endpoints - current_endpoints)),
+            schema_changed_endpoints=changed_schemas,
+            cli_version_changed=bool(previous and previous.get("cli_version") != cli_version),
+        )
+        path.parent.mkdir(parents=True, exist_ok=True)
+        self._state_dir.mkdir(parents=True, exist_ok=True)
+        self._state_dir.chmod(0o700)
+        path.parent.chmod(0o700)
+        payload = {
+            "question": question,
+            "cli_version": cli_version,
+            "refreshed_at": self._now(),
+            "endpoints": endpoints,
+            "schemas": schemas,
+        }
+        path.write_bytes(_canonical_json(payload))
+        path.chmod(0o600)
+        return drift
+
+
 class EvidenceBroker:
     """Local content-addressed cache for policy-compatible evidence reuse."""
 
@@ -168,6 +280,7 @@ class EvidenceBroker:
         raw_result: Any,
         source_category: str,
         cost_usd: float,
+        endpoint_id: str | None = None,
     ) -> EvidencePacket:
         if source_category not in request.policy.allowed_source_categories:
             raise EvidencePolicyError("source category is not allowed by task policy")
@@ -196,6 +309,7 @@ class EvidenceBroker:
             "allowed_source_categories": sorted(request.policy.allowed_source_categories),
             "raw_sha256": raw_sha256,
             "cost_usd": cost_usd,
+            "endpoint_id": endpoint_id,
             "collected_at": self._now(),
             "quarantined": False,
         }
@@ -278,6 +392,7 @@ class EvidenceBroker:
             raw_result=result,
             source_category=candidate["source_category"],
             cost_usd=float(estimated_cost),
+            endpoint_id=EndpointCatalogLedger._endpoint_id(provider, endpoint),
         )
         return EvidencePacket(
             cache_status="miss",
@@ -287,6 +402,31 @@ class EvidenceBroker:
             source_category=stored.source_category,
             collected_at=stored.collected_at,
         )
+
+    def invalidate_endpoint_drift(self, endpoint_ids: set[str]) -> int:
+        """Invalidate cached entries whose producing endpoint materially changed."""
+
+        if not endpoint_ids:
+            return 0
+        entries_dir = self._state_dir / "entries"
+        changed = 0
+        try:
+            paths = tuple(entries_dir.glob("*.json"))
+        except OSError:
+            return 0
+        for path in paths:
+            try:
+                entry = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError):
+                continue
+            if not isinstance(entry, dict) or entry.get("endpoint_id") not in endpoint_ids:
+                continue
+            entry["quarantined"] = True
+            entry["invalidation_reason"] = "endpoint_drift"
+            path.write_bytes(_canonical_json(entry))
+            path.chmod(0o600)
+            changed += 1
+        return changed
 
     @staticmethod
     def _select_candidate(

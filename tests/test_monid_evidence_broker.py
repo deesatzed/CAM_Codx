@@ -9,6 +9,7 @@ import pytest
 from tools.monid_evidence_broker import (
     EvidencePolicy,
     EvidencePolicyError,
+    EndpointCatalogLedger,
     EvidenceRequest,
     EvidenceBroker,
     MonidExecutionError,
@@ -269,3 +270,70 @@ def test_subprocess_runner_rejects_non_json_output(monkeypatch: pytest.MonkeyPat
 
     with pytest.raises(MonidExecutionError, match="JSON object"):
         SubprocessMonidRunner().run(["monid", "discover", "-j", "-q", "Kalshi"])
+
+
+class CatalogRunner:
+    def __init__(self, *, endpoints: list[str], schemas: dict[str, dict[str, Any]]) -> None:
+        self.endpoints = endpoints
+        self.schemas = schemas
+
+    def run(self, argv: list[str]) -> dict[str, Any]:
+        if argv[1] == "discover":
+            return {
+                "results": [
+                    {
+                        "provider": "surf",
+                        "endpoint": endpoint,
+                        "categories": ["prediction-markets"],
+                        "price": {"amount": {"value": 0.024}},
+                    }
+                    for endpoint in self.endpoints
+                ]
+            }
+        if argv[1] == "inspect":
+            return self.schemas[argv[argv.index("-e") + 1]]
+        raise AssertionError(f"unexpected command: {argv}")
+
+
+def test_catalog_ledger_reports_added_endpoint_and_selected_schema_drift(tmp_path: Path) -> None:
+    question = "Kalshi AI markets"
+    first = CatalogRunner(
+        endpoints=["/markets"],
+        schemas={"/markets": {"input": {"queryParams": {"properties": {"limit": {}}}}}},
+    )
+    ledger = EndpointCatalogLedger(tmp_path / "state", runner=first, now=lambda: 1000.0)
+    initial = ledger.refresh(question, selected_endpoint=("surf", "/markets"), cli_version="0.1.7")
+
+    assert initial.has_drift is False
+
+    second = CatalogRunner(
+        endpoints=["/markets", "/analytics"],
+        schemas={"/markets": {"input": {"queryParams": {"properties": {"ticker": {}}}}}},
+    )
+    changed = EndpointCatalogLedger(tmp_path / "state", runner=second, now=lambda: 2000.0).refresh(
+        question, selected_endpoint=("surf", "/markets"), cli_version="0.1.7"
+    )
+
+    assert changed.added_endpoints == ("surf /analytics",)
+    assert changed.schema_changed_endpoints == ("surf /markets",)
+    assert changed.has_drift is True
+
+
+def test_schema_drift_invalidates_cached_evidence_from_that_endpoint(tmp_path: Path) -> None:
+    request = EvidenceRequest(
+        task_id="task-1",
+        question="Kalshi AI markets",
+        requested_data_classes=frozenset({"public"}),
+        policy=EvidencePolicy(1.0, 3600, frozenset({"prediction-markets"}), "local", frozenset()),
+    )
+    broker = EvidenceBroker(tmp_path / "state", now=lambda: 1000.0)
+    broker.store_completed_result(
+        request,
+        raw_result={"ok": True},
+        source_category="prediction-markets",
+        cost_usd=0.024,
+        endpoint_id="surf /markets",
+    )
+
+    assert broker.invalidate_endpoint_drift({"surf /markets"}) == 1
+    assert broker.resolve_cached(request).cache_status == "miss"
