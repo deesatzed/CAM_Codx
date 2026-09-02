@@ -1,0 +1,59 @@
+{
+  "schema_version": 1,
+  "skills": [
+    {
+      "name": "cam-codx-monid-capability-spike",
+      "capability_id": "capability_spike",
+      "description": "Evaluate a missing external application capability through bounded Monid discovery and inspection before choosing an integration.",
+      "discover_queries": [
+        "structured data API capability"
+      ],
+      "safety_class": "read_only_external_data",
+      "public_data_only": true
+    },
+    {
+      "name": "cam-codx-monid-launch-week",
+      "capability_id": "launch_week",
+      "description": "Plan public launch intelligence for an independent developer without committing to permanent data-tool subscriptions.",
+      "discover_queries": [
+        "brand mentions public web",
+        "product launch community posts"
+      ],
+      "safety_class": "read_only_external_data",
+      "public_data_only": true
+    },
+    {
+      "name": "cam-codx-monid-competitive-surface",
+      "capability_id": "competitive_surface",
+      "description": "Map public search, brand, company, and news evidence to candidate product or positioning decisions.",
+      "discover_queries": [
+        "SEO organic competitors keywords",
+        "brand mentions company news"
+      ],
+      "safety_class": "read_only_external_data",
+      "public_data_only": true
+    },
+    {
+      "name": "cam-codx-monid-product-intelligence",
+      "capability_id": "product_intelligence",
+      "description": "Evaluate public price, inventory, product-detail, and review data for a provider-independent application adapter.",
+      "discover_queries": [
+        "product prices reviews inventory",
+        "product page structured data"
+      ],
+      "safety_class": "read_only_external_data",
+      "public_data_only": true
+    },
+    {
+      "name": "cam-codx-monid-incident-context",
+      "capability_id": "incident_context",
+      "description": "Add bounded public news, website-health, and external mention context to a software incident investigation.",
+      "discover_queries": [
+        "company news incidents outages",
+        "website technical health check"
+      ],
+      "safety_class": "read_only_external_data",
+      "public_data_only": true
+    }
+  ]
+}
