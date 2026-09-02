@@ -1,0 +1,26 @@
+{
+  "provider": "example-provider",
+  "endpoint": "/mentions",
+  "description": "Public brand mention results with URLs",
+  "input": {
+    "queryParams": {
+      "type": "object",
+      "properties": {
+        "query": {"type": "string"},
+        "limit": {"type": "integer"}
+      },
+      "required": ["query"]
+    },
+    "pathParams": {
+      "type": "object",
+      "properties": {"region": {"type": "string"}}
+    },
+    "body": {
+      "type": "object",
+      "properties": {"publicOnly": {"type": "boolean"}}
+    }
+  },
+  "price": {"type": "PER_CALL", "amount": {"value": 0.25, "currency": "USD"}},
+  "metrics": {"status": "unknown"},
+  "hints": {"run this endpoint": "monid run ..."}
+}

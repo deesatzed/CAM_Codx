@@ -1,0 +1,30 @@
+{
+  "query": "brand mentions public web Example Product",
+  "count": 3,
+  "results": [
+    {
+      "provider": "down-provider",
+      "endpoint": "/outage",
+      "description": "Unavailable result",
+      "score": 0.99,
+      "price": {"type": "PER_CALL", "amount": {"value": 0.01, "currency": "USD"}},
+      "metrics": {"status": "outage"}
+    },
+    {
+      "provider": "example-provider",
+      "endpoint": "/mentions",
+      "description": "Public brand mention results with URLs",
+      "score": 0.91,
+      "price": {"type": "PER_CALL", "amount": {"value": 0.25, "currency": "USD"}},
+      "metrics": {"status": "unknown"}
+    },
+    {
+      "provider": "stable-provider",
+      "endpoint": "/expensive",
+      "description": "Stable but more expensive mentions",
+      "score": 0.80,
+      "price": {"type": "PER_CALL", "amount": {"value": 2.0, "currency": "USD"}},
+      "metrics": {"status": "stable"}
+    }
+  ]
+}
