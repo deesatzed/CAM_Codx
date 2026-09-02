@@ -52,6 +52,17 @@ def test_plan_discovers_inspects_and_never_runs_paid_endpoint(tmp_path: Path) ->
     assert "pathParams" in payload["selected"][0]["input"]
     assert json.loads(output.read_text(encoding="utf-8")) == payload
 
+    repeated_output = tmp_path / "plan-repeated.json"
+    repeated = MonidShowcasePlanner(runner=FixtureRunner()).plan(
+        skill="cam-codx-monid-launch-week",
+        subject="Example Product",
+        max_cost_usd="1.00",
+        candidate_limit=2,
+        output=repeated_output,
+    )
+    assert repeated == payload
+    assert repeated_output.read_bytes() == output.read_bytes()
+
 
 def test_existing_tool_precedes_monid_and_makes_no_calls(tmp_path: Path) -> None:
     from tools.cam_monid_showcase import MonidShowcasePlanner
