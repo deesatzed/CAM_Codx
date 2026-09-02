@@ -512,14 +512,6 @@
     .footer-inner p { margin: 0; font-size: 0.76rem; }
     .footer-inner a { color: var(--paper); text-underline-offset: 4px; }
 
-    .will-reveal {
-      opacity: 0;
-      transform: translateY(18px);
-      transition: opacity 520ms ease, transform 520ms ease;
-    }
-
-    .will-reveal.is-visible { opacity: 1; transform: translateY(0); }
-
     @media (max-width: 900px) {
       .header-nav a:not(:last-child) { display: none; }
       .hero { padding-top: 60px; }
@@ -560,7 +552,6 @@
     @media (prefers-reduced-motion: reduce) {
       html { scroll-behavior: auto; }
       *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
-      .will-reveal { opacity: 1; transform: none; }
     }
   </style>
 </head>
@@ -833,20 +824,5 @@
     </div>
   </footer>
 
-  <script>
-    (() => {
-      const candidates = document.querySelectorAll('.section-heading, .catalog-card, .showcase-card, .labor-card, .proof-card');
-      if (!('IntersectionObserver' in window) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-      candidates.forEach((element) => element.classList.add('will-reveal'));
-      const observer = new IntersectionObserver((entries) => {
-        entries.forEach((entry) => {
-          if (!entry.isIntersecting) return;
-          entry.target.classList.add('is-visible');
-          observer.unobserve(entry.target);
-        });
-      }, { threshold: 0.12 });
-      candidates.forEach((element) => observer.observe(element));
-    })();
-  </script>
 </body>
 </html>

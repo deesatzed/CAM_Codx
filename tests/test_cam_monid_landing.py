@@ -93,6 +93,12 @@ def test_landing_has_semantic_campaign_structure_and_five_showcases() -> None:
     assert ":focus-visible" in html
 
 
+def test_progressive_enhancement_never_hides_unscrolled_content() -> None:
+    html = _read(LANDING)
+    assert ".will-reveal" not in html
+    assert "IntersectionObserver" not in html
+
+
 def test_landing_links_to_source_guide_and_dated_receipt() -> None:
     _html, parser = _landing_parser()
     required = {
