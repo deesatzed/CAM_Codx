@@ -1,0 +1,4 @@
+interface:
+  display_name: "CAM Monid Competitive Surface"
+  short_description: "Map competitors for one product decision"
+  default_prompt: "Use $cam-codx-monid-competitive-surface to map public competitor evidence for this bounded positioning decision."

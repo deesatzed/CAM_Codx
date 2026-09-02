@@ -1,0 +1,828 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Monid × CAM_Codx — Capabilities on Demand</title>
+  <meta name="description" content="See how CAM_Codx uses Monid's pay-as-you-go tool catalog to design bounded, testable application capabilities without a stack of subscriptions.">
+  <style>
+    :root {
+      color-scheme: dark;
+      --graphite: #0a0d0c;
+      --panel: #111513;
+      --panel-soft: #161b18;
+      --paper: #f2f1e8;
+      --muted: #a8b0aa;
+      --line: #29312c;
+      --mint: #80f6bd;
+      --mint-dark: #0f291f;
+      --amber: #ffc56f;
+      --ink: #07110c;
+      --max: 1180px;
+      --radius: 24px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      background: var(--graphite);
+    }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      overflow-x: hidden;
+      color: var(--paper);
+      background:
+        radial-gradient(circle at 78% 6%, rgba(128, 246, 189, 0.10), transparent 27rem),
+        linear-gradient(rgba(128, 246, 189, 0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(128, 246, 189, 0.025) 1px, transparent 1px),
+        var(--graphite);
+      background-size: auto, 48px 48px, 48px 48px, auto;
+      font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-size: 16px;
+      line-height: 1.55;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: inherit; }
+
+    a:focus-visible,
+    button:focus-visible {
+      outline: 3px solid var(--amber);
+      outline-offset: 4px;
+    }
+
+    .skip-link {
+      position: fixed;
+      z-index: 100;
+      top: 12px;
+      left: 12px;
+      padding: 10px 14px;
+      color: var(--ink);
+      background: var(--amber);
+      border-radius: 8px;
+      transform: translateY(-160%);
+    }
+
+    .skip-link:focus { transform: translateY(0); }
+
+    .shell {
+      width: min(calc(100% - 40px), var(--max));
+      margin-inline: auto;
+    }
+
+    .site-header {
+      position: relative;
+      z-index: 10;
+      padding: 26px 0;
+    }
+
+    .site-header .shell,
+    .brand-lockup,
+    .header-nav,
+    .hero-actions,
+    .section-kicker,
+    .catalog-meta,
+    .proof-title,
+    .footer-inner {
+      display: flex;
+      align-items: center;
+    }
+
+    .site-header .shell { justify-content: space-between; gap: 28px; }
+
+    .brand-lockup {
+      gap: 11px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.86rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+    }
+
+    .brand-mark {
+      display: grid;
+      width: 30px;
+      height: 30px;
+      place-items: center;
+      color: var(--ink);
+      background: var(--mint);
+      border-radius: 9px 4px 9px 4px;
+      box-shadow: 0 0 30px rgba(128, 246, 189, 0.18);
+    }
+
+    .brand-divider { color: #66716a; }
+
+    .header-nav { gap: 24px; }
+
+    .header-nav a {
+      color: var(--muted);
+      font-size: 0.86rem;
+      text-decoration: none;
+    }
+
+    .header-nav a:hover { color: var(--paper); }
+
+    .hero {
+      position: relative;
+      padding: 90px 0 96px;
+    }
+
+    .hero::after {
+      position: absolute;
+      top: 15%;
+      right: -70px;
+      width: 300px;
+      height: 300px;
+      border: 1px solid rgba(128, 246, 189, 0.12);
+      border-radius: 50%;
+      content: "";
+      box-shadow:
+        0 0 0 42px rgba(128, 246, 189, 0.025),
+        0 0 0 92px rgba(128, 246, 189, 0.018);
+      pointer-events: none;
+    }
+
+    .eyebrow,
+    .section-label,
+    .card-index,
+    .catalog-type,
+    .proof-state,
+    .micro-label {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      margin: 0 0 26px;
+      padding: 8px 12px;
+      color: var(--mint);
+      background: rgba(128, 246, 189, 0.07);
+      border: 1px solid rgba(128, 246, 189, 0.2);
+      border-radius: 999px;
+    }
+
+    .pulse {
+      width: 7px;
+      height: 7px;
+      background: var(--mint);
+      border-radius: 50%;
+      box-shadow: 0 0 0 5px rgba(128, 246, 189, 0.11);
+    }
+
+    h1,
+    h2,
+    h3,
+    p { margin-top: 0; }
+
+    h1 {
+      max-width: 920px;
+      margin-bottom: 28px;
+      font-size: clamp(3.2rem, 7.6vw, 7rem);
+      font-weight: 650;
+      letter-spacing: -0.075em;
+      line-height: 0.94;
+    }
+
+    h1 .accent { color: var(--mint); }
+
+    .hero-copy {
+      max-width: 750px;
+      margin-bottom: 36px;
+      color: #c8cec9;
+      font-size: clamp(1.08rem, 2vw, 1.34rem);
+      line-height: 1.58;
+    }
+
+    .hero-copy strong { color: var(--paper); font-weight: 600; }
+
+    .hero-actions { flex-wrap: wrap; gap: 12px; }
+
+    .button {
+      display: inline-flex;
+      min-height: 48px;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      padding: 0 20px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      font-size: 0.92rem;
+      font-weight: 700;
+      text-decoration: none;
+      transition: transform 180ms ease, border-color 180ms ease, background 180ms ease;
+    }
+
+    .button:hover { transform: translateY(-2px); }
+
+    .button-primary {
+      color: var(--ink);
+      background: var(--mint);
+      border-color: var(--mint);
+    }
+
+    .button-secondary { color: var(--paper); background: rgba(255, 255, 255, 0.025); }
+    .button-secondary:hover { border-color: #58635c; }
+
+    .signal-strip {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      margin-top: 72px;
+      border-block: 1px solid var(--line);
+    }
+
+    .signal {
+      padding: 24px 22px 24px 0;
+      border-right: 1px solid var(--line);
+    }
+
+    .signal + .signal { padding-left: 30px; }
+    .signal:last-child { border-right: 0; }
+
+    .signal strong {
+      display: block;
+      margin-bottom: 3px;
+      color: var(--mint);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 1.8rem;
+      line-height: 1;
+    }
+
+    .signal span { color: var(--muted); font-size: 0.84rem; }
+
+    section { padding: 96px 0; }
+
+    .section-heading {
+      display: grid;
+      grid-template-columns: minmax(0, 1.35fr) minmax(260px, 0.65fr);
+      gap: 56px;
+      align-items: end;
+      margin-bottom: 48px;
+    }
+
+    .section-label { margin-bottom: 14px; color: var(--mint); }
+
+    h2 {
+      max-width: 780px;
+      margin-bottom: 0;
+      font-size: clamp(2.25rem, 4.4vw, 4.25rem);
+      font-weight: 620;
+      letter-spacing: -0.055em;
+      line-height: 1.02;
+    }
+
+    .section-intro { margin-bottom: 0; color: var(--muted); font-size: 1rem; }
+
+    .flow-board {
+      position: relative;
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 10px;
+      padding: 18px;
+      overflow: hidden;
+      background: rgba(17, 21, 19, 0.82);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+    }
+
+    .flow-track {
+      position: absolute;
+      z-index: 0;
+      top: 50%;
+      right: 8%;
+      left: 8%;
+      height: 1px;
+      background: var(--line);
+    }
+
+    .flow-signal {
+      position: absolute;
+      top: -3px;
+      left: 0;
+      width: 7px;
+      height: 7px;
+      background: var(--mint);
+      border-radius: 50%;
+      box-shadow: 0 0 14px var(--mint);
+      animation: route-signal 6s ease-in-out infinite;
+    }
+
+    @keyframes route-signal {
+      0%, 8% { transform: translateX(0); opacity: 0; }
+      14% { opacity: 1; }
+      88% { opacity: 1; }
+      94%, 100% { transform: translateX(calc(84vw - 150px)); opacity: 0; }
+    }
+
+    .flow-node {
+      position: relative;
+      z-index: 1;
+      min-height: 178px;
+      padding: 20px 16px;
+      background: var(--panel-soft);
+      border: 1px solid #303833;
+      border-radius: 16px;
+    }
+
+    .flow-node:nth-child(4),
+    .flow-node:nth-child(5) { border-color: rgba(128, 246, 189, 0.35); }
+
+    .node-number {
+      display: grid;
+      width: 28px;
+      height: 28px;
+      margin-bottom: 32px;
+      place-items: center;
+      color: var(--mint);
+      border: 1px solid rgba(128, 246, 189, 0.28);
+      border-radius: 50%;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.7rem;
+    }
+
+    .flow-node h3 { margin-bottom: 8px; font-size: 0.94rem; line-height: 1.2; }
+    .flow-node p { margin: 0; color: var(--muted); font-size: 0.77rem; line-height: 1.45; }
+    .flow-node .later { color: var(--amber); }
+
+    .catalog-grid,
+    .showcase-grid,
+    .labor-grid,
+    .proof-grid {
+      display: grid;
+      gap: 14px;
+    }
+
+    .catalog-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+
+    .catalog-card,
+    .showcase-card,
+    .labor-card,
+    .proof-card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+    }
+
+    .catalog-card { min-height: 260px; padding: 22px; }
+    .catalog-card:hover { border-color: rgba(128, 246, 189, 0.38); }
+
+    .catalog-meta { justify-content: space-between; gap: 10px; margin-bottom: 46px; }
+    .catalog-type { color: var(--muted); }
+
+    .health {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--mint);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.66rem;
+    }
+
+    .health::before {
+      width: 6px;
+      height: 6px;
+      background: currentColor;
+      border-radius: 50%;
+      content: "";
+    }
+
+    .catalog-card h3 { margin-bottom: 7px; font-size: 1.05rem; }
+    .endpoint { min-height: 48px; color: var(--muted); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.72rem; overflow-wrap: anywhere; }
+
+    .price {
+      margin: 30px 0 0;
+      color: var(--paper);
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 1.08rem;
+    }
+
+    .price span { color: var(--muted); font-size: 0.68rem; }
+
+    .snapshot-note {
+      margin: 18px 0 0;
+      color: var(--muted);
+      font-size: 0.76rem;
+      text-align: right;
+    }
+
+    .showcase-grid { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+
+    .showcase-card {
+      grid-column: span 4;
+      min-height: 360px;
+      padding: 30px;
+      transition: border-color 180ms ease, transform 180ms ease;
+    }
+
+    .showcase-card:hover { transform: translateY(-3px); border-color: #46524a; }
+    .showcase-card:nth-child(4), .showcase-card:nth-child(5) { grid-column: span 6; }
+    .card-index { margin-bottom: 64px; color: var(--mint); }
+    .showcase-card h3 { margin-bottom: 13px; font-size: 1.55rem; letter-spacing: -0.035em; }
+    .showcase-card > p { margin-bottom: 28px; color: var(--muted); }
+
+    .card-result {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 10px;
+      padding-top: 18px;
+      border-top: 1px solid var(--line);
+      color: #ccd2ce;
+      font-size: 0.82rem;
+    }
+
+    .card-result strong { color: var(--amber); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.68rem; letter-spacing: 0.08em; }
+
+    .labor-grid { grid-template-columns: repeat(3, 1fr); }
+    .labor-card { padding: 32px; }
+    .labor-card.featured { background: var(--mint); border-color: var(--mint); color: var(--ink); }
+    .micro-label { margin-bottom: 40px; color: var(--mint); }
+    .featured .micro-label { color: #17603f; }
+    .labor-card h3 { margin-bottom: 14px; font-size: 1.4rem; }
+    .labor-card p { margin: 0; color: var(--muted); }
+    .labor-card.featured p { color: #244535; }
+
+    .proof-wrap {
+      padding: 24px;
+      background: #0d100f;
+      border: 1px solid #354039;
+      border-radius: var(--radius);
+      box-shadow: 0 30px 80px rgba(0, 0, 0, 0.25);
+    }
+
+    .proof-grid { grid-template-columns: repeat(3, 1fr); }
+    .proof-card { min-height: 310px; padding: 28px; }
+    .proof-title { justify-content: space-between; gap: 16px; margin-bottom: 38px; }
+    .proof-state { color: var(--mint); }
+    .proof-card:nth-child(2) .proof-state { color: var(--amber); }
+    .proof-card:nth-child(3) .proof-state { color: #c3c9c5; }
+    .proof-code { color: #65716a; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.68rem; }
+    .proof-card ul { margin: 0; padding: 0; list-style: none; }
+    .proof-card li { position: relative; margin-bottom: 13px; padding-left: 18px; color: #c2c9c4; font-size: 0.88rem; }
+    .proof-card li::before { position: absolute; top: 0.68em; left: 0; width: 6px; height: 1px; background: var(--mint); content: ""; }
+
+    .truth-line {
+      margin: 18px 0 0;
+      padding: 18px 20px;
+      color: var(--amber);
+      background: rgba(255, 197, 111, 0.06);
+      border: 1px solid rgba(255, 197, 111, 0.18);
+      border-radius: 14px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.78rem;
+    }
+
+    .explore-panel {
+      position: relative;
+      padding: 62px;
+      overflow: hidden;
+      color: var(--ink);
+      background: var(--paper);
+      border-radius: 30px;
+    }
+
+    .explore-panel::after {
+      position: absolute;
+      right: -90px;
+      bottom: -120px;
+      width: 330px;
+      height: 330px;
+      background: var(--mint);
+      border-radius: 50%;
+      content: "";
+      opacity: 0.75;
+      filter: blur(1px);
+    }
+
+    .explore-content { position: relative; z-index: 1; max-width: 760px; }
+    .explore-panel .section-label { color: #17603f; }
+    .explore-panel h2 { margin-bottom: 22px; }
+    .explore-panel p { max-width: 680px; margin-bottom: 30px; color: #354239; font-size: 1.05rem; }
+    .explore-panel .button-primary { color: var(--paper); background: var(--ink); border-color: var(--ink); }
+    .explore-panel .button-secondary { color: var(--ink); background: transparent; border-color: #9da59f; }
+
+    .site-footer { padding: 36px 0 50px; color: var(--muted); }
+    .footer-inner { justify-content: space-between; gap: 24px; padding-top: 28px; border-top: 1px solid var(--line); }
+    .footer-inner p { margin: 0; font-size: 0.76rem; }
+    .footer-inner a { color: var(--paper); text-underline-offset: 4px; }
+
+    @media (max-width: 900px) {
+      .header-nav a:not(:last-child) { display: none; }
+      .hero { padding-top: 60px; }
+      .section-heading { grid-template-columns: 1fr; gap: 20px; }
+      .flow-board { grid-template-columns: repeat(3, 1fr); }
+      .flow-track, .flow-signal { display: none; }
+      .catalog-grid { grid-template-columns: repeat(2, 1fr); }
+      .catalog-card:last-child { grid-column: span 2; }
+      .showcase-card { grid-column: span 6; }
+      .showcase-card:last-child { grid-column: span 12; }
+      .labor-grid, .proof-grid { grid-template-columns: 1fr; }
+      .proof-card { min-height: 0; }
+    }
+
+    @media (max-width: 620px) {
+      .shell { width: min(calc(100% - 28px), var(--max)); }
+      .brand-lockup { font-size: 0.75rem; }
+      .site-header { padding-top: 18px; }
+      h1 { font-size: clamp(3rem, 15vw, 4.3rem); }
+      .hero { padding: 48px 0 72px; }
+      .hero::after { display: none; }
+      .signal-strip { grid-template-columns: 1fr; margin-top: 52px; }
+      .signal, .signal + .signal { padding: 18px 0; border-right: 0; border-bottom: 1px solid var(--line); }
+      .signal:last-child { border-bottom: 0; }
+      section { padding: 72px 0; }
+      .flow-board, .catalog-grid, .showcase-grid { grid-template-columns: 1fr; }
+      .catalog-card:last-child, .showcase-card, .showcase-card:nth-child(4), .showcase-card:nth-child(5), .showcase-card:last-child { grid-column: auto; }
+      .flow-node { min-height: 0; }
+      .node-number { margin-bottom: 18px; }
+      .showcase-card { min-height: 0; }
+      .card-index { margin-bottom: 42px; }
+      .proof-wrap { padding: 10px; }
+      .explore-panel { padding: 42px 24px; }
+      .explore-panel::after { opacity: 0.38; }
+      .footer-inner { align-items: flex-start; flex-direction: column; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      html { scroll-behavior: auto; }
+      *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+
+  <header class="site-header">
+    <div class="shell">
+      <div class="brand-lockup" aria-label="Monid with CAM Codex">
+        <span class="brand-mark" aria-hidden="true">M</span>
+        <span>Monid</span>
+        <span class="brand-divider" aria-hidden="true">×</span>
+        <span>CAM_Codx</span>
+      </div>
+      <nav class="header-nav" aria-label="Page navigation">
+        <a href="#capability-flow">How it works</a>
+        <a href="#showcases">Five builds</a>
+        <a href="#proof">Proof</a>
+      </nav>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="shell">
+        <p class="eyebrow"><span class="pulse" aria-hidden="true"></span> An independent developer integration proof</p>
+        <h1 id="hero-title">Build with the tools you need—<span class="accent">only when you need them.</span></h1>
+        <p class="hero-copy"><strong>CAM_Codx turns product intent into bounded, testable engineering work.</strong> Monid turns a live catalog of external capabilities into pay-as-you-go building blocks. Together, they make “we cannot justify another subscription” a design constraint—not a dead end.</p>
+        <div class="hero-actions">
+          <a class="button button-primary" href="#showcases">Explore the five builds <span aria-hidden="true">↓</span></a>
+          <a class="button button-secondary" href="#proof">See exactly what was proven</a>
+        </div>
+        <div class="signal-strip" aria-label="Proof summary">
+          <div class="signal"><strong>5</strong><span>authenticated catalog discoveries</span></div>
+          <div class="signal"><strong>5</strong><span>application-shaped Codex skills</span></div>
+          <div class="signal"><strong>0</strong><span>paid endpoint calls in this proof</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="capability-flow" aria-labelledby="flow-title">
+      <div class="shell">
+        <div class="section-heading">
+          <div>
+            <p class="section-label">01 / Capability flow</p>
+            <h2 id="flow-title">From product gap to inspected tool—without hard-wiring the vendor.</h2>
+          </div>
+          <p class="section-intro">The application asks for an outcome. CAM_Codx supplies context, limits, and evidence discipline. Monid supplies the tool market at the moment of need.</p>
+        </div>
+        <div class="flow-board" aria-label="Capability acquisition flow">
+          <div class="flow-track" aria-hidden="true"><span class="flow-signal"></span></div>
+          <article class="flow-node">
+            <span class="node-number">01</span>
+            <h3>Product need</h3>
+            <p>A real application outcome, not “use another API.”</p>
+          </article>
+          <article class="flow-node">
+            <span class="node-number">02</span>
+            <h3>CAM_Codx gap decision</h3>
+            <p>Prefer the developer's owned tools. Isolate only the missing capability.</p>
+          </article>
+          <article class="flow-node">
+            <span class="node-number">03</span>
+            <h3>Monid discover</h3>
+            <p>Search the live catalog with one narrow public-data need.</p>
+          </article>
+          <article class="flow-node">
+            <span class="node-number">04</span>
+            <h3>Inspect schema + price</h3>
+            <p>Make the interface, health, and cost visible before selection.</p>
+          </article>
+          <article class="flow-node">
+            <span class="node-number">05</span>
+            <h3>Exact authorization</h3>
+            <p class="later">Designed, not executed in this proof.</p>
+          </article>
+          <article class="flow-node">
+            <span class="node-number">06</span>
+            <h3>Portable adapter</h3>
+            <p>Normalize evidence so the application is not trapped by one provider.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="catalog" aria-labelledby="catalog-title">
+      <div class="shell">
+        <div class="section-heading">
+          <div>
+            <p class="section-label">02 / Live catalog surface</p>
+            <h2 id="catalog-title">One catalog. Five application surfaces. Metered at the point of use.</h2>
+          </div>
+          <p class="section-intro">Representative results from five authenticated `monid discover` searches. These are candidate capabilities, not endorsements or completed paid runs.</p>
+        </div>
+        <div class="catalog-grid">
+          <article class="catalog-card">
+            <div class="catalog-meta"><span class="catalog-type">Mentions</span><span class="health">stable</span></div>
+            <h3>Strale</h3>
+            <p class="endpoint">/x402/brand-mention-search</p>
+            <p class="price">$0.3564 <span>/ call</span></p>
+          </article>
+          <article class="catalog-card">
+            <div class="catalog-meta"><span class="catalog-type">Search</span><span class="health">stable</span></div>
+            <h3>Ahrefs</h3>
+            <p class="endpoint">/site-explorer/organic-competitors</p>
+            <p class="price">$0.042 <span>/ result</span></p>
+          </article>
+          <article class="catalog-card">
+            <div class="catalog-meta"><span class="catalog-type">Company</span><span class="health">stable</span></div>
+            <h3>Akta</h3>
+            <p class="endpoint">/v1/company/enrichment</p>
+            <p class="price">$0.125 <span>/ result</span></p>
+          </article>
+          <article class="catalog-card">
+            <div class="catalog-meta"><span class="catalog-type">Product</span><span class="health">stable</span></div>
+            <h3>Capterra</h3>
+            <p class="endpoint">/get_product_reviews</p>
+            <p class="price">$0.01 <span>/ call</span></p>
+          </article>
+          <article class="catalog-card">
+            <div class="catalog-meta"><span class="catalog-type">News</span><span class="health">stable</span></div>
+            <h3>Context.dev</h3>
+            <p class="endpoint">/news/search</p>
+            <p class="price">$0.00009 <span>/ result</span></p>
+          </article>
+        </div>
+        <p class="snapshot-note">Observed 2026-09-02 · catalog prices and health may change</p>
+      </div>
+    </section>
+
+    <section id="showcases" aria-labelledby="showcases-title">
+      <div class="shell">
+        <div class="section-heading">
+          <div>
+            <p class="section-label">03 / Five builds</p>
+            <h2 id="showcases-title">Not five API demos. Five reasons an application reaches for a tool.</h2>
+          </div>
+          <p class="section-intro">Each optional skill starts with repository truth and ends with a decision artifact. Monid fills only the capability gap that existing tools do not cover.</p>
+        </div>
+        <div class="showcase-grid">
+          <article class="showcase-card" data-showcase="capability-spike">
+            <p class="card-index">Build 01</p>
+            <h3>Capability Spike</h3>
+            <p>Ask whether a missing external-data feature is worth integrating before committing to a provider or subscription.</p>
+            <div class="card-result"><strong>OUTPUT</strong><span>Provider-independent fixture, cost envelope, adapter test, and go/no-go.</span></div>
+          </article>
+          <article class="showcase-card" data-showcase="launch-week">
+            <p class="card-index">Build 02</p>
+            <h3>Launch Week</h3>
+            <p>Assemble short-lived public mention and community intelligence when a permanent monitoring seat makes no economic sense.</p>
+            <div class="card-result"><strong>OUTPUT</strong><span>Evidence-linked launch brief with ranked follow-ups and blind spots.</span></div>
+          </article>
+          <article class="showcase-card" data-showcase="competitive-surface">
+            <p class="card-index">Build 03</p>
+            <h3>Competitive Surface</h3>
+            <p>Combine search, company, brand, and news evidence for one positioning decision without pretending the map is exhaustive.</p>
+            <div class="card-result"><strong>OUTPUT</strong><span>Competitor map that separates observed facts from positioning inference.</span></div>
+          </article>
+          <article class="showcase-card" data-showcase="product-intelligence">
+            <p class="card-index">Build 04</p>
+            <h3>Product Intelligence</h3>
+            <p>Test public price, availability, detail, or review data behind a normalized application contract rather than a provider-shaped product.</p>
+            <div class="card-result"><strong>OUTPUT</strong><span>Saved fixture, freshness limits, normalized fields, and adapter evidence.</span></div>
+          </article>
+          <article class="showcase-card" data-showcase="incident-context">
+            <p class="card-index">Build 05</p>
+            <h3>Incident Context</h3>
+            <p>Add bounded public news, website-health, or outage mentions to an incident timeline while internal telemetry stays authoritative.</p>
+            <div class="card-result"><strong>OUTPUT</strong><span>External-context timeline that labels correlation and never invents causation.</span></div>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="division-of-labor" aria-labelledby="labor-title">
+      <div class="shell">
+        <div class="section-heading">
+          <div>
+            <p class="section-label">04 / Division of labor</p>
+            <h2 id="labor-title">The catalog becomes more valuable when the application knows when to say “not yet.”</h2>
+          </div>
+          <p class="section-intro">The combination is the product story: dynamic capability supply plus a control layer that knows the software objective, budget, and proof threshold.</p>
+        </div>
+        <div class="labor-grid">
+          <article class="labor-card">
+            <p class="micro-label">CAM_Codx contributes</p>
+            <h3>Context and discipline</h3>
+            <p>Repository truth, existing-tool precedence, acceptance criteria, cost ceilings, adapter boundaries, tests, and evidence labels.</p>
+          </article>
+          <article class="labor-card featured">
+            <p class="micro-label">Together they unlock</p>
+            <h3>Disposable capability, durable engineering</h3>
+            <p>The external tool can appear for one workflow and disappear afterward. The application's contract, fixture, and decision record remain.</p>
+          </article>
+          <article class="labor-card">
+            <p class="micro-label">Monid contributes</p>
+            <h3>A live tool market</h3>
+            <p>Discoverable providers, explicit schemas, measured health, and metered prices without pre-wiring every vendor into the application.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="proof" aria-labelledby="proof-title">
+      <div class="shell">
+        <div class="section-heading">
+          <div>
+            <p class="section-label">05 / Evidence ledger</p>
+            <h2 id="proof-title">The advertisement is ambitious. The claims are deliberately narrow.</h2>
+          </div>
+          <p class="section-intro">This ledger makes it possible to evaluate the idea without confusing a catalog proof and tested orchestration with a paid production deployment.</p>
+        </div>
+        <div class="proof-wrap">
+          <div class="proof-grid">
+            <article class="proof-card">
+              <div class="proof-title"><span class="proof-state">Exercised live</span><span class="proof-code">REAL CLI</span></div>
+              <ul>
+                <li>Monid CLI and skill version alignment</li>
+                <li>Five authenticated `monid discover` catalog searches</li>
+                <li>Real provider, endpoint, price, and health metadata</li>
+                <li>Token value was never printed or copied into CAM_Codx</li>
+              </ul>
+            </article>
+            <article class="proof-card">
+              <div class="proof-title"><span class="proof-state">Fixture-tested</span><span class="proof-code">LOCAL PROOF</span></div>
+              <ul>
+                <li>Discovery and inspection response parsing</li>
+                <li>Schema retention and decimal cost selection</li>
+                <li>Outage, secret-shaped input, and over-budget rejection</li>
+                <li>Six skill packages, opt-in install, backups, and deterministic receipts</li>
+              </ul>
+            </article>
+            <article class="proof-card">
+              <div class="proof-title"><span class="proof-state">Not claimed</span><span class="proof-code">NEXT PROOF</span></div>
+              <ul>
+                <li>Live Monid inspect was not exercised</li>
+                <li>Paid `monid run` and result polling were not exercised</li>
+                <li>No production application was built or deployed</li>
+                <li>No endorsement, commercial relationship, or performance claim</li>
+              </ul>
+            </article>
+          </div>
+          <p class="truth-line">PAID ENDPOINT EXECUTED: NONE · PROVIDER SPEND AUTHORIZED: NONE · PRODUCTION APPLICATION CLAIMED: NONE</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="explore" aria-labelledby="explore-title">
+      <div class="shell">
+        <div class="explore-panel">
+          <div class="explore-content">
+            <p class="section-label">06 / Explore the implementation</p>
+            <h2 id="explore-title">A tool marketplace can be part of the architecture—not another tab in the stack.</h2>
+            <p>Review the five skills, the no-spend planner, the opt-in installer, and the dated catalog evidence. The source is public so the boundary is inspectable.</p>
+            <div class="hero-actions">
+              <a class="button button-primary" href="https://github.com/deesatzed/CAM_Codx/tree/feat/monid-showcase-skills">View the feature branch <span aria-hidden="true">↗</span></a>
+              <a class="button button-secondary" href="../../CAM_MONID_SHOWCASE_SKILLS.md">Read the implementation guide</a>
+              <a class="button button-secondary" href="../../reports/2026-09-02-monid-showcase-catalog.md">Inspect the catalog receipt</a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="shell footer-inner">
+      <p>Independent CAM_Codx integration proof · Catalog observed 2026-09-02</p>
+      <p><a href="#main">Back to top</a></p>
+    </div>
+  </footer>
+
+</body>
+</html>

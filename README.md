@@ -139,6 +139,8 @@ For the novice step-by-step flow and use cases, read:
 - [Codex quickstart](docs/QUICKSTART_CODEX.md)
 - [CAM Development Brief](docs/CAM_DEVELOPMENT_BRIEF.md)
 - [CAM Pull Mine Directory](docs/CAM_PULL_MINE_DIR.md)
+- [Optional CAM_Codx + Monid showcase skills](docs/CAM_MONID_SHOWCASE_SKILLS.md)
+- [CAM_Codx × Monid campaign page](docs/showpieces/cam-codx-monid/)
 - [New computer setup walkthrough](docs/NEW_COMPUTER_SETUP_WALKTHROUGH.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [XTtape CAM showpiece case study](docs/examples/XTTAPE_CAM_SHOWPIECE_CASE_STUDY.md)

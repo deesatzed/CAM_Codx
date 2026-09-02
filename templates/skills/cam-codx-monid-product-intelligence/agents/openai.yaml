@@ -1,0 +1,4 @@
+interface:
+  display_name: "CAM Monid Product Intelligence"
+  short_description: "Prototype a public product-data adapter"
+  default_prompt: "Use $cam-codx-monid-product-intelligence to plan a cost-capped public product-data adapter and fixture."

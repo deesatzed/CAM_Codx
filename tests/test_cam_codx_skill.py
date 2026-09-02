@@ -14,6 +14,7 @@ REFERENCES = {
     "knowledge-playbooks.md",
     "admin-playbooks.md",
     "safety-and-approvals.md",
+    "monid-showcase-playbooks.md",
 }
 TRUTH_FILES = (
     "AGENTS.md",
@@ -160,3 +161,25 @@ def test_skill_contains_no_stale_paths_secrets_or_implicit_live_actions() -> Non
     lowered = text.lower()
     assert "ordinary swe work never mines" in lowered
     assert "promotion is never part of mining" in lowered
+
+
+def test_skill_routes_optional_monid_showcases_without_implying_spend() -> None:
+    _frontmatter, body = _frontmatter_and_body()
+    normalized = " ".join(body.lower().split())
+    assert "references/monid-showcase-playbooks.md" in body
+    assert "ordinary cam work never implies monid spend" in normalized
+
+    playbook = (SKILL / "references" / "monid-showcase-playbooks.md").read_text(
+        encoding="utf-8"
+    )
+    for name in (
+        "cam-codx-monid-capability-spike",
+        "cam-codx-monid-launch-week",
+        "cam-codx-monid-competitive-surface",
+        "cam-codx-monid-product-intelligence",
+        "cam-codx-monid-incident-context",
+        "tools/cam_monid_showcase.py",
+    ):
+        assert name in playbook
+    assert "paid_endpoint_executed: false" in playbook
+    assert "explicit authorization" in playbook.lower()

@@ -32,6 +32,20 @@ python tools/cam_setup_wizard.py \
 Default installation installs only `cam-codx`. It reports known legacy CAM
 skills but leaves them untouched.
 
+The five Monid showcase skills are optional. Install them only with the
+canonical skill and an explicit flag:
+
+```bash
+python tools/cam_setup_wizard.py \
+  --cam-home <CAM_HOME> --skip-clone \
+  --install-codex-skill --install-monid-showcase-skills \
+  --non-interactive
+```
+
+This opt-in installs `cam-codx` plus exactly five `cam-codx-monid-*` skills.
+Replacing any installed copy creates a timestamped backup and `restore.json`.
+The flag does not authorize a paid Monid endpoint call.
+
 To migrate the old CAM-managed skill directories, request it explicitly:
 
 ```bash

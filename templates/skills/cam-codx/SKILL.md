@@ -93,6 +93,12 @@ For recall, evidence quality, and mining, read
 models, self-enhance, evolution, doctor, and setup, read
 [references/admin-playbooks.md](references/admin-playbooks.md).
 
+Use an optional Monid showcase only when a bounded public external-data gap is
+part of the requested outcome and no selected or existing dedicated tool covers
+it. Read
+[references/monid-showcase-playbooks.md](references/monid-showcase-playbooks.md)
+for routing. Ordinary CAM work never implies Monid spend.
+
 ## Hard boundaries
 
 Ordinary SWE work never mines repositories. There is no implicit mining and no

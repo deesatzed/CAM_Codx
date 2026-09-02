@@ -300,6 +300,92 @@ def test_classifier_distinguishes_direct_analogy_and_hypothesis() -> None:
     assert "validation" in hypothesis.limitation
 
 
+def _sufficiency_payload(**overrides):
+    payload = {
+        "verdict": "partially_sufficient",
+        "direct_evidence": ["method-python-retry"],
+        "analogies": ["method-transactional-recovery"],
+        "missing_obligations": ["verify target-specific checkpoint recovery"],
+        "conflicts": [],
+        "stale_sources": [],
+        "confidence": "medium",
+        "limitations": ["The source has not been verified in the target."],
+        "recommended_route": "inspect_named_sources",
+        "proof_requirements": ["Run the target's recovery tests."],
+        "origin": "cam_runtime",
+    }
+    payload.update(overrides)
+    return payload
+
+
+def test_runtime_sufficiency_rejects_false_sufficient_and_human_ledger() -> None:
+    brief = _load_contract()
+
+    with pytest.raises(brief.BriefValidationError, match="missing_obligations"):
+        omitted = _sufficiency_payload(verdict="sufficient", missing_obligations=[])
+        omitted.pop("missing_obligations")
+        brief.validate_sufficiency_payload(omitted)
+    with pytest.raises(brief.BriefValidationError, match="stale"):
+        brief.validate_sufficiency_payload(
+            _sufficiency_payload(
+                verdict="sufficient",
+                stale_sources=["method-old-retry"],
+                missing_obligations=[],
+            )
+        )
+    with pytest.raises(brief.BriefValidationError, match="conflict"):
+        brief.validate_sufficiency_payload(
+            _sufficiency_payload(
+                verdict="sufficient",
+                conflicts=["two sources disagree about checkpoint ordering"],
+                missing_obligations=[],
+            )
+        )
+    with pytest.raises(brief.BriefValidationError, match="cam_runtime"):
+        brief.validate_sufficiency_payload(
+            _sufficiency_payload(origin="human_preregistration")
+        )
+
+
+def test_runtime_sufficiency_preserves_abstention_and_structured_fields() -> None:
+    brief = _load_contract()
+
+    assessment = brief.validate_sufficiency_payload(_sufficiency_payload())
+
+    assert assessment.verdict is brief.SufficiencyVerdict.PARTIALLY_SUFFICIENT
+    assert assessment.direct_evidence == ("method-python-retry",)
+    assert assessment.analogies == ("method-transactional-recovery",)
+    assert assessment.missing_obligations == ("verify target-specific checkpoint recovery",)
+    assert assessment.origin == "cam_runtime"
+
+    empty = brief.derive_runtime_sufficiency(())
+    assert empty.verdict is brief.SufficiencyVerdict.INSUFFICIENT
+    assert empty.missing_obligations
+    assert empty.proof_requirements
+
+
+def test_development_brief_can_render_runtime_sufficiency() -> None:
+    brief = _load_contract()
+    request = brief.BriefRequest(mode="new", task_text="Build a durable import retry flow")
+    assessment = brief.validate_sufficiency_payload(_sufficiency_payload())
+    development_brief = brief.DevelopmentBrief(
+        request=request,
+        target_evidence=(),
+        evidence_items=(),
+        recommendation="Inspect the evidence.",
+        recommended_next_step=brief.NextStep(kind="inspect_source", summary="Inspect it."),
+        optional_next_steps=(),
+        limitations=(),
+        sufficiency=assessment,
+    )
+
+    rendered = brief.render_markdown(development_brief)
+
+    assert "## Sufficiency" in rendered
+    assert "partially_sufficient" in rendered
+    assert "verify target-specific checkpoint recovery" in rendered
+
+
 def test_low_evidence_requests_named_scope_without_silently_expanding() -> None:
     brief = _load_contract()
 
