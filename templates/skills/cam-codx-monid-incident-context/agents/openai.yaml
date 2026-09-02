@@ -1,0 +1,4 @@
+interface:
+  display_name: "CAM Monid Incident Context"
+  short_description: "Add cost-capped public incident context"
+  default_prompt: "Use $cam-codx-monid-incident-context to plan bounded public external-context checks for this incident."

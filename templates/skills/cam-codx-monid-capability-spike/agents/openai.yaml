@@ -1,0 +1,4 @@
+interface:
+  display_name: "CAM Monid Capability Spike"
+  short_description: "Test a pay-as-you-go data capability safely"
+  default_prompt: "Use $cam-codx-monid-capability-spike to evaluate this public-data integration gap and produce a bounded go/no-go plan."

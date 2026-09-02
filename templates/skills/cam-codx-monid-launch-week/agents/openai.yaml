@@ -1,0 +1,4 @@
+interface:
+  display_name: "CAM Monid Launch Week"
+  short_description: "Build a bounded public launch signal brief"
+  default_prompt: "Use $cam-codx-monid-launch-week to plan a cost-capped public launch intelligence brief for this independent developer."
