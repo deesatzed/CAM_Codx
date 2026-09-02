@@ -38,6 +38,13 @@ LEGACY_CAM_CODEX_SKILLS = (
     "cam-codx-setup",
     "cam-codx-swe",
 )
+MONID_SHOWCASE_SKILLS = (
+    "cam-codx-monid-capability-spike",
+    "cam-codx-monid-launch-week",
+    "cam-codx-monid-competitive-surface",
+    "cam-codx-monid-product-intelligence",
+    "cam-codx-monid-incident-context",
+)
 
 
 @dataclass(frozen=True)
@@ -432,15 +439,26 @@ def install_codex_skill(source: Path, codex_home: Path) -> Path:
     return dest
 
 
-def install_codex_skills(source_root: Path, codex_home: Path) -> list[CodexSkillInstall]:
-    """Install the single canonical CAM_Codx skill."""
+def install_codex_skills(
+    source_root: Path,
+    codex_home: Path,
+    *,
+    include_monid_showcase: bool = False,
+) -> list[CodexSkillInstall]:
+    """Install canonical CAM_Codx and, only when requested, its showcases."""
 
     source_root = source_root.expanduser().resolve()
-    source = source_root / "cam-codx"
-    if not (source / "SKILL.md").is_file():
-        raise FileNotFoundError(f"canonical CAM Codex skill missing under {source_root}")
-    dest, backup, metadata = _install_codex_skill_safely(source, codex_home)
-    return [CodexSkillInstall(source, dest, backup, metadata)]
+    names = ("cam-codx",) + (MONID_SHOWCASE_SKILLS if include_monid_showcase else ())
+    sources = [source_root / name for name in names]
+    missing = [source for source in sources if not (source / "SKILL.md").is_file()]
+    if missing:
+        raise FileNotFoundError(f"CAM Codex skill template missing SKILL.md: {missing[0]}")
+
+    installs: list[CodexSkillInstall] = []
+    for source in sources:
+        dest, backup, metadata = _install_codex_skill_safely(source, codex_home)
+        installs.append(CodexSkillInstall(source, dest, backup, metadata))
+    return installs
 
 
 def known_installed_legacy_skills(codex_home: Path) -> list[Path]:
@@ -632,6 +650,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("--skip-wrapper", action="store_true")
     parser.add_argument("--install-codex-skill", action="store_true")
     parser.add_argument(
+        "--install-monid-showcase-skills",
+        action="store_true",
+        help="also install five optional Monid showcase skills",
+    )
+    parser.add_argument(
         "--migrate-codex-skills",
         action="store_true",
         help="move known legacy CAM skills to a timestamped recoverable backup",
@@ -644,6 +667,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv or sys.argv[1:])
+    if args.install_monid_showcase_skills and not args.install_codex_skill:
+        print(
+            "--install-monid-showcase-skills requires --install-codex-skill",
+            file=sys.stderr,
+        )
+        return 2
     cam_home = args.cam_home.expanduser().resolve()
     cam_archive = (args.cam_archive or default_archive_for(cam_home)).expanduser().resolve()
 
@@ -698,7 +727,11 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     if args.install_codex_skill:
         skill_root = Path(__file__).resolve().parents[1] / "templates" / "skills"
-        skill_installs = install_codex_skills(skill_root, args.codex_home)
+        skill_installs = install_codex_skills(
+            skill_root,
+            args.codex_home,
+            include_monid_showcase=args.install_monid_showcase_skills,
+        )
     if args.migrate_codex_skills:
         try:
             skill_migration = migrate_codex_skills(args.codex_home)

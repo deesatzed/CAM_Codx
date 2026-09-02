@@ -292,6 +292,61 @@ def test_install_codex_skills_installs_only_canonical_cam_codx(tmp_path: Path) -
     assert not (codex_home / "skills" / "cam-codx-swe").exists()
 
 
+def test_install_codex_skills_opt_in_installs_canonical_and_five_showcases(
+    tmp_path: Path,
+) -> None:
+    from tools.cam_setup_wizard import MONID_SHOWCASE_SKILLS
+
+    codex_home = tmp_path / ".codex"
+    source_root = tmp_path / "CAM_Codx" / "templates" / "skills"
+    expected = {"cam-codx", *MONID_SHOWCASE_SKILLS}
+    for name in expected:
+        source = source_root / name
+        source.mkdir(parents=True)
+        (source / "SKILL.md").write_text(
+            f"---\nname: {name}\ndescription: test\n---\n",
+            encoding="utf-8",
+        )
+        installed = codex_home / "skills" / name
+        installed.mkdir(parents=True)
+        (installed / "SKILL.md").write_text(f"old {name}", encoding="utf-8")
+
+    installs = install_codex_skills(
+        source_root, codex_home, include_monid_showcase=True
+    )
+
+    assert {item.dest.name for item in installs} == expected
+    assert len(installs) == 6
+    for item in installs:
+        assert (item.dest / "SKILL.md").is_file()
+        assert item.previous_backup is not None
+        assert (item.previous_backup / item.dest.name / "SKILL.md").read_text(
+            encoding="utf-8"
+        ) == f"old {item.dest.name}"
+        metadata = json.loads(item.restore_metadata.read_text(encoding="utf-8"))
+        assert metadata["status"] == "complete"
+
+
+def test_monid_showcase_cli_flag_requires_canonical_install(tmp_path: Path) -> None:
+    from tools import cam_setup_wizard
+
+    result = cam_setup_wizard.main(
+        [
+            "--cam-home",
+            str(tmp_path / "CAM_ALL"),
+            "--codex-home",
+            str(tmp_path / ".codex"),
+            "--skip-clone",
+            "--skip-wrapper",
+            "--non-interactive",
+            "--install-monid-showcase-skills",
+        ]
+    )
+
+    assert result == 2
+    assert not (tmp_path / ".codex" / "skills").exists()
+
+
 def test_install_codex_skills_preserves_previous_canonical_in_recoverable_backup(
     tmp_path: Path,
 ) -> None:
@@ -518,3 +573,5 @@ def test_setup_skill_documents_canonical_install_and_explicit_recoverable_migrat
     assert "timestamped" in skill.lower()
     assert "restore" in skill.lower()
     assert "installs only `cam-codx`" in skill.lower()
+    assert "--install-monid-showcase-skills" in skill
+    assert "optional" in skill.lower()
