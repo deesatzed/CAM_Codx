@@ -824,3 +824,24 @@
 - Reported verdict: safety/orchestration proof passes; useful mine-to-build and
   product proof remains unproven. Next action is the independent candidate
   ledger and clean-room landing map.
+
+## 2026-09-03 Monid whisky-shopping proof reconciliation
+
+- Revalidated the saved Monid run identities with CLI `0.1.7`: two Apify
+  Google Shopping runs completed with 18 billed results and `$0.151` total
+  cost; an earlier Strale attempt returned provider HTTP 404 at `$0.00`.
+- Added a durable paid-proof receipt covering the Springbank 10 negative result
+  and the Port Charlotte 18 qualified delivered-price result. The receipt keeps
+  indexed leads separate from merchant validation and does not claim legal
+  shipping assurance, retailer reliability, or purchase completion.
+- Updated the public campaign, owner brief, implementation guide, and landing
+  tests so the earlier zero-paid-run claim is no longer presented as current.
+- Preserved the five-discovery zero-spend catalog receipt as its own dated
+  evidence boundary. No new Monid run, purchase, deployment, secret handling,
+  or WhiskeySages repository mutation occurred during reconciliation.
+- Verification: the Monid landing/showcase gate passed `14` tests. The full
+  CAM_Codx suite passed `230` tests when supplied the manifest-pinned CAM_CAM
+  revision `e5693a3` through the sibling layout its cross-repository tests
+  require. `git diff --check`, campaign-site lint, and campaign-site production
+  build passed. A newer CAM_CAM `main` correctly fails the pinned-revision
+  conformance gate and was not used to manufacture a green result.

@@ -104,6 +104,7 @@ def test_landing_links_to_source_guide_and_dated_receipt() -> None:
     required = {
         "../../CAM_MONID_SHOWCASE_SKILLS.md",
         "../../reports/2026-09-02-monid-showcase-catalog.md",
+        "../../reports/2026-09-03-monid-whisky-shopping-proof.md",
         "https://github.com/deesatzed/CAM_Codx/tree/feat/monid-showcase-skills",
     }
     assert required <= set(parser.links)
@@ -116,7 +117,7 @@ def test_landing_links_to_source_guide_and_dated_receipt() -> None:
         assert target.exists(), f"broken local landing link: {href}"
 
 
-def test_public_artifacts_state_exact_live_fixture_and_not_claimed_boundaries() -> None:
+def test_public_artifacts_state_exact_paid_proof_and_not_claimed_boundaries() -> None:
     html = _normalized(_read(LANDING))
     brief = _normalized(_read(BRIEF))
 
@@ -124,10 +125,10 @@ def test_public_artifacts_state_exact_live_fixture_and_not_claimed_boundaries() 
         assert "five authenticated" in text
         assert "monid discover" in text
         assert "fixture-tested" in text
-        assert "paid endpoint executed" in text
-        assert "none" in text
-        assert "live monid inspect" in text
-        assert "not" in text
+        assert "two completed paid" in text
+        assert "18 results" in text
+        assert "$0.151" in text
+        assert "no purchase" in text
         assert "production application" in text
 
     assert "exercised live" in html
@@ -143,13 +144,11 @@ def test_public_artifacts_exclude_secrets_private_concepts_and_false_endorsement
     assert not re.search(r"monid_(?:live|test)_[a-z0-9_-]+", combined, re.IGNORECASE)
     assert not re.search(r"api[_-]?key\s*=", combined, re.IGNORECASE)
     for forbidden in (
-        "scotch",
         "maya",
         "testimonial",
         "official monid partner",
         "in partnership with monid",
         "endorsed by monid",
-        "we executed a paid endpoint",
         "production-ready monid application",
     ):
         assert forbidden not in lowered
@@ -167,7 +166,7 @@ def test_owner_brief_is_sendable_and_answers_real_credential_question() -> None:
         "## What used a real Monid credential",
         "## Verification and evidence",
         "## Why this matters to Monid",
-        "## Boundaries and next proof",
+        "## Boundaries",
         "## Links",
     ):
         assert heading in brief

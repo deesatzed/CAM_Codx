@@ -80,7 +80,7 @@ If an existing dedicated tool already covers the need, pass it with
 2. an existing dedicated tool or owned API;
 3. Monid for the uncovered capability.
 
-## Paid proof is a later decision
+## Paid execution remains a separate decision
 
 Neither installing a skill nor requesting a plan authorizes provider spend.
 Before any `monid run`, CAM_Codx must show the inspected endpoint and obtain
@@ -92,7 +92,7 @@ explicit authorization for:
 - maximum total cost;
 - output location.
 
-The first proof should use one query, one call, and a 5-10 result limit. Save
+Any first proof should use one query, one call, and a 5-10 result limit. Save
 the output, record actual cost, and stop when the authorized bound is reached.
 A `BLOCKED` run is terminal: report the workspace control rather than retrying
 or switching providers silently.
@@ -113,3 +113,11 @@ the default and opt-in installation surfaces remain separate and recoverable.
 The accompanying
 [catalog receipt](reports/2026-09-02-monid-showcase-catalog.md) records the
 no-spend discovery evidence used to ground these examples.
+
+The later
+[whisky-shopping proof](reports/2026-09-03-monid-whisky-shopping-proof.md)
+records two separately bounded paid product searches: 18 results for `$0.151`
+total. CAM_Codx rejected mismatched, stale, unavailable, risky, or
+destination-unverified leads and preserved both a qualified delivered-price
+result and an honest no-match result. No purchase was placed, and a checkout
+rate was not relabeled as legal shipping assurance.

@@ -26,9 +26,11 @@ context. We also built a no-spend planner, opt-in installer, deterministic
 receipts, safety tests, and a public evidence ledger.
 
 For the real Monid portion, the authenticated CLI completed five catalog
-discoveries across mentions, search, company, product, and news capabilities.
-Paid endpoint executed: none. Live Monid inspect and paid runs were not part of
-this proof, and we are not presenting it as a production application.
+discoveries and two paid product searches. The paid runs returned 18 shopping
+leads for `$0.151` total. CAM_Codx then rejected wrong products, stale or
+unavailable listings, unverified delivery claims, and material seller risk. One
+question ended with no verified match; the other produced a qualified delivered
+subtotal. No purchase was placed, and this is not a production application.
 
 The page below shows the idea and the exact evidence boundary. I would value
 your technical feedback, and you are welcome to share it if it is useful to
@@ -59,10 +61,11 @@ boundaries, schema and price inspection, cost ceilings, normalized adapters,
 tests, and evidence receipts.
 
 We implemented five optional Codex skills, a shared no-spend planner, canonical
-routing, an explicit opt-in installer, public documentation, and a catalog
-receipt. The implementation is advertisement-worthy because the architectural
-pattern is real and inspectable. Its claims remain intentionally narrower than
-a live paid application case study.
+routing, an explicit opt-in installer, public documentation, a catalog receipt,
+and a paid whisky-shopping proof. Two completed paid calls returned 18 results for
+`$0.151`; CAM_Codx turned them into one honest negative and one qualified
+delivered-price result. The claims remain narrower than a production shopping
+application.
 
 ## The problem we addressed
 
@@ -108,7 +111,9 @@ Supporting components include:
 - an installer that keeps canonical `cam-codx` as the default and adds the five
   skills only through an explicit flag;
 - recoverable backups for replaced skill installations;
-- a dated, zero-spend catalog receipt.
+- a dated, zero-spend catalog receipt;
+- a paid proof receipt with run IDs, actual cost, candidate rejections, and
+  merchant-validation boundaries.
 
 ## How the architecture works
 
@@ -124,8 +129,10 @@ Monid catalog discovery
 Schema, health, and published price inspection
       ↓
 Bounded plan and provider-independent adapter contract
-      ↓ separate authorization, not exercised here
-Paid provider call and saved fixture
+      ↓ separate exact authorization
+Paid provider call and saved evidence
+      ↓
+Application-specific validation and qualified verdict
 ```
 
 This separation matters. The application depends on its own normalized
@@ -148,13 +155,16 @@ Those calls returned current catalog metadata, including real providers,
 endpoints, published prices, and health labels. The token value was never
 printed, copied into the repository, or passed through CAM_Codx artifacts.
 
-The no-spend boundary is exact:
+Two separately bounded `monid run` calls then exercised Apify's Google Shopping
+endpoint with public whisky queries and small result limits:
 
-- **Paid endpoint executed: none.**
-- **Live Monid inspect: not exercised.** Inspection behavior was fixture-tested.
-- **Paid `monid run`: not exercised.**
-- **Run polling and workspace-control handling: not exercised live.**
-- **Production application: not built or claimed.**
+- Springbank 10: run `01M1JAY91KXVGXK88YP4VQ0JRT`, 8 results, `$0.068`;
+- Port Charlotte 18: run `01M1KJMYSHW61X1563RWJP4BKW`, 10 results, `$0.083`.
+
+Both runs were revalidated as `COMPLETED` with provider HTTP `200`. An earlier
+Strale attempt returned provider HTTP `404`, zero results, and `$0.00`. Total
+paid Monid cost was `$0.151`. No purchase, account login, payment data, or
+private street address was involved.
 
 ## Verification and evidence
 
@@ -176,7 +186,10 @@ Fixture-tested behavior includes:
 
 The evidence is intentionally labeled by proof type. A fixture proves local
 orchestration and parsing. Authenticated discovery proves access to the live
-catalog. Neither one proves a paid provider response or production performance.
+catalog. The two run receipts prove paid provider responses at a point in time.
+Merchant checks support the stated verdicts, but they do not prove continuous
+inventory, seller reliability, legal shipping eligibility, completed checkout,
+or production performance.
 
 ## Why this matters to Monid
 
@@ -198,17 +211,13 @@ developer problem and ends with an inspectable software artifact. They show why
 Monid can matter even when a developer does not want “hundreds of tools” in the
 normal interface.
 
-## Boundaries and next proof
+## Boundaries
 
-This work does not claim a production application, provider quality result,
-live Monid inspect result, paid endpoint result, or Monid endorsement.
-
-The next technically meaningful proof would be deliberately small: choose one
-of the five skills, inspect one current endpoint live, authorize one capped
-call with a 5–10 result limit, save the result as a fixture, build the normalized
-adapter, and report the actual charge and acceptance-test result. That proof
-should happen only after an explicit endpoint, input, call-count, and total-cost
-authorization.
+This work does not claim a production application, continuous product or price
+accuracy, retailer reliability, legal shipping assurance, purchase completion,
+or Monid endorsement. It does prove two bounded paid responses, their actual
+cost, and the application-level reasoning that prevented low-quality shopping
+leads from becoming false recommendations.
 
 ## Links
 
@@ -216,4 +225,5 @@ authorization.
 - [Feature branch](https://github.com/deesatzed/CAM_Codx/tree/feat/monid-showcase-skills)
 - [Implementation guide](CAM_MONID_SHOWCASE_SKILLS.md)
 - [Dated catalog receipt](reports/2026-09-02-monid-showcase-catalog.md)
+- [Paid whisky-shopping proof](reports/2026-09-03-monid-whisky-shopping-proof.md)
 - [No-spend planner](../tools/cam_monid_showcase.py)
