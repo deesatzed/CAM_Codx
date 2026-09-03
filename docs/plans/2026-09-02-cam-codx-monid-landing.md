@@ -1,5 +1,10 @@
 # CAM_Codx + Monid Landing Page Implementation Plan
 
+> Historical execution plan: the zero-paid-run assertions below describe the
+> 2026-09-02 implementation checkpoint. The later paid proof and current public
+> claim boundary are recorded in
+> `docs/reports/2026-09-03-monid-whisky-shopping-proof.md`.
+
 > **For Codex:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 
 **Goal:** Build a public-safe advertisement-style landing page and an owner-facing email brief that explain Monid's on-demand capabilities through the tested CAM_Codx integration pattern.

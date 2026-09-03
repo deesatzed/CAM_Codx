@@ -1,5 +1,12 @@
 # CAM_Codx + Monid Landing Page Design
 
+> Historical design boundary: this document records the approved zero-paid-run
+> campaign scope on 2026-09-02. Two later bounded paid shopping runs are now
+> documented in
+> `docs/reports/2026-09-03-monid-whisky-shopping-proof.md`; the public page and
+> owner brief were reconciled to that newer evidence without changing the
+> self-contained static-page architecture.
+
 ## Purpose
 
 Create a public advertisement-style explanation of what Monid makes possible

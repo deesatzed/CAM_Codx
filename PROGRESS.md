@@ -845,3 +845,8 @@
   require. `git diff --check`, campaign-site lint, and campaign-site production
   build passed. A newer CAM_CAM `main` correctly fails the pinned-revision
   conformance gate and was not used to manufacture a green result.
+- The repository's approved landing architecture remains the self-contained
+  static HTML under `docs/showpieces/`; an outer Vinext hosting wrapper is a
+  staging artifact, not canonical CAM_Codx source. The original design and
+  execution plan now carry historical-boundary notices pointing to the paid
+  receipt rather than silently retaining a stale zero-run claim.
